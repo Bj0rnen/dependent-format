@@ -24,6 +24,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module DependentRecord where
@@ -151,9 +152,11 @@ instance Serialize (Some1 (Rec1 f)) where
 
 -- TODO: Still not sure if this can generalize to more than one "variable" with some trickery.
 
---type family Fst p where
+--type family
+--    Fst p where
 --    Fst '(a, _) = a
---type family Snd p where
+--type family
+--    Snd p where
 --    Snd '(_, b) = b
 
 --data Fst (p :: (a, b)) where
@@ -187,3 +190,33 @@ instance Serialize (Some1 (Rec1 f)) where
 
 --exampleDependentMore :: DependentMore '(1, 2)
 --exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> (5 :> Nil))
+
+type family Functionalize (a :: Type) :: k
+
+data Fst (p :: (a, b))
+data Snd (p :: (a, b))
+
+type instance Functionalize (Fst '(a, b)) = a
+type instance Functionalize (Snd '(a, b)) = b
+
+data SingOf (k :: Type) (a :: Type) where
+    SingOf :: Sing (Functionalize a :: k) -> SingOf k a
+deriving instance Show (Sing (Functionalize a :: k)) => Show (SingOf k a)
+instance Functor (SingOf k) where
+    fmap f (SingOf s) = SingOf (unsafeCoerce s)  -- TODO: Sure, that's going to end up well...
+
+data VectorOf (a :: Type) (n :: Type) where
+    VectorOf :: Vector a (Functionalize n) -> VectorOf a n
+    deriving Show
+instance Functor (VectorOf a) where
+    fmap f (VectorOf v) = VectorOf (unsafeCoerce v)  -- TODO: Sure, that's going to end up well...
+
+data DependentMore (size1size2 :: (Nat, Nat)) = DependentMore
+    { size1 :: SingOf Nat (Fst size1size2)
+    , size2 :: SingOf Nat (Snd size1size2)
+    , arr1 :: VectorOf Word8 (Fst size1size2)
+    , arr2 :: VectorOf Word8 (Snd size1size2)
+    } deriving (Show, Generic1)
+
+exampleDependentMore :: DependentMore '(1, 2)
+exampleDependentMore = DependentMore (SingOf SNat) (SingOf SNat) (VectorOf (3 :> Nil)) (VectorOf (4 :> 5 :> Nil))
