@@ -137,6 +137,9 @@ slol = serialize lol
 dlol :: (Rep1 DependentPair 2, [Word8])
 dlol = deserialize [2, 1, 2]
 
+--lol' :: DependentPair 2
+--lol' = to1 @Nat @DependentPair @2 dlol
+
 instance Serialize (SomeSing Nat) where
     serialize (SomeSing (SNat :: Sing n)) = serialize (SNat @n)
     deserialize bs =
@@ -209,3 +212,26 @@ exampleNonDependentMore = DependentMore 1 2 (some1 (3 :> Nil)) (some1 (4 :> 5 :>
 
 exampleDependentMore :: DependentMore ('Dependent 1) ('Dependent 2)
 exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> 5 :> Nil)
+
+instance Serialize a => Serialize (K1 R a p) where
+    serialize (K1 a) = serialize a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') -> (K1 a, bs')
+
+lols :: Rep (DependentMore ('Dependent 1) ('Dependent 2)) p
+lols = from exampleDependentMore
+
+slols = serialize lols
+dlols :: (Rep (DependentMore ('Dependent 1) ('Dependent 2)) p, [Word8])
+dlols = deserialize slols
+
+--lols' :: Rep (DependentMore ('Dependent 1) ('Dependent 2)) p
+--lols' = to dlols
+
+nonDependentRep1 :: forall a x y z. Rep (a ('Dependent x)) y -> Rep (a 'NonDependent) z
+--nonDependentRep1 (M1 (M1 ((M1 (K1 size1)) :*: M1 (K1 (size2))) :*: (M1 (K1 arr1) :*: M1 (K1 arr2)))) = undefined
+nonDependentRep1 = undefined
+
+nonDependent1 :: forall a x. (Generic (a ('Dependent x)), Generic (a 'NonDependent)) => a ('Dependent x) -> a 'NonDependent
+nonDependent1 a = to $ nonDependentRep1 @a @x $ from a
