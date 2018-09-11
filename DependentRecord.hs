@@ -151,129 +151,61 @@ instance Serialize (Some1 (Rec1 f)) where
     deserialize = undefined
 
 
--- TODO: Still not sure if this can generalize to more than one "variable" with some trickery.
-
---type family
---    Fst p where
---    Fst '(a, _) = a
---type family
---    Snd p where
---    Snd '(_, b) = b
-
---data Fst (p :: (a, b)) where
---    Fst :: a -> Fst '(a, b)
---deriving instance Show a => Show (Fst '(a, b))
---data Snd (p :: (a, b)) where
---    Snd :: b -> Snd '(a, b)
---deriving instance Show b => Show (Snd '(a, b))
-
---data Fst (p :: (a, b)) deriving Show
---data Snd (p :: (a, b))
-
--- $(singletons [d|
---     data Fst (p :: (Type, Type)) where
---         Fst :: a -> Fst '(a, b)
---     |])
--- deriving instance Show a => Show (Fst '(a, b))
--- $(singletons [d|
---     data Fst (a :: Type) where
---         Fst :: (a, b) -> Fst a
---     |])
---deriving instance Show (Fst a)
---deriving instance Show (Sing ('Fst size1size2))
-
---data DependentMore (size1size2 :: (Nat, Nat)) = DependentMore
---    { size1 :: Sing (Fst size1size2)
---    , size2 :: Sing (Snd size1size2)
---    , arr1 :: Vector Word8 (Fst size1size2)
---    , arr2 :: Vector Word8 (Snd size1size2)
---    } deriving (Show)
-
---exampleDependentMore :: DependentMore '(1, 2)
---exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> (5 :> Nil))
-
---type family Functionalize (a :: Type) :: k
+--data Fst (f :: k -> Type) (p :: (k, k2)) where
+--    Fst :: f a -> Fst f '(a, b)
+--instance ForallF Show f => Show (Fst f p) where
+--    show (Fst (a :: f a)) = "Fst (" ++ (show a \\ instF @Show @f @a) ++ ")"
 --
---data Fst (p :: (a, b))
---data Snd (p :: (a, b))
---
---type instance Functionalize (Fst '(a, b)) = a
---type instance Functionalize (Snd '(a, b)) = b
---
---data SingOf (k :: Type) (a :: Type) where
---    SingOf :: Sing (Functionalize a :: k) -> SingOf k a
---deriving instance Show (Sing (Functionalize a :: k)) => Show (SingOf k a)
---instance Functor (SingOf k) where
---    fmap f (SingOf s) = SingOf (unsafeCoerce s)  -- TODO: Sure, that's going to end up well...
---
---data VectorOf (a :: Type) (n :: Type) where
---    VectorOf :: Vector a (Functionalize n) -> VectorOf a n
---    deriving Show
---instance Functor (VectorOf a) where
---    fmap f (VectorOf v) = VectorOf (unsafeCoerce v)  -- TODO: Sure, that's going to end up well...
+--data Snd (f :: k -> Type) (p :: (k1, k)) where
+--    Snd :: f b -> Snd f '(a, b)
+--instance ForallF Show f => Show (Snd f p) where
+--    show (Snd (a :: f b)) = "Snd (" ++ (show a \\ instF @Show @f @b) ++ ")"
 --
 --data DependentMore (size1size2 :: (Nat, Nat)) = DependentMore
---    { size1 :: SingOf Nat (Fst size1size2)
---    , size2 :: SingOf Nat (Snd size1size2)
---    , arr1 :: VectorOf Word8 (Fst size1size2)
---    , arr2 :: VectorOf Word8 (Snd size1size2)
+--    { size1 :: Fst Sing size1size2
+--    , size2 :: Snd Sing size1size2
+--    , arr1 :: Fst (Vector Word8) size1size2
+--    , arr2 :: Snd (Vector Word8) size1size2
 --    } deriving (Show, Generic1)
 --
 --exampleDependentMore :: DependentMore '(1, 2)
---exampleDependentMore = DependentMore (SingOf SNat) (SingOf SNat) (VectorOf (3 :> Nil)) (VectorOf (4 :> 5 :> Nil))
-
---type family Fst (a :: Type) :: Type
---type instance Fst (Sing ('(a, b) :: (Nat, Nat))) = Sing a
-
---data family Fst (p :: (k1, k2)) (a :: k)
---data instance Fst '(a, b) Sing where
---    FstSing :: Sing a -> Fst '(a, b) Sing
-----instance Functor Fst
---data instance Fst '(n, m) (Vector a) where
---    FstVector :: Vector a n -> Fst '(n, m) (Vector a)
-
-data Fst (f :: k -> Type) (p :: (k, k2)) where
-    Fst :: f a -> Fst f '(a, b)
-instance ForallF Show f => Show (Fst f p) where
-    show (Fst (a :: f a)) = "Fst (" ++ (show a \\ instF @Show @f @a) ++ ")"
-
-data Snd (f :: k -> Type) (p :: (k1, k)) where
-    Snd :: f b -> Snd f '(a, b)
-instance ForallF Show f => Show (Snd f p) where
-    show (Snd (a :: f b)) = "Snd (" ++ (show a \\ instF @Show @f @b) ++ ")"
-
-
---data family Snd a
---data instance Snd (Sing ('(a, b) :: (Nat, Nat))) where
---    SndSing :: Sing b -> Snd (Sing ('(a, b) :: (Nat, Nat)))
---instance Functor Snd
-
---type family Id (a :: Type) :: Type
---type instance Id a = a
+--exampleDependentMore = DependentMore (Fst SNat) (Snd SNat) (Fst (3 :> Nil)) (Snd (4 :> 5 :> Nil))
 --
---type Id (a :: Type) = a
---
---type family Applied (f :: k -> Type) (a :: k) :: Type
---type instance Applied f a = f a
---
---data DependentMore (size1size2 :: (Nat)) = DependentMore
---    { size1 :: Applied Sing size1size2
---    --, size2 :: Sing size1size2
---    --, arr1 :: Vector Word8 size1size2
---    --, arr2 :: Vector Word8 size1size2
---    } deriving (Show, Generic1)
-
-data DependentMore (size1size2 :: (Nat, Nat)) = DependentMore
-    { size1 :: Fst Sing size1size2
-    , size2 :: Snd Sing size1size2
-    , arr1 :: Fst (Vector Word8) size1size2
-    , arr2 :: Snd (Vector Word8) size1size2
-    } deriving (Show, Generic1)
-
-exampleDependentMore :: DependentMore '(1, 2)
-exampleDependentMore = DependentMore (Fst SNat) (Snd SNat) (Fst (3 :> Nil)) (Snd (4 :> 5 :> Nil))
-
 -- TODO: The above is seemingly the best I can get with Generic1.
 -- TODO: I should look back to the ideas I had some time ago where instead of relying on Generic1 (and the Generic2... that I wish existed),
 -- TODO: I rely only on Generic. Then I inject distinct values on each type variable (or element of HList/tuple) as "tags" for a TaggedHList
 -- TODO: I'm simply wondering if that approach is more or less a hand-baked GenericN? That would honestly be blog post worthy...
+
+instance Dict1 Show (Vector Word8) where
+    dict1 _ = Dict
+
+data Dependency a = NonDependent | Dependent a
+
+type family (a :: k -> Type) // (b :: Dependency k) = (t :: Type) where
+    Sing // ('NonDependent :: Dependency k) = Demote k
+    a // 'NonDependent = Some1 a
+    a // 'Dependent b = a b
+
+data DependentMore (size1 :: Dependency Nat) (size2 :: Dependency Nat) = DependentMore
+    { size1 :: Sing // size1
+    , size2 :: Sing // size2
+    , arr1 :: Vector Word8 // size1
+    , arr2 :: Vector Word8 // size2
+    } deriving Generic
+deriving instance
+    ( Show (Sing // size1)
+    , Show (Sing // size2)
+    , Show (Vector Word8 // size1)
+    , Show (Vector Word8 // size2)
+    ) => Show (DependentMore size1 size2)
+
+
+type family NonDependent (a :: k) :: Type where
+    NonDependent (a :: Type) = a
+    NonDependent (a :: Dependency _ -> k) = NonDependent (a 'NonDependent)
+
+exampleNonDependentMore :: NonDependent DependentMore
+exampleNonDependentMore = DependentMore 1 2 (some1 (3 :> Nil)) (some1 (4 :> 5 :> Nil))
+
+exampleDependentMore :: DependentMore ('Dependent 1) ('Dependent 2)
+exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> 5 :> Nil)
