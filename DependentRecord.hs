@@ -137,8 +137,8 @@ slol = serialize lol
 dlol :: (Rep1 DependentPair 2, [Word8])
 dlol = deserialize [2, 1, 2]
 
---lol' :: DependentPair 2
---lol' = to1 @Nat @DependentPair @2 dlol
+lol' :: DependentPair 2
+lol' = to1 (fst dlol)
 
 instance Serialize (SomeSing Nat) where
     serialize (SomeSing (SNat :: Sing n)) = serialize (SNat @n)
@@ -184,8 +184,8 @@ instance Dict1 Show (Vector Word8) where
 
 data Dependency a = NonDependent | Dependent a
 
-type family (a :: k -> Type) // (b :: Dependency k) = (t :: Type) where
-    Sing // ('NonDependent :: Dependency k) = Demote k
+type family (a :: t -> Type) // (b :: Dependency t) :: Type where
+    Sing // ('NonDependent :: Dependency t) = Demote t
     a // 'NonDependent = Some1 a
     a // 'Dependent b = a b
 
@@ -203,9 +203,9 @@ deriving instance
     ) => Show (DependentMore size1 size2)
 
 
-type family NonDependent (a :: k) :: Type where
+type family NonDependent (a :: t) :: Type where
     NonDependent (a :: Type) = a
-    NonDependent (a :: Dependency _ -> k) = NonDependent (a 'NonDependent)
+    NonDependent (a :: Dependency _ -> t) = NonDependent (a 'NonDependent)
 
 exampleNonDependentMore :: NonDependent DependentMore
 exampleNonDependentMore = DependentMore 1 2 (some1 (3 :> Nil)) (some1 (4 :> 5 :> Nil))
@@ -226,12 +226,37 @@ slols = serialize lols
 dlols :: (Rep (DependentMore ('Dependent 1) ('Dependent 2)) p, [Word8])
 dlols = deserialize slols
 
---lols' :: Rep (DependentMore ('Dependent 1) ('Dependent 2)) p
---lols' = to dlols
+lols' :: DependentMore ('Dependent 1) ('Dependent 2)
+lols' = to (fst dlols)
 
-nonDependentRep1 :: forall a x y z. Rep (a ('Dependent x)) y -> Rep (a 'NonDependent) z
---nonDependentRep1 (M1 (M1 ((M1 (K1 size1)) :*: M1 (K1 (size2))) :*: (M1 (K1 arr1) :*: M1 (K1 arr2)))) = undefined
-nonDependentRep1 = undefined
+nonDependent1K1Sing :: SingKind t => K1 c (Sing (a :: t)) p -> K1 c (Demote t) p
+nonDependent1K1Sing (K1 a) = K1 (fromSing a)
+nonDependent1K1NonSing :: SingI b => K1 c (a b) p -> K1 c (Some1 a) p
+nonDependent1K1NonSing (K1 a) = K1 (some1 a)
 
-nonDependent1 :: forall a x. (Generic (a ('Dependent x)), Generic (a 'NonDependent)) => a ('Dependent x) -> a 'NonDependent
-nonDependent1 a = to $ nonDependentRep1 @a @x $ from a
+nonDependent1M1Sing :: SingKind t => M1 i c (K1 c' (Sing (a :: t))) p -> M1 i c (K1 c' (Demote t)) p
+nonDependent1M1Sing (M1 a) = M1 (nonDependent1K1Sing a)
+nonDependent1M1NonSing :: SingI b => M1 i c (K1 c' (a b)) p -> M1 i c (K1 c' (Some1 a)) p
+nonDependent1M1NonSing (M1 a) = M1 (nonDependent1K1NonSing a)
+
+--class NonDependent1Sing r where
+--    nonDependent1Sing :: SingKind t => r (Sing (a :: t)) p -> r (Demote t) p
+--instance NonDependent1Sing (K1 c) where
+--    nonDependent1Sing (K1 a) = K1 (fromSing a)
+--instance NonDependent1Sing (M1 i c) where
+--    nonDependent1Sing (M1 a) = M1 (fromSing a)
+
+--class DropDependency a where
+--    dropDependency :: a p -> a p
+
+--nonDependentRep1 :: forall a x y z. Rep (a ('Dependent x)) y -> Rep (a 'NonDependent) z
+----nonDependentRep1 (M1 (M1 ((M1 (K1 size1)) :*: M1 (K1 (size2))) :*: (M1 (K1 arr1) :*: M1 (K1 arr2)))) = undefined
+--nonDependentRep1 = undefined
+
+--nonDependentMore :: Rep (DependentMore ('Dependent size1) ('Dependent size2)) p -> Rep (DependentMore 'NonDependent 'NonDependent) p
+--nonDependentMore (M1 (M1 ((M1 (K1 size1)) :*: M1 (K1 (size2))) :*: (M1 (K1 arr1) :*: M1 (K1 arr2)))) = undefined
+
+--nonDependent1K1 :: K1 () -> K1 'NonDependent
+
+--nonDependent1 :: forall a x. (Generic (a ('Dependent x)), Generic (a 'NonDependent)) => a ('Dependent x) -> a 'NonDependent
+--nonDependent1 a = to $ nonDependentRep1 @a @x $ from a
