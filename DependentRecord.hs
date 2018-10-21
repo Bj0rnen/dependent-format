@@ -132,6 +132,12 @@ instance (Serialize (a p), Serialize (b p)) => Serialize ((a :*: b) p) where
                 case deserialize @(b p) bs' of
                     (b, bs'') -> (a :*: b, bs'')
 
+instance Serialize a => Serialize (K1 i a p) where
+    serialize (K1 a) = serialize a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') -> (K1 a, bs')
+
 
 slol = serialize lol
 dlol :: (Rep1 DependentPair 2, [Word8])
@@ -213,12 +219,6 @@ exampleNonDependentMore = DependentMore 1 2 (some1 (3 :> Nil)) (some1 (4 :> 5 :>
 exampleDependentMore :: DependentMore ('Dependent 1) ('Dependent 2)
 exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> 5 :> Nil)
 
-instance Serialize a => Serialize (K1 R a p) where
-    serialize (K1 a) = serialize a
-    deserialize bs =
-        case deserialize bs of
-            (a, bs') -> (K1 a, bs')
-
 lols :: Rep (DependentMore ('Dependent 1) ('Dependent 2)) p
 lols = from exampleDependentMore
 
@@ -229,22 +229,35 @@ dlols = deserialize slols
 lols' :: DependentMore ('Dependent 1) ('Dependent 2)
 lols' = to (fst dlols)
 
-nonDependent1K1Sing :: SingKind t => K1 c (Sing (a :: t)) p -> K1 c (Demote t) p
-nonDependent1K1Sing (K1 a) = K1 (fromSing a)
-nonDependent1K1NonSing :: SingI b => K1 c (a b) p -> K1 c (Some1 a) p
-nonDependent1K1NonSing (K1 a) = K1 (some1 a)
+nlols :: Rep (NonDependent DependentMore) p
+nlols = gundepend (fst dlols)
 
-nonDependent1M1Sing :: SingKind t => M1 i c (K1 c' (Sing (a :: t))) p -> M1 i c (K1 c' (Demote t)) p
-nonDependent1M1Sing (M1 a) = M1 (nonDependent1K1Sing a)
-nonDependent1M1NonSing :: SingI b => M1 i c (K1 c' (a b)) p -> M1 i c (K1 c' (Some1 a)) p
-nonDependent1M1NonSing (M1 a) = M1 (nonDependent1K1NonSing a)
+nlols' :: NonDependent DependentMore
+nlols' = to nlols
 
---class NonDependent1Sing r where
---    nonDependent1Sing :: SingKind t => r (Sing (a :: t)) p -> r (Demote t) p
---instance NonDependent1Sing (K1 c) where
---    nonDependent1Sing (K1 a) = K1 (fromSing a)
---instance NonDependent1Sing (M1 i c) where
---    nonDependent1Sing (M1 a) = M1 (fromSing a)
+
+
+class GUndepend f g | f -> g where
+    gundepend :: f p -> g p
+instance (GUndepend f g, GUndepend f' g') => GUndepend (f :*: f') (g :*: g') where
+    gundepend (a :*: b) = gundepend a :*: gundepend b
+instance (SingKind t, dt ~ Demote t) => GUndepend (K1 i (Sing (a :: t))) (K1 i dt) where
+    gundepend (K1 a) = K1 (fromSing a)
+instance KnownNat n => GUndepend (K1 i (Vector a n)) (K1 i (Some1 (Vector a))) where
+    gundepend (K1 a) = K1 (some1 a)
+instance GUndepend f g => GUndepend (M1 i c f) (M1 i c g) where
+    gundepend (M1 a) = M1 (gundepend a)
+
+undepend1 :: (Generic (a ('Dependent x)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x))) (Rep (NonDependent a))) => a ('Dependent x) -> NonDependent a
+undepend1 = to . gundepend . from
+undepend2 :: (Generic (a ('Dependent x) ('Dependent y)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x) ('Dependent y))) (Rep (NonDependent a))) => a ('Dependent x) ('Dependent y) -> NonDependent a
+undepend2 = to . gundepend . from
+
+-- TODO: This has bad inference. For example I need to say
+--           undepend @_ @(NonDependent DependentMore) exampleDependentMore
+--       Otherwise, it thinks the second type's Rep is `U1` (Rep for unit) for some reason.
+undepend :: (Generic a, Generic b, GUndepend (Rep a) (Rep b)) => a -> b
+undepend = to . gundepend . from
 
 --class DropDependency a where
 --    dropDependency :: a p -> a p
