@@ -237,26 +237,31 @@ nlols' = to nlols
 
 
 
-class GUndepend f g | f -> g where
-    gundepend :: f p -> g p
-instance (GUndepend f g, GUndepend f' g') => GUndepend (f :*: f') (g :*: g') where
+class GUndepend f where
+    type GNonDependent (f :: k -> Type) :: k -> Type
+    gundepend :: f p -> (GNonDependent f) p
+instance (GUndepend f, GUndepend g) => GUndepend (f :*: g) where
+    type GNonDependent (f :*: g) = GNonDependent f :*: GNonDependent g
     gundepend (a :*: b) = gundepend a :*: gundepend b
-instance (SingKind t, dt ~ Demote t) => GUndepend (K1 i (Sing (a :: t))) (K1 i dt) where
+instance SingKind t => GUndepend (K1 i (Sing (a :: t)))where
+    type GNonDependent (K1 i (Sing (a :: t))) = K1 i (Demote t)
     gundepend (K1 a) = K1 (fromSing a)
-instance KnownNat n => GUndepend (K1 i (Vector a n)) (K1 i (Some1 (Vector a))) where
+instance KnownNat n => GUndepend (K1 i (Vector a n)) where
+    type GNonDependent (K1 i (Vector a n)) = K1 i (Some1 (Vector a))
     gundepend (K1 a) = K1 (some1 a)
-instance GUndepend f g => GUndepend (M1 i c f) (M1 i c g) where
+instance GUndepend f => GUndepend (M1 i c f) where
+    type GNonDependent (M1 i c f) = M1 i c (GNonDependent f)
     gundepend (M1 a) = M1 (gundepend a)
 
-undepend1 :: (Generic (a ('Dependent x)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x))) (Rep (NonDependent a))) => a ('Dependent x) -> NonDependent a
+undepend1 :: (Generic (a ('Dependent x)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x))), GNonDependent (Rep (a ('Dependent x))) ~ Rep (NonDependent a)) => a ('Dependent x) -> NonDependent a
 undepend1 = to . gundepend . from
-undepend2 :: (Generic (a ('Dependent x) ('Dependent y)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x) ('Dependent y))) (Rep (NonDependent a))) => a ('Dependent x) ('Dependent y) -> NonDependent a
+undepend2 :: (Generic (a ('Dependent x) ('Dependent y)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x) ('Dependent y))), GNonDependent (Rep (a ('Dependent x) ('Dependent y))) ~ Rep (NonDependent a)) => a ('Dependent x) ('Dependent y) -> NonDependent a
 undepend2 = to . gundepend . from
 
 -- TODO: This has bad inference. For example I need to say
 --           undepend @_ @(NonDependent DependentMore) exampleDependentMore
 --       Otherwise, it thinks the second type's Rep is `U1` (Rep for unit) for some reason.
-undepend :: (Generic a, Generic b, GUndepend (Rep a) (Rep b)) => a -> b
+undepend :: forall a b. (Generic a, Generic b, GUndepend (Rep a), GNonDependent (Rep a) ~ Rep b) => a -> b
 undepend = to . gundepend . from
 
 --class DropDependency a where
