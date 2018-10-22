@@ -243,7 +243,7 @@ instance (GUndepend f f', GUndepend g g') => GUndepend (f :*: g) (f' :*: g') whe
     gundepend (a :*: b) = gundepend a :*: gundepend b
 instance (SingKind t, dt ~ Demote t) => GUndepend (K1 i (Sing (a :: t))) (K1 i dt) where
     gundepend (K1 a) = K1 (fromSing a)
-instance KnownNat n => GUndepend (K1 i (a n)) (K1 i (Some1 a)) where
+instance SingI n => GUndepend (K1 i (a n)) (K1 i (Some1 a)) where
     gundepend (K1 a) = K1 (some1 a)
 instance GUndepend (K1 i a) (K1 i a) where
     gundepend (K1 a) = K1 a
