@@ -189,6 +189,17 @@ instance Dict1 Show (Vector Word8) where
     dict1 _ = Dict
 
 data Dependency a = NonDependent | Dependent a
+    deriving Show
+
+data instance Sing (d :: Dependency a) where
+    SNonDependent :: Sing ('NonDependent :: Dependency a)
+    SDependent :: Sing x -> Sing ('Dependent x :: Dependency a)
+instance SingKind a => SingKind (Dependency a) where
+    type Demote (Dependency a) = Dependency (Demote a)
+    fromSing SNonDependent = NonDependent
+    fromSing (SDependent a) = Dependent (fromSing a)
+    toSing NonDependent = SomeSing SNonDependent
+    toSing (Dependent (FromSing a)) = SomeSing (SDependent a)
 
 type family (a :: t -> Type) // (b :: Dependency t) :: Type where
     Sing // ('NonDependent :: Dependency t) = Demote t
@@ -237,32 +248,109 @@ nlols' = to nlols
 
 
 
-class GUndepend f where
-    type GNonDependent (f :: k -> Type) :: k -> Type
-    gundepend :: f p -> (GNonDependent f) p
-instance (GUndepend f, GUndepend g) => GUndepend (f :*: g) where
-    type GNonDependent (f :*: g) = GNonDependent f :*: GNonDependent g
+class GUndepend f g where
+    gundepend :: f p -> g p
+instance (GUndepend f f', GUndepend g g') => GUndepend (f :*: g) (f' :*: g') where
     gundepend (a :*: b) = gundepend a :*: gundepend b
-instance SingKind t => GUndepend (K1 i (Sing (a :: t)))where
-    type GNonDependent (K1 i (Sing (a :: t))) = K1 i (Demote t)
+instance (SingKind t, dt ~ Demote t) => GUndepend (K1 i (Sing (a :: t))) (K1 i dt) where
     gundepend (K1 a) = K1 (fromSing a)
-instance KnownNat n => GUndepend (K1 i (Vector a n)) where
-    type GNonDependent (K1 i (Vector a n)) = K1 i (Some1 (Vector a))
+instance SingI n => GUndepend (K1 i (a n)) (K1 i (Some1 a)) where
     gundepend (K1 a) = K1 (some1 a)
-instance GUndepend f => GUndepend (M1 i c f) where
-    type GNonDependent (M1 i c f) = M1 i c (GNonDependent f)
+instance GUndepend (K1 i a) (K1 i a) where
+    gundepend (K1 a) = K1 a
+instance GUndepend f g => GUndepend (M1 i c f) (M1 i c g) where
     gundepend (M1 a) = M1 (gundepend a)
 
-undepend1 :: (Generic (a ('Dependent x)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x))), GNonDependent (Rep (a ('Dependent x))) ~ Rep (NonDependent a)) => a ('Dependent x) -> NonDependent a
+undepend1 ::
+    ( Generic (a ('Dependent x))
+    , Generic (NonDependent a)
+    , GUndepend (Rep (a ('Dependent x))) (Rep (NonDependent a))
+    ) => a ('Dependent x) -> NonDependent a
 undepend1 = to . gundepend . from
-undepend2 :: (Generic (a ('Dependent x) ('Dependent y)), Generic (NonDependent a), GUndepend (Rep (a ('Dependent x) ('Dependent y))), GNonDependent (Rep (a ('Dependent x) ('Dependent y))) ~ Rep (NonDependent a)) => a ('Dependent x) ('Dependent y) -> NonDependent a
+undepend2 ::
+    ( Generic (a ('Dependent x) ('Dependent y))
+    , Generic (NonDependent a)
+    , GUndepend (Rep (a ('Dependent x) ('Dependent y))) (Rep (NonDependent a))
+    ) => a ('Dependent x) ('Dependent y) -> NonDependent a
 undepend2 = to . gundepend . from
 
 -- TODO: This has bad inference. For example I need to say
 --           undepend @_ @(NonDependent DependentMore) exampleDependentMore
 --       Otherwise, it thinks the second type's Rep is `U1` (Rep for unit) for some reason.
-undepend :: forall a b. (Generic a, Generic b, GUndepend (Rep a), GNonDependent (Rep a) ~ Rep b) => a -> b
+undepend :: forall a b. (GUndepend (Rep a) (Rep b), Generic b, Generic a) => a -> b
 undepend = to . gundepend . from
+
+
+data DependentPlusFree (size1 :: Dependency Nat) (size2 :: Dependency Nat) = DependentPlusFree
+    { size1 :: Sing // size1
+    , size2 :: Sing // size2
+    , arr1 :: Vector Word8 // size1
+    , arr2 :: Vector Word8 // size2
+    , freeArr :: Vector Word8 4
+    } deriving Generic
+deriving instance
+    ( Show (Sing // size1)
+    , Show (Sing // size2)
+    , Show (Vector Word8 // size1)
+    , Show (Vector Word8 // size2)
+    ) => Show (DependentPlusFree size1 size2)
+instance Dict2 Show DependentPlusFree where
+    dict2 (SDependent SNat) (SDependent SNat) = Dict
+    dict2 (SDependent SNat) SNonDependent = Dict
+    dict2 SNonDependent (SDependent SNat) = Dict
+    dict2 SNonDependent SNonDependent = Dict
+
+dpf :: DependentPlusFree ('Dependent 1) ('Dependent 2)
+dpf = DependentPlusFree SNat SNat (3 :> Nil) (4 :> 5 :> Nil) (6 :> 7 :> 8 :> 9 :> Nil)
+
+ndpf :: NonDependent DependentPlusFree
+ndpf = undepend dpf
+
+
+class GDepend f g where
+    gdepend :: g p -> Either String (f p)
+instance (GDepend f f', GDepend g g') => GDepend (f :*: g) (f' :*: g') where
+    gdepend (a :*: b) =
+        case (gdepend a, gdepend b) of
+            (Left s, Left t) -> Left (s ++ " :*: " ++ t)
+            (Left s, Right y) -> Left (s ++ " :*: _")
+            (Right x, Left t) -> Left ("_ :*: " ++ t)
+            (Right x, Right y) -> Right (x :*: y)
+instance (SingKind t, dt ~ Demote t, SDecide t, SingI a, Show dt) => GDepend (K1 i (Sing (a :: t))) (K1 i dt) where
+    gdepend (K1 a) =
+        withSomeSing a $ \s ->
+            case s %~ sing @t @a of
+                Proved Refl ->
+                    Right (K1 s)
+                Disproved r ->
+                    -- TODO: Can probably grap field name.
+                    Left ("((Sing) Refuted: " ++ show a ++ " %~ " ++ show (demote @a) ++ ")")
+instance (SingKind t, SDecide t, SingI (n :: t), Show (Demote t)) => GDepend (K1 i (a n)) (K1 i (Some1 a)) where
+    gdepend (K1 (Some1 n a)) =
+        case n %~ sing @t @n of
+            Proved Refl ->
+                Right (K1 a)
+            Disproved r ->
+                -- TODO: Can probably grap field name.
+                Left ("((Some1) Refuted: " ++ show (fromSing n) ++ " %~ " ++ show (demote @n) ++ ")")
+instance GDepend (K1 i a) (K1 i a) where
+    gdepend (K1 a) = Right (K1 a)
+instance GDepend f g => GDepend (M1 i c f) (M1 i c g) where
+    gdepend (M1 a) =
+        M1 <$> gdepend a
+
+depend :: forall a b. (GDepend (Rep a) (Rep b), Generic b, Generic a) => b -> Either String a
+depend a = to <$> gdepend (from a)
+
+redpf :: Either String (DependentPlusFree ('Dependent 1) ('Dependent 2))
+redpf = depend ndpf
+
+faileddpf :: Either String (DependentPlusFree ('Dependent 3) ('Dependent 2))
+faileddpf = depend ndpf
+
+
+someDpf :: Some2 DependentPlusFree
+someDpf = Some2 (SDependent SNat :: Sing ('Dependent 1 :: Dependency Nat)) (SDependent SNat :: Sing ('Dependent 2 :: Dependency Nat)) dpf
 
 --class DropDependency a where
 --    dropDependency :: a p -> a p
