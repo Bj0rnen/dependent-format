@@ -158,9 +158,32 @@ instance Serialize (SomeSing Nat) where
                     SomeNat (Proxy :: Proxy n) ->
                         (SomeSing @Nat @n SNat, bs')
 
-instance Serialize (Some1 (GHC.Rec1 f)) where
-    serialize (Some1 s (GHC.Rec1 a)) = undefined  --serialize a  -- TODO: ForallF? KnownImplies?
-    deserialize = undefined
+instance Serialize (Some1 DependentPair) where
+    serialize (Some1 SNat (DependentPair SNat arr)) = serialize arr
+    deserialize bs =
+        case deserialize bs of
+            (SomeSing (SNat :: Sing (size :: Nat)), bs') ->
+                case deserialize bs' of
+                    (arr :: Vector Word8 size, bs'') ->
+                        (Some1 SNat (DependentPair SNat arr), bs'')
+
+instance Serialize (Some1 f) => Serialize (Some1 (GHC.M1 i c f)) where
+    serialize (Some1 (s :: Sing a) (GHC.M1 a)) = serialize (Some1 s a)
+    deserialize bs =
+        case deserialize bs of
+            (Some1 s a, bs') -> (Some1 s (GHC.M1 a), bs')
+instance Serialize (Some1 (GHC.M1 s l (GHC.Rec1 Sing) GHC.:*: GHC.M1 s m (GHC.Rec1 (Vector Word8)))) where
+    serialize (Some1 SNat (GHC.M1 (GHC.Rec1 SNat) GHC.:*: (GHC.M1 (GHC.Rec1 arr)))) = serialize arr
+    deserialize bs =
+        case deserialize bs of
+            (SomeSing (SNat :: Sing (size :: Nat)), bs') ->
+                case deserialize bs' of
+                    (arr :: Vector Word8 size, bs'') ->
+                        (Some1 SNat (GHC.M1 (GHC.Rec1 SNat) GHC.:*: (GHC.M1 (GHC.Rec1 arr))), bs'')
+
+someLol :: Some1 (GHC.Rep1 DependentPair)
+someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
+sdp = serialize someLol
 
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
