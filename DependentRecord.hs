@@ -179,8 +179,8 @@ instance
     ( Serialize (Some1 f)
     , Dict1 Serialize (g :: k -> Type)
     )
-    => Serialize (Some1 (GHC.M1 s l (GHC.Rec1 f) GHC.:*: g)) where
-    serialize (Some1 (s1 :: Sing x) (GHC.M1 (GHC.Rec1 s2) GHC.:*: a)) =
+    => Serialize (Some1 (f GHC.:*: g)) where
+    serialize (Some1 (s1 :: Sing x) (s2 GHC.:*: a)) =
         withDict (dict1 s1 :: Dict (Serialize (g x))) $
             serialize (Some1 s1 s2) ++ serialize a
     deserialize bs =
@@ -189,7 +189,12 @@ instance
                 withDict (dict1 s1 :: Dict (Serialize (g x))) $
                     case deserialize bs' of
                         (a :: g size, bs'') ->
-                            (Some1 s1 (GHC.M1 (GHC.Rec1 s2) GHC.:*: a), bs'')
+                            (Some1 s1 (s2 GHC.:*: a), bs'')
+instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
+    serialize (Some1 s (GHC.Rec1 a)) = serialize (Some1 s a)
+    deserialize bs =
+        case deserialize bs of
+            (Some1 s a, bs') -> (Some1 s (GHC.Rec1 a), bs')
 instance Dict1 Serialize f => Dict1 Serialize (GHC.M1 s l f) where
     dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
 instance Dict1 Serialize f => Dict1 Serialize (GHC.Rec1 f) where
