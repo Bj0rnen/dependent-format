@@ -196,6 +196,14 @@ instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
     deserialize bs =
         case deserialize bs of
             (Some1 s a, bs') -> (Some1 s (GHC.Rec1 a), bs')
+--instance Serialize (Some1 (GHC.K1 i a)) where
+--    serialize (Some1 s (GHC.K1 a)) = serialize a
+--    deserialize bs =
+--        case deserialize bs of
+--            (a, bs') -> (Some1 ? (GHC.K1 a), bs')
+instance Serialize a => Dict1 Serialize (GHC.K1 i a) where
+    dict1 _ = Dict
+
 instance Dict1 Serialize f => Dict1 Serialize (GHC.M1 s l f) where
     dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
 instance Dict1 Serialize f => Dict1 Serialize (GHC.Rec1 f) where
@@ -219,7 +227,8 @@ someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 sdp = serialize someLol
 
 data UseSizeTwice (size :: Nat) = UseSizeTwice
-    { size :: Sing size
+    { whatever :: Word8
+    , size :: Sing size
     , arr1 :: Vector Word8 size
     , sizeAgain :: Sing size
     , arr2 :: Vector Word16 size
@@ -234,7 +243,7 @@ instance Serialize Word16 where
             (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
 
 someUST :: Some1 (GHC.Rep1 UseSizeTwice)
-someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
+someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
 sust = serialize someUST
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
