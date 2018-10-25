@@ -102,6 +102,7 @@ ifZeroElse z s =
                 withDict (axiom :: Dict (IsNonZero n ~ 'True)) (s Proxy) \\ unsafeSubNat @n @1 \\ plusMinusInverse @1 @n
 samePredecessor :: forall n n1 n2. (n ~ (1 + n1), n ~ (1 + n2)) :- (n1 ~ n2)
 samePredecessor = Sub axiom
+
 instance (Serialize a, KnownNat n) => Serialize (Vector a n) where
     serialize (v :: Vector a n) =
         ifZeroElse @n [] $ \_ ->
@@ -114,6 +115,8 @@ instance (Serialize a, KnownNat n) => Serialize (Vector a n) where
                 (a, bs') ->
                     case deserialize @(Vector a n1) bs' of
                         (as, bs'') -> (a :> as, bs'')
+instance Serialize a => Dict1 Serialize (Vector a) where
+    dict1 SNat = Dict
 
 instance Serialize (f p) => Serialize (GHC.Rec1 f p) where
     serialize (GHC.Rec1 a) = serialize a
@@ -172,14 +175,21 @@ instance Serialize (Some1 f) => Serialize (Some1 (GHC.M1 i c f)) where
     deserialize bs =
         case deserialize bs of
             (Some1 s a, bs') -> (Some1 s (GHC.M1 a), bs')
-instance Serialize (Some1 (GHC.M1 s l (GHC.Rec1 Sing) GHC.:*: GHC.M1 s m (GHC.Rec1 (Vector Word8)))) where
-    serialize (Some1 SNat (GHC.M1 (GHC.Rec1 SNat) GHC.:*: (GHC.M1 (GHC.Rec1 arr)))) = serialize arr
+instance
+    ( Serialize (SomeSing k)
+    , Dict1 Serialize (f :: k -> Type)
+    )
+    => Serialize (Some1 (GHC.M1 s l (GHC.Rec1 Sing) GHC.:*: GHC.M1 s m (GHC.Rec1 f))) where
+    serialize (Some1 s1 (GHC.M1 (GHC.Rec1 (s2 :: Sing x)) GHC.:*: (GHC.M1 (GHC.Rec1 a)))) =
+        withDict (dict1 s2 :: Dict (Serialize (f x))) $
+            serialize a
     deserialize bs =
         case deserialize bs of
-            (SomeSing (SNat :: Sing (size :: Nat)), bs') ->
-                case deserialize bs' of
-                    (arr :: Vector Word8 size, bs'') ->
-                        (Some1 SNat (GHC.M1 (GHC.Rec1 SNat) GHC.:*: (GHC.M1 (GHC.Rec1 arr))), bs'')
+            (SomeSing (s :: Sing (x :: k)), bs') ->
+                withDict (dict1 s :: Dict (Serialize (f x))) $
+                    case deserialize bs' of
+                        (a :: f size, bs'') ->
+                            (Some1 s (GHC.M1 (GHC.Rec1 s) GHC.:*: (GHC.M1 (GHC.Rec1 a))), bs'')
 
 someLol :: Some1 (GHC.Rep1 DependentPair)
 someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
