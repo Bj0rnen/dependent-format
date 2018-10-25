@@ -46,6 +46,7 @@ import Unsafe.Coerce
 import Data.Constraint.Forall
 
 import Data.Word
+import Data.Bits
 import Numeric.Natural
 
 import Exinst
@@ -199,6 +200,11 @@ instance Dict1 Serialize f => Dict1 Serialize (GHC.M1 s l f) where
     dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
 instance Dict1 Serialize f => Dict1 Serialize (GHC.Rec1 f) where
     dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
+instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (f GHC.:*: g) where
+    dict1 (s :: Sing a) =
+        withDict (dict1 s :: Dict (Serialize (f a))) $
+            withDict (dict1 s :: Dict (Serialize (g a))) $
+                Dict
 instance Serialize (SomeSing t) => Serialize (Some1 (Sing :: t -> Type)) where
     serialize (Some1 s1 s2) = serialize (SomeSing s2)
     deserialize bs =
@@ -215,9 +221,15 @@ data UseSizeTwice (size :: Nat) = UseSizeTwice
     , arr2 :: Vector Word16 size
     } deriving (GHC.Generic1)
 
+instance Serialize Word16 where
+    serialize a = [fromIntegral (a .&. 0xFF00) `shiftR` 8, fromIntegral (a .&. 0xFF)]
+    deserialize bs =
+        case deserialize bs of
+            (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
+
 someUST :: Some1 (GHC.Rep1 UseSizeTwice)
 someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice SNat (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
---sust = serialize someUST
+sust = serialize someUST
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
