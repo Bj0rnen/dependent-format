@@ -35,7 +35,10 @@ import GHC.TypeNats
 import Data.Singletons.TypeLits
 import Data.Kind
 
-import GHC.Generics
+import qualified GHC.Generics as GHC hiding (from, to)
+import Generics.SOP hiding (Sing, Nil, SingI, sing)
+import qualified Generics.SOP as SOP
+import Generics.SOP.Classes (Same)
 
 import Data.Proxy
 import Data.Constraint
@@ -56,10 +59,10 @@ infixr :>
 data DependentPair (size :: Nat) = DependentPair
     { size :: Sing size
     , arr :: Vector Word8 size
-    } deriving (Show, Generic1)
+    } deriving (Show, GHC.Generic1)
 
-lol :: Rep1 DependentPair 2
-lol = from1 (DependentPair SNat (1 :> 2 :> Nil))
+lol :: GHC.Rep1 DependentPair 2
+lol = GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 
 class Serialize a where
     serialize :: a -> [Word8]
@@ -112,39 +115,39 @@ instance (Serialize a, KnownNat n) => Serialize (Vector a n) where
                     case deserialize @(Vector a n1) bs' of
                         (as, bs'') -> (a :> as, bs'')
 
-instance Serialize (f p) => Serialize (Rec1 f p) where
-    serialize (Rec1 a) = serialize a
+instance Serialize (f p) => Serialize (GHC.Rec1 f p) where
+    serialize (GHC.Rec1 a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (Rec1 a, bs')
+            (a, bs') -> (GHC.Rec1 a, bs')
 
-instance Serialize (f p) => Serialize (M1 i c f p) where
-    serialize (M1 a) = serialize a
+instance Serialize (f p) => Serialize (GHC.M1 i c f p) where
+    serialize (GHC.M1 a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (M1 a, bs')
+            (a, bs') -> (GHC.M1 a, bs')
 
-instance (Serialize (a p), Serialize (b p)) => Serialize ((a :*: b) p) where
-    serialize (a :*: b) = serialize a ++ serialize b
+instance (Serialize (a p), Serialize (b p)) => Serialize ((a GHC.:*: b) p) where
+    serialize (a GHC.:*: b) = serialize a ++ serialize b
     deserialize bs =
         case deserialize @(a p) bs of
             (a, bs') ->
                 case deserialize @(b p) bs' of
-                    (b, bs'') -> (a :*: b, bs'')
+                    (b, bs'') -> (a GHC.:*: b, bs'')
 
-instance Serialize a => Serialize (K1 i a p) where
-    serialize (K1 a) = serialize a
+instance Serialize a => Serialize (GHC.K1 i a p) where
+    serialize (GHC.K1 a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (K1 a, bs')
+            (a, bs') -> (GHC.K1 a, bs')
 
 
 slol = serialize lol
-dlol :: (Rep1 DependentPair 2, [Word8])
+dlol :: (GHC.Rep1 DependentPair 2, [Word8])
 dlol = deserialize [2, 1, 2]
 
 lol' :: DependentPair 2
-lol' = to1 (fst dlol)
+lol' = GHC.to1 (fst dlol)
 
 instance Serialize (SomeSing Nat) where
     serialize (SomeSing (SNat :: Sing n)) = serialize (SNat @n)
@@ -155,8 +158,8 @@ instance Serialize (SomeSing Nat) where
                     SomeNat (Proxy :: Proxy n) ->
                         (SomeSing @Nat @n SNat, bs')
 
-instance Serialize (Some1 (Rec1 f)) where
-    serialize (Some1 s (Rec1 a)) = undefined  --serialize a  -- TODO: ForallF? KnownImplies?
+instance Serialize (Some1 (GHC.Rec1 f)) where
+    serialize (Some1 s (GHC.Rec1 a)) = undefined  --serialize a  -- TODO: ForallF? KnownImplies?
     deserialize = undefined
 
 
@@ -185,6 +188,22 @@ instance Serialize (Some1 (Rec1 f)) where
 -- TODO: I rely only on Generic. Then I inject distinct values on each type variable (or element of HList/tuple) as "tags" for a TaggedHList
 -- TODO: I'm simply wondering if that approach is more or less a hand-baked GenericN? That would honestly be blog post worthy...
 
+instance Serialize (NP I xs) => Serialize (SOP I '[xs]) where
+    serialize (SOP (Z as)) = serialize as
+    deserialize bs =
+        case deserialize @(NP I xs) bs of
+            (as, bs') -> (SOP (Z as), bs')
+instance Serialize (NP I '[]) where
+    serialize SOP.Nil = []
+    deserialize bs = (SOP.Nil, bs)
+instance (Serialize x, Serialize (NP I xs)) => Serialize (NP I (x ': xs)) where
+    serialize (I a :* as) = serialize a ++ serialize as
+    deserialize bs =
+        case deserialize @x bs of
+            (a, bs') ->
+                case deserialize @(NP I xs) bs' of
+                    (b, bs'') -> (I a :* b, bs'')
+
 instance Dict1 Show (Vector Word8) where
     dict1 _ = Dict
 
@@ -211,7 +230,7 @@ data DependentMore (size1 :: Dependency Nat) (size2 :: Dependency Nat) = Depende
     , size2 :: Sing // size2
     , arr1 :: Vector Word8 // size1
     , arr2 :: Vector Word8 // size2
-    } deriving Generic
+    } deriving (GHC.Generic, Generic)
 deriving instance
     ( Show (Sing // size1)
     , Show (Sing // size2)
@@ -230,17 +249,17 @@ exampleNonDependentMore = DependentMore 1 2 (some1 (3 :> Nil)) (some1 (4 :> 5 :>
 exampleDependentMore :: DependentMore ('Dependent 1) ('Dependent 2)
 exampleDependentMore = DependentMore SNat SNat (3 :> Nil) (4 :> 5 :> Nil)
 
-lols :: Rep (DependentMore ('Dependent 1) ('Dependent 2)) p
+lols :: Rep (DependentMore ('Dependent 1) ('Dependent 2))
 lols = from exampleDependentMore
 
 slols = serialize lols
-dlols :: (Rep (DependentMore ('Dependent 1) ('Dependent 2)) p, [Word8])
+dlols :: (Rep (DependentMore ('Dependent 1) ('Dependent 2)), [Word8])
 dlols = deserialize slols
 
 lols' :: DependentMore ('Dependent 1) ('Dependent 2)
 lols' = to (fst dlols)
 
-nlols :: Rep (NonDependent DependentMore) p
+nlols :: Rep (NonDependent DependentMore)
 nlols = gundepend (fst dlols)
 
 nlols' :: NonDependent DependentMore
@@ -248,18 +267,19 @@ nlols' = to nlols
 
 
 
-class GUndepend f g where
-    gundepend :: f p -> g p
-instance (GUndepend f f', GUndepend g g') => GUndepend (f :*: g) (f' :*: g') where
-    gundepend (a :*: b) = gundepend a :*: gundepend b
-instance (SingKind t, dt ~ Demote t) => GUndepend (K1 i (Sing (a :: t))) (K1 i dt) where
-    gundepend (K1 a) = K1 (fromSing a)
-instance SingI n => GUndepend (K1 i (a n)) (K1 i (Some1 a)) where
-    gundepend (K1 a) = K1 (some1 a)
-instance GUndepend (K1 i a) (K1 i a) where
-    gundepend (K1 a) = K1 a
-instance GUndepend f g => GUndepend (M1 i c f) (M1 i c g) where
-    gundepend (M1 a) = M1 (gundepend a)
+class GUndepend' a b where
+    gundepend' :: a -> b
+instance GUndepend' a a where
+    gundepend' a = a
+instance (SingKind t, dt ~ Demote t) => GUndepend' (Sing (a :: t)) dt where
+    gundepend' a = fromSing a
+instance SingI n => GUndepend' (a n) (Some1 a) where
+    gundepend' a = some1 a
+
+class GUndepend a b where
+    gundepend :: a -> b
+instance (a ~ SOP I '[xs], b ~ SOP I '[ys], AllZip GUndepend' xs ys) => GUndepend a b where
+    gundepend = htrans (Proxy @GUndepend') (\(I a) -> I (gundepend' a))
 
 undepend1 ::
     ( Generic (a ('Dependent x))
@@ -287,7 +307,7 @@ data DependentPlusFree (size1 :: Dependency Nat) (size2 :: Dependency Nat) = Dep
     , arr1 :: Vector Word8 // size1
     , arr2 :: Vector Word8 // size2
     , freeArr :: Vector Word8 4
-    } deriving Generic
+    } deriving (GHC.Generic, Generic)
 deriving instance
     ( Show (Sing // size1)
     , Show (Sing // size2)
@@ -307,37 +327,53 @@ ndpf :: NonDependent DependentPlusFree
 ndpf = undepend dpf
 
 
-class GDepend f g where
-    gdepend :: g p -> Either String (f p)
-instance (GDepend f f', GDepend g g') => GDepend (f :*: g) (f' :*: g') where
-    gdepend (a :*: b) =
-        case (gdepend a, gdepend b) of
-            (Left s, Left t) -> Left (s ++ " :*: " ++ t)
-            (Left s, Right y) -> Left (s ++ " :*: _")
-            (Right x, Left t) -> Left ("_ :*: " ++ t)
-            (Right x, Right y) -> Right (x :*: y)
-instance (SingKind t, dt ~ Demote t, SDecide t, SingI a, Show dt) => GDepend (K1 i (Sing (a :: t))) (K1 i dt) where
-    gdepend (K1 a) =
+
+class GDepend' a b where
+    gdepend' :: b -> Either String a
+instance GDepend' a a where
+    gdepend' a = Right a
+instance (SingKind t, dt ~ Demote t, SDecide t, SingI a, Show dt) => GDepend' (Sing (a :: t)) dt where
+    gdepend' a =
         withSomeSing a $ \s ->
             case s %~ sing @t @a of
                 Proved Refl ->
-                    Right (K1 s)
+                    Right s
                 Disproved r ->
                     -- TODO: Can probably grap field name.
                     Left ("((Sing) Refuted: " ++ show a ++ " %~ " ++ show (demote @a) ++ ")")
-instance (SingKind t, SDecide t, SingI (n :: t), Show (Demote t)) => GDepend (K1 i (a n)) (K1 i (Some1 a)) where
-    gdepend (K1 (Some1 n a)) =
+instance (SingKind t, SDecide t, SingI (n :: t), Show (Demote t)) => GDepend' (a n) (Some1 a) where
+    gdepend' (Some1 n a) =
         case n %~ sing @t @n of
             Proved Refl ->
-                Right (K1 a)
+                Right a
             Disproved r ->
                 -- TODO: Can probably grap field name.
                 Left ("((Some1) Refuted: " ++ show (fromSing n) ++ " %~ " ++ show (demote @n) ++ ")")
-instance GDepend (K1 i a) (K1 i a) where
-    gdepend (K1 a) = Right (K1 a)
-instance GDepend f g => GDepend (M1 i c f) (M1 i c g) where
-    gdepend (M1 a) =
-        M1 <$> gdepend a
+
+class GDepend f g where
+    gdepend :: g -> Either String f
+instance GDepend (NP I xs) (NP I ys) => GDepend (SOP I '[xs]) (SOP I '[ys]) where
+    gdepend (SOP (Z xs)) = SOP . Z <$> gdepend xs
+instance GDepend (NP I '[]) (NP I '[]) where
+    gdepend SOP.Nil = Right SOP.Nil
+instance (GDepend (I x) (I y), GDepend (NP I xs) (NP I ys)) => GDepend (NP I (x ': xs)) (NP I (y ': ys)) where
+    gdepend (a :* as) =
+        case (gdepend a, gdepend as) of
+            (Left s, Left t) -> Left (s ++ " :* " ++ t)
+            (Left s, Right y) -> Left (s ++ " :* _")
+            (Right x, Left t) -> Left ("_ :* " ++ t)
+            (Right x, Right y) -> Right (x :* y)
+instance GDepend' a b => GDepend (I a) (I b) where
+    gdepend (I a) = I <$> gdepend' a
+--instance (a ~ SOP I '[xs], b ~ SOP I '[ys], AllZip GDepend' xs ys) => GDepend a b where
+--    gdepend = htrans (Proxy @GDepend') (\(I a) -> I (gdepend' a))
+
+--class GUndepend a b where
+--    gundepend :: a -> b
+--instance (a ~ SOP I '[xs], b ~ SOP I '[ys], AllZip GUndepend' xs ys) => GUndepend a b where
+--    gundepend = htrans (Proxy @GUndepend') (\(I a) -> I (gundepend' a))
+
+
 
 depend :: forall a b. (GDepend (Rep a) (Rep b), Generic b, Generic a) => b -> Either String a
 depend a = to <$> gdepend (from a)
