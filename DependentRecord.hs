@@ -205,6 +205,9 @@ instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (f GHC.:*: g)
         withDict (dict1 s :: Dict (Serialize (f a))) $
             withDict (dict1 s :: Dict (Serialize (g a))) $
                 Dict
+-- TODO: Can I write the non-Nat-specialized instance of the below, somehow?
+instance Dict1 Serialize (Sing :: Nat -> Type) where
+    dict1 SNat = Dict
 instance Serialize (SomeSing t) => Serialize (Some1 (Sing :: t -> Type)) where
     serialize (Some1 s1 s2) = serialize (SomeSing s2)
     deserialize bs =
@@ -218,7 +221,10 @@ sdp = serialize someLol
 data UseSizeTwice (size :: Nat) = UseSizeTwice
     { size :: Sing size
     , arr1 :: Vector Word8 size
+    , sizeAgain :: Sing size
     , arr2 :: Vector Word16 size
+    , arr3 :: Vector Word8 size
+    , sizeAgainAgain :: Sing size
     } deriving (GHC.Generic1)
 
 instance Serialize Word16 where
@@ -228,7 +234,7 @@ instance Serialize Word16 where
             (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
 
 someUST :: Some1 (GHC.Rep1 UseSizeTwice)
-someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice SNat (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
+someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
 sust = serialize someUST
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
