@@ -179,22 +179,35 @@ instance
     ( Serialize (SomeSing k)
     , Dict1 Serialize (f :: k -> Type)
     )
-    => Serialize (Some1 (GHC.M1 s l (GHC.Rec1 Sing) GHC.:*: GHC.M1 s m (GHC.Rec1 f))) where
-    serialize (Some1 s1 (GHC.M1 (GHC.Rec1 (s2 :: Sing x)) GHC.:*: (GHC.M1 (GHC.Rec1 a)))) =
+    => Serialize (Some1 (GHC.M1 s l (GHC.Rec1 Sing) GHC.:*: f)) where
+    serialize (Some1 s1 (GHC.M1 (GHC.Rec1 (s2 :: Sing x)) GHC.:*: a)) =
         withDict (dict1 s2 :: Dict (Serialize (f x))) $
-            serialize a
+            serialize (SomeSing s2) ++ serialize a
     deserialize bs =
         case deserialize bs of
             (SomeSing (s :: Sing (x :: k)), bs') ->
                 withDict (dict1 s :: Dict (Serialize (f x))) $
                     case deserialize bs' of
                         (a :: f size, bs'') ->
-                            (Some1 s (GHC.M1 (GHC.Rec1 s) GHC.:*: (GHC.M1 (GHC.Rec1 a))), bs'')
+                            (Some1 s (GHC.M1 (GHC.Rec1 s) GHC.:*: a), bs'')
+instance Dict1 Serialize f => Dict1 Serialize (GHC.M1 s l f) where
+    dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
+instance Dict1 Serialize f => Dict1 Serialize (GHC.Rec1 f) where
+    dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
 
 someLol :: Some1 (GHC.Rep1 DependentPair)
 someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 sdp = serialize someLol
 
+data UseSizeTwice (size :: Nat) = UseSizeTwice
+    { size :: Sing size
+    , arr1 :: Vector Word8 size
+    , arr2 :: Vector Word16 size
+    } deriving (GHC.Generic1)
+
+someUST :: Some1 (GHC.Rep1 UseSizeTwice)
+someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice SNat (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
+--sust = serialize someUST
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
