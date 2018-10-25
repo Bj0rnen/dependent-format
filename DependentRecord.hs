@@ -402,3 +402,32 @@ someDpf = Some2 (SDependent SNat :: Sing ('Dependent 1 :: Dependency Nat)) (SDep
 
 --nonDependent1 :: forall a x. (Generic (a ('Dependent x)), Generic (a 'NonDependent)) => a ('Dependent x) -> a 'NonDependent
 --nonDependent1 a = to $ nonDependentRep1 @a @x $ from a
+
+
+data G a where
+    G :: a -> G a
+    Tag :: Nat -> G a
+
+data GSing (a :: G t) where
+    GSing :: Sing (a :: t) -> GSing ('G a)
+data GVector a (n :: G Nat) where
+    GVector :: Vector a n -> GVector a ('G n)
+
+data GPlusFree (size1 :: G Nat) (size2 :: G Nat) = GPlusFree
+    { size1 :: GSing size1
+    , size2 :: GSing size2
+    , arr1 :: GVector Word8 size1
+    , arr2 :: GVector Word8 size2
+    , freeArr :: Vector Word8 4
+    } deriving (GHC.Generic, Generic)
+
+type family
+    Tag2 (f :: G x -> G y -> Type) :: Type where
+    Tag2 (f :: G x -> G y -> Type) = f ('Tag 0) ('Tag 1)
+type family
+    Rep2 (f :: G x -> G y -> Type) :: Type where
+    Rep2 (f :: G x -> G y -> Type) = Rep (Tag2 f)
+--data GSome2 f where
+--    GSome2 :: Sing a -> Sing b -> f (G a) (G b) -> GSome2 f
+data SomeRep2 (f :: G a -> G b -> Type) where
+    SomeRep2 :: Sing a -> Sing b -> Rep (f ('G a) ('G b)) -> SomeRep2 f
