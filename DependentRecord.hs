@@ -181,16 +181,16 @@ instance
     , Dict1 Serialize (g :: k -> Type)
     )
     => Serialize (Some1 (f GHC.:*: g)) where
-    serialize (Some1 (s1 :: Sing x) (s2 GHC.:*: a)) =
-        withDict (dict1 s1 :: Dict (Serialize (g x))) $
-            serialize (Some1 s1 s2) ++ serialize a
-    deserialize bs =
-        case deserialize bs of
-            (Some1 s1 (s2 :: f x), bs') ->
-                withDict (dict1 s1 :: Dict (Serialize (g x))) $
-                    case deserialize bs' of
-                        (a :: g size, bs'') ->
-                            (Some1 s1 (s2 GHC.:*: a), bs'')
+    --serialize (Some1 (s1 :: Sing x) (s2 GHC.:*: a)) =
+    --    withDict (dict1 s1 :: Dict (Serialize (g x))) $
+    --        serialize (Some1 s1 s2) ++ serialize a
+    --deserialize bs =
+    --    case deserialize bs of
+    --        (Some1 s1 (s2 :: f x), bs') ->
+    --            withDict (dict1 s1 :: Dict (Serialize (g x))) $
+    --                case deserialize bs' of
+    --                    (a :: g size, bs'') ->
+    --                        (Some1 s1 (s2 GHC.:*: a), bs'')
 instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
     serialize (Some1 s (GHC.Rec1 a)) = serialize (Some1 s a)
     deserialize bs =
@@ -245,6 +245,17 @@ instance Serialize Word16 where
 someUST :: Some1 (GHC.Rep1 UseSizeTwice)
 someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
 sust = serialize someUST
+
+-- (Serialize (Some1 f)) means: We can deserialize an `f a` without knowing a, and doing so teaches us `a`'s value.
+-- (Dict1 Serialize f) means: We can deserialize an `f a` given a (Dict (Serialize (f a))).
+-- The way I see it, we need to somehow track where we know `a` and where we need to know `a`.
+-- The deserialization is happening in order from first record field to last. We're allowed to make that assumption.
+-- (:*:) is the most intriguing part, but even the simple ones like (M1) will appear at various stages.
+-- Some of them will deserialize without knowing `a` and teach us a (Those that wrap a Sing).
+-- Some will need to know `a` in order to deserialize. In this case of just one variable, these don't teach us more.
+-- Some will deserialize fine with or without `a`, and won't teach us `a` if we don't know it.
+-- For (:*:), the above cases apply in the outward-facing sense, but there's also interaction between the inner parts.
+-- How
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
