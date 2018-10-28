@@ -176,21 +176,6 @@ instance Serialize (Some1 f) => Serialize (Some1 (GHC.M1 i c f)) where
     deserialize bs =
         case deserialize bs of
             (Some1 s a, bs') -> (Some1 s (GHC.M1 a), bs')
-instance
-    ( Serialize (Some1 f)
-    , Dict1 Serialize (g :: k -> Type)
-    )
-    => Serialize (Some1 (f GHC.:*: g)) where
-    --serialize (Some1 (s1 :: Sing x) (s2 GHC.:*: a)) =
-    --    withDict (dict1 s1 :: Dict (Serialize (g x))) $
-    --        serialize (Some1 s1 s2) ++ serialize a
-    --deserialize bs =
-    --    case deserialize bs of
-    --        (Some1 s1 (s2 :: f x), bs') ->
-    --            withDict (dict1 s1 :: Dict (Serialize (g x))) $
-    --                case deserialize bs' of
-    --                    (a :: g size, bs'') ->
-    --                        (Some1 s1 (s2 GHC.:*: a), bs'')
 instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
     serialize (Some1 s (GHC.Rec1 a)) = serialize (Some1 s a)
     deserialize bs =
@@ -256,6 +241,91 @@ sust = serialize someUST
 -- Some will deserialize fine with or without `a`, and won't teach us `a` if we don't know it.
 -- For (:*:), the above cases apply in the outward-facing sense, but there's also interaction between the inner parts.
 -- How
+
+data DepLevel = Requiring | NonDep | Learning
+type family
+    ProductDepLevel (l :: DepLevel) (r :: DepLevel) :: DepLevel where
+    ProductDepLevel 'Requiring 'Requiring = 'Requiring
+    ProductDepLevel 'Requiring 'NonDep    = 'Requiring
+    ProductDepLevel 'Requiring 'Learning  = 'Requiring
+    ProductDepLevel 'NonDep    'Requiring = 'Requiring
+    ProductDepLevel 'NonDep    'NonDep    = 'NonDep
+    ProductDepLevel 'NonDep    'Learning  = 'Learning
+    ProductDepLevel 'Learning  'Requiring = 'Learning
+    ProductDepLevel 'Learning  'NonDep    = 'Learning
+    ProductDepLevel 'Learning  'Learning  = 'Learning
+type family
+    DepLevelOf (f :: k -> Type) :: DepLevel where
+    DepLevelOf (GHC.Rec0 _) = 'NonDep
+    DepLevelOf (GHC.K1 _ _) = 'NonDep
+    DepLevelOf Sing = 'Learning
+    DepLevelOf (GHC.Rec1 f) = DepLevelOf f
+    DepLevelOf (GHC.S1 _ f) = DepLevelOf f
+    DepLevelOf (GHC.M1 _ _ f) = DepLevelOf f
+    DepLevelOf (l GHC.:*: r) = ProductDepLevel (DepLevelOf l) (DepLevelOf r)
+    DepLevelOf _ = 'Requiring
+class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
+    p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
+    p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+instance
+    ( 'Learning ~ DepLevelOf l
+    , Serialize (Some1 l)
+    , 'Requiring ~ DepLevelOf r
+    , Dict1 Serialize r
+    )
+    => Product1Serialize 'Learning 'Requiring l r where
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withDict (dict1 s :: Dict (Serialize (r a))) $ serialize b)
+    p1deserialize bs =
+        case deserialize bs of
+            (Some1 (s :: Sing a) a, bs') ->
+                case withDict (dict1 s :: Dict (Serialize (r a))) $ deserialize bs' of
+                    (b, bs'') ->
+                        (Some1 s (a GHC.:*: b), bs'')
+instance
+    ( 'Learning ~ DepLevelOf l
+    , Serialize (Some1 l)
+    , 'Learning ~ DepLevelOf r
+    , Serialize (Some1 r)
+    , SDecide t
+    , SingKind t
+    , Show (Demote t)
+    )
+    => Product1Serialize 'Learning 'Learning (l :: t -> Type) r where
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ serialize (Some1 s b)
+    p1deserialize bs =
+        case deserialize bs of
+            (Some1 s1 (a :: l a1), bs') ->
+                case deserialize bs' of
+                    (Some1 s2 (b :: r a2), bs'') ->
+                        case s1 %~ s2 of
+                            Proved Refl -> (Some1 s1 (a GHC.:*: b), bs'')
+                            -- TODO: deserialize should return Either.
+                            -- TODO: Should I wrap in SomeSing before showing instead of demoting?
+                            Disproved r -> error ("((Sing) Refuted: " ++ show (withSingI s1 $ demote @a1) ++ " %~ " ++ show (withSingI s2 $ demote @a2) ++ ")")
+instance
+    ( 'NonDep ~ DepLevelOf l
+    , ForallF Serialize l
+    , 'Learning ~ DepLevelOf r
+    , Serialize (Some1 r)
+    )
+    => Product1Serialize 'NonDep 'Learning (l :: t -> Type) r where
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = (serialize a \\ instF @Serialize @l @a) ++ serialize (Some1 s b)
+    p1deserialize bs =
+        withNothing $ \(Proxy :: Proxy (x :: t)) ->
+            case deserialize bs \\ instF @Serialize @l @x of
+                (a :: l x, bs') ->
+                    case deserialize bs' of
+                        (Some1 (s :: Sing a) (b :: r a), bs'') ->
+                            let a' = unsafeCoerce a :: l a in  -- TODO: unsafeCoerce because I have no idea how to use instF for deserialization. I don't know if this safe usage at all.
+                                (Some1 s (a' GHC.:*: b), bs'')
+        where
+            withNothing :: forall r. (forall (x :: t). Proxy x -> r) -> r
+            withNothing f = f Proxy
+-- TODO: I think we'll need a whole bunch of more instances of Product1Serialize.
+
+instance (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
+    serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
+    deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
