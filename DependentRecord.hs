@@ -44,6 +44,7 @@ import Data.Proxy
 import Data.Constraint
 import Unsafe.Coerce
 import Data.Constraint.Forall
+import GHC.Types (Any)
 
 import Data.Word
 import Data.Bits
@@ -311,17 +312,36 @@ instance
     => Product1Serialize 'NonDep 'Learning (l :: t -> Type) r where
     p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = (serialize a \\ instF @Serialize @l @a) ++ serialize (Some1 s b)
     p1deserialize bs =
-        withNothing $ \(Proxy :: Proxy (x :: t)) ->
-            case deserialize bs \\ instF @Serialize @l @x of
-                (a :: l x, bs') ->
-                    case deserialize bs' of
-                        (Some1 (s :: Sing a) (b :: r a), bs'') ->
-                            let a' = unsafeCoerce a :: l a in  -- TODO: unsafeCoerce because I have no idea how to use instF for deserialization. I don't know if this safe usage at all.
-                                (Some1 s (a' GHC.:*: b), bs'')
-        where
-            withNothing :: forall r. (forall (x :: t). Proxy x -> r) -> r
-            withNothing f = f Proxy
--- TODO: I think we'll need a whole bunch of more instances of Product1Serialize.
+        --withNothing $ \(Proxy :: Proxy (x :: t)) ->
+        --    case deserialize bs \\ instF @Serialize @l @x of
+        --        (a :: l x, bs') ->
+        --            case deserialize bs' of
+        --                (Some1 (s :: Sing a) (b :: r a), bs'') ->
+        --                    let a' = unsafeCoerce a :: l a in  -- TODO: unsafeCoerce because I have no idea how to use instF for deserialization. I don't know if this safe usage at all.
+        --                        (Some1 s (a' GHC.:*: b), bs'')
+        --where
+        --    withNothing :: forall r. (forall (x :: t). Proxy x -> r) -> r
+        --    withNothing f = f Proxy
+        case deserialize bs \\ instF @Serialize @l @Any of
+            (a :: l Any, bs') ->
+                case deserialize bs' of
+                    (Some1 (s :: Sing a) (b :: r a), bs'') ->
+                        (Some1 s (unsafeCoerce a GHC.:*: b), bs'')
+--instF @c @f @x :: g x
+instance
+    ( 'Learning ~ DepLevelOf l
+    , Serialize (Some1 l)
+    , 'NonDep ~ DepLevelOf r
+    , ForallF Serialize r
+    )
+    => Product1Serialize 'Learning 'NonDep (l :: t -> Type) r where
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (serialize b \\ instF @Serialize @r @a)
+    p1deserialize bs =
+        case deserialize bs of
+            (Some1 (s :: Sing a) (a :: l a), bs') ->
+                case deserialize bs' \\ instF @Serialize @r @a of
+                    (b :: r a, bs'') ->
+                        (Some1 s (a GHC.:*: b), bs'')
 
 instance (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
     serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
