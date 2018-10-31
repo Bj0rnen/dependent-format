@@ -232,6 +232,14 @@ someUST :: Some1 (GHC.Rep1 UseSizeTwice)
 someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
 sust = serialize someUST
 
+data NeverUseSize (size :: Nat) = NeverUseSize
+    { x :: Word8
+    , y :: Word8
+    } deriving (GHC.Generic1, Show)
+
+dnus :: NeverUseSize a
+dnus = GHC.to1 $ fst $ deserialize [1, 2]
+
 -- (Serialize (Some1 f)) means: We can deserialize an `f a` without knowing a, and doing so teaches us `a`'s value.
 -- (Dict1 Serialize f) means: We can deserialize an `f a` given a (Dict (Serialize (f a))).
 -- The way I see it, we need to somehow track where we know `a` and where we need to know `a`.
