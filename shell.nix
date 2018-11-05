@@ -1,8 +1,37 @@
 with (import <nixpkgs> {}).pkgs;
 let
-  ghcPackages = haskell.packages.ghc844;
+  ghcPackages = haskell.packages.ghc862;
+
+  # I've modified nixpkgs, so that singletons_2_5 depends on th-desugar_1_9,
+  # and exinst_0_7 depends on singletons_2_5. (just singletons depending on th-desugar_1_9,
+  # would have probably accomplished it too).
+  # I've tried to figure out how to use overlays to make that change local to this shell.nix
+  # But I don't know how to use that feature correctly...
+
+  #config = {
+  #  packageOverrides = pkgs: rec {
+  #    haskellPackages = pkgs.haskellPackages.override {
+  #      overrides = self: super: {
+  #        singletons = super.singletons_2_5;
+  #      };
+  #    };
+  #  };
+  #};
+
+  #config = {
+  #  haskell.packages.ghc862 = pkgs.haskell.packages.ghc862.override {
+  #    overrides = self: super: {
+  #      singletons = super.singletons_2_5;
+  #    };
+  #  };
+  #};
+
+  #newPkgs = import <nixpkgs> { inherit config; };
+  #ghcPackages = newPkgs.haskell.packages.ghc862;
+
+
   ghc = ghcPackages.ghcWithPackages
-          (pkgs: with pkgs; [ singletons exinst constraints generics-sop ]);
+          (pkgs: with pkgs; [ singletons_2_5 exinst_0_7 constraints generics-sop kind-generics ]);
 in
 stdenv.mkDerivation {
   name = "my-haskell-env-0";
