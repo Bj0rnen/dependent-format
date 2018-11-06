@@ -118,8 +118,6 @@ instance (Serialize a, KnownNat n) => Serialize (Vector a n) where
                 (a, bs') ->
                     case deserialize @(Vector a n1) bs' of
                         (as, bs'') -> (a :> as, bs'')
-instance Serialize a => Dict1 Serialize (Vector a) where
-    dict1 SNat = Dict
 
 instance Serialize (f p) => Serialize (GHC.Rec1 f p) where
     serialize (GHC.Rec1 a) = serialize a
@@ -188,21 +186,7 @@ instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
 --    deserialize bs =
 --        case deserialize bs of
 --            (a, bs') -> (Some1 ? (GHC.K1 a), bs')
-instance Serialize a => Dict1 Serialize (GHC.K1 i a) where
-    dict1 _ = Dict
 
-instance Dict1 Serialize f => Dict1 Serialize (GHC.M1 s l f) where
-    dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
-instance Dict1 Serialize f => Dict1 Serialize (GHC.Rec1 f) where
-    dict1 (s :: Sing a) = withDict (dict1 s :: Dict (Serialize (f a))) Dict
-instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (f GHC.:*: g) where
-    dict1 (s :: Sing a) =
-        withDict (dict1 s :: Dict (Serialize (f a))) $
-            withDict (dict1 s :: Dict (Serialize (g a))) $
-                Dict
--- TODO: Can I write the non-Nat-specialized instance of the below, somehow?
-instance Dict1 Serialize (Sing :: Nat -> Type) where
-    dict1 SNat = Dict
 instance Serialize (SomeSing t) => Serialize (Some1 (Sing :: t -> Type)) where
     serialize (Some1 s1 s2) = serialize (SomeSing s2)
     deserialize bs =
@@ -277,20 +261,34 @@ type family
 class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
     p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+--instance
+--    ( 'Learning ~ DepLevelOf l
+--    , Serialize (Some1 l)
+--    , 'Requiring ~ DepLevelOf r
+--    , forall x. SingI x => Serialize (r x)
+--    )
+--    => Product1Serialize 'Learning 'Requiring l r where
+--    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withSingI s $ serialize b)
+--    p1deserialize bs =
+--        case deserialize bs of
+--            (Some1 (s :: Sing a) a, bs') ->
+--                case withSingI s $ deserialize bs' of
+--                    (b, bs'') ->
+--                        (Some1 s (a GHC.:*: b), bs'')
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'Requiring ~ DepLevelOf r
-    , Dict1 Serialize r
+    , forall (x :: Nat). KnownNat x => Serialize (r x)  -- TODO: The above instance doesn't force Nat to be the kind of `x`. But it doesn't work, so I need to figure out what to do about the mismatch between `SingI` and `KnownNat`.
     )
     => Product1Serialize 'Learning 'Requiring l r where
-    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withDict (dict1 s :: Dict (Serialize (r a))) $ serialize b)
+    p1serialize (Some1 (SNat :: Sing a) (a GHC.:*: b)) = serialize (Some1 SNat a) ++ (serialize b)
     p1deserialize bs =
         case deserialize bs of
-            (Some1 (s :: Sing a) a, bs') ->
-                case withDict (dict1 s :: Dict (Serialize (r a))) $ deserialize bs' of
+            (Some1 (SNat :: Sing a) a, bs') ->
+                case deserialize bs' of
                     (b, bs'') ->
-                        (Some1 s (a GHC.:*: b), bs'')
+                        (Some1 SNat (a GHC.:*: b), bs'')
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
@@ -385,9 +383,6 @@ instance (Serialize x, Serialize (NP I xs)) => Serialize (NP I (x ': xs)) where
             (a, bs') ->
                 case deserialize @(NP I xs) bs' of
                     (b, bs'') -> (I a :* b, bs'')
-
-instance Dict1 Show (Vector Word8) where
-    dict1 _ = Dict
 
 data Dependency a = NonDependent | Dependent a
     deriving Show
@@ -496,11 +491,6 @@ deriving instance
     , Show (Vector Word8 // size1)
     , Show (Vector Word8 // size2)
     ) => Show (DependentPlusFree size1 size2)
-instance Dict2 Show DependentPlusFree where
-    dict2 (SDependent SNat) (SDependent SNat) = Dict
-    dict2 (SDependent SNat) SNonDependent = Dict
-    dict2 SNonDependent (SDependent SNat) = Dict
-    dict2 SNonDependent SNonDependent = Dict
 
 dpf :: DependentPlusFree ('Dependent 1) ('Dependent 2)
 dpf = DependentPlusFree SNat SNat (3 :> Nil) (4 :> 5 :> Nil) (6 :> 7 :> 8 :> 9 :> Nil)
