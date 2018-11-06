@@ -52,7 +52,7 @@ import Numeric.Natural
 
 import Exinst
 
-data Vector a n where
+data Vector :: Type -> Nat -> Type where
     Nil :: Vector a 0
     (:>) :: IsNonZero (1 + n) ~ 'True => a -> Vector a n -> Vector a (1 + n)  -- NOTE: The IsNonZero thing makes ifZeroElse's 0-case fail this pattern match. Hope there's some nicer way to achieve this.
 deriving instance Show a => Show (Vector a n)
@@ -402,7 +402,7 @@ instance Dict1 Show (Vector Word8) where
 data Dependency a = NonDependent | Dependent a
     deriving Show
 
-data instance Sing (d :: Dependency a) where
+data instance Sing :: Dependency a -> Type where
     SNonDependent :: Sing ('NonDependent :: Dependency a)
     SDependent :: Sing x -> Sing ('Dependent x :: Dependency a)
 instance SingKind a => SingKind (Dependency a) where
@@ -527,7 +527,7 @@ instance GDepend' a a where
 instance (SingKind t, dt ~ Demote t, SDecide t, SingI a, Show dt) => GDepend' (Sing (a :: t)) dt where
     gdepend' a =
         withSomeSing a $ \s ->
-            case s %~ sing @t @a of
+            case s %~ sing @a of
                 Proved Refl ->
                     Right s
                 Disproved r ->
@@ -535,7 +535,7 @@ instance (SingKind t, dt ~ Demote t, SDecide t, SingI a, Show dt) => GDepend' (S
                     Left ("((Sing) Refuted: " ++ show a ++ " %~ " ++ show (demote @a) ++ ")")
 instance (SingKind t, SDecide t, SingI (n :: t), Show (Demote t)) => GDepend' (a n) (Some1 a) where
     gdepend' (Some1 n a) =
-        case n %~ sing @t @n of
+        case n %~ sing @n of
             Proved Refl ->
                 Right a
             Disproved r ->
@@ -596,13 +596,13 @@ someDpf = Some2 (SDependent SNat :: Sing ('Dependent 1 :: Dependency Nat)) (SDep
 --nonDependent1 a = to $ nonDependentRep1 @a @x $ from a
 
 
-data G a where
+data G :: Type -> Type where
     G :: a -> G a
     Tag :: Nat -> G a
 
-data GSing (a :: G t) where
+data GSing :: G t -> Type where
     GSing :: Sing (a :: t) -> GSing ('G a)
-data GVector a (n :: G Nat) where
+data GVector a :: G Nat -> Type where
     GVector :: Vector a n -> GVector a ('G n)
 
 data GPlusFree (size1 :: G Nat) (size2 :: G Nat) = GPlusFree
