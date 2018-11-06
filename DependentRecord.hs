@@ -26,6 +26,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 module DependentRecord where
 
@@ -313,12 +314,12 @@ instance
                             Disproved r -> error ("((Sing) Refuted: " ++ show (withSingI s1 $ demote @a1) ++ " %~ " ++ show (withSingI s2 $ demote @a2) ++ ")")
 instance
     ( 'NonDep ~ DepLevelOf l
-    , ForallF Serialize l
+    , forall x. Serialize (l x)
     , 'Learning ~ DepLevelOf r
     , Serialize (Some1 r)
     )
     => Product1Serialize 'NonDep 'Learning (l :: t -> Type) r where
-    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = (serialize a \\ instF @Serialize @l @a) ++ serialize (Some1 s b)
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize a ++ serialize (Some1 s b)
     p1deserialize bs =
         --withNothing $ \(Proxy :: Proxy (x :: t)) ->
         --    case deserialize bs \\ instF @Serialize @l @x of
@@ -330,7 +331,7 @@ instance
         --where
         --    withNothing :: forall r. (forall (x :: t). Proxy x -> r) -> r
         --    withNothing f = f Proxy
-        case deserialize bs \\ instF @Serialize @l @Any of
+        case deserialize bs of
             (a :: l Any, bs') ->
                 case deserialize bs' of
                     (Some1 (s :: Sing a) (b :: r a), bs'') ->
@@ -340,14 +341,14 @@ instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'NonDep ~ DepLevelOf r
-    , ForallF Serialize r
+    , forall x. Serialize (r x)
     )
     => Product1Serialize 'Learning 'NonDep (l :: t -> Type) r where
-    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (serialize b \\ instF @Serialize @r @a)
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ serialize b
     p1deserialize bs =
         case deserialize bs of
             (Some1 (s :: Sing a) (a :: l a), bs') ->
-                case deserialize bs' \\ instF @Serialize @r @a of
+                case deserialize bs' of
                     (b :: r a, bs'') ->
                         (Some1 s (a GHC.:*: b), bs'')
 
