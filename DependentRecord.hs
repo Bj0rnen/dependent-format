@@ -44,8 +44,8 @@ import Generics.SOP.Classes (Same)
 import Data.Proxy
 import Data.Constraint
 import Unsafe.Coerce
-import Data.Constraint.Forall
 import GHC.Types (Any)
+import Data.Coerce
 
 import Data.Word
 import Data.Bits
@@ -314,34 +314,23 @@ instance
                             Disproved r -> error ("((Sing) Refuted: " ++ show (withSingI s1 $ demote @a1) ++ " %~ " ++ show (withSingI s2 $ demote @a2) ++ ")")
 instance
     ( 'NonDep ~ DepLevelOf l
-    , forall x. Serialize (l x)
+    , forall x. Serialize (l x), forall x y. Coercible (l x) (l y)
     , 'Learning ~ DepLevelOf r
     , Serialize (Some1 r)
     )
     => Product1Serialize 'NonDep 'Learning (l :: t -> Type) r where
     p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize a ++ serialize (Some1 s b)
     p1deserialize bs =
-        --withNothing $ \(Proxy :: Proxy (x :: t)) ->
-        --    case deserialize bs \\ instF @Serialize @l @x of
-        --        (a :: l x, bs') ->
-        --            case deserialize bs' of
-        --                (Some1 (s :: Sing a) (b :: r a), bs'') ->
-        --                    let a' = unsafeCoerce a :: l a in  -- TODO: unsafeCoerce because I have no idea how to use instF for deserialization. I don't know if this safe usage at all.
-        --                        (Some1 s (a' GHC.:*: b), bs'')
-        --where
-        --    withNothing :: forall r. (forall (x :: t). Proxy x -> r) -> r
-        --    withNothing f = f Proxy
         case deserialize bs of
-            (a :: l Any, bs') ->
+            (a, bs') ->
                 case deserialize bs' of
                     (Some1 (s :: Sing a) (b :: r a), bs'') ->
-                        (Some1 s (unsafeCoerce a GHC.:*: b), bs'')
---instF @c @f @x :: g x
+                        (Some1 s (coerce @(l _) a GHC.:*: b), bs'')
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'NonDep ~ DepLevelOf r
-    , forall x. Serialize (r x)
+    , forall x. Serialize (r x)  -- We don't need it, but it might be consistent to also have: forall x y. Coercible (r x) (r y)
     )
     => Product1Serialize 'Learning 'NonDep (l :: t -> Type) r where
     p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ serialize b
