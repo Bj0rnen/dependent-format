@@ -261,34 +261,27 @@ type family
 class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
     p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
---instance
---    ( 'Learning ~ DepLevelOf l
---    , Serialize (Some1 l)
---    , 'Requiring ~ DepLevelOf r
---    , forall x. SingI x => Serialize (r x)
---    )
---    => Product1Serialize 'Learning 'Requiring l r where
---    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withSingI s $ serialize b)
---    p1deserialize bs =
---        case deserialize bs of
---            (Some1 (s :: Sing a) a, bs') ->
---                case withSingI s $ deserialize bs' of
---                    (b, bs'') ->
---                        (Some1 s (a GHC.:*: b), bs'')
+
+-- This instance might be overly broad. And I don't want Dict1 when there's QuantifiedConstraints...
+-- See trac #14937.
+instance (forall a. KnownNat a => c (f a)) => Dict1 c f where
+    dict1 SNat = Dict
+
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'Requiring ~ DepLevelOf r
-    , forall (x :: Nat). KnownNat x => Serialize (r x)  -- TODO: The above instance doesn't force Nat to be the kind of `x`. But it doesn't work, so I need to figure out what to do about the mismatch between `SingI` and `KnownNat`.
+    , Dict1 Serialize r -- TODO: Can hopefully some day be replaced with the below. See trac #14937.
+    --, forall (x :: k). SingI x => Serialize (r x)
     )
-    => Product1Serialize 'Learning 'Requiring l r where
-    p1serialize (Some1 (SNat :: Sing a) (a GHC.:*: b)) = serialize (Some1 SNat a) ++ (serialize b)
+    => Product1Serialize 'Learning 'Requiring (l :: k -> Type) (r :: k -> Type) where
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withDict (dict1 s :: Dict (Serialize (r a))) $ serialize b)
     p1deserialize bs =
         case deserialize bs of
-            (Some1 (SNat :: Sing a) a, bs') ->
-                case deserialize bs' of
+            (Some1 (s :: Sing a) a, bs') ->
+                case withDict (dict1 s :: Dict (Serialize (r a))) $ deserialize bs' of
                     (b, bs'') ->
-                        (Some1 SNat (a GHC.:*: b), bs'')
+                        (Some1 s (a GHC.:*: b), bs'')
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
