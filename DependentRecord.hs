@@ -75,11 +75,14 @@ instance Serialize Word8 where
     serialize a = [a]
     deserialize (b : bs) = (b, bs)
 
-instance KnownNat n => Serialize (Sing (n :: Nat)) where  -- 8-bit
+instance SingI n => Serialize (Sing (n :: Nat)) where  -- 8-bit
     serialize SNat = [fromIntegral $ natVal @n Proxy]
-    deserialize (n : bs)
-        | fromIntegral n == natVal @n Proxy = (SNat, bs)
-        | otherwise = error "Deserialized wrong SNat"
+    deserialize (n : bs) =
+        withKnownNat @n sing $
+            if fromIntegral n == natVal @n Proxy then
+                (SNat, bs)
+            else
+                error "Deserialized wrong SNat"
 
 newtype Magic n = Magic (KnownNat n => Dict (KnownNat n))
 magic :: forall n m o. (Natural -> Natural -> Natural) -> (KnownNat n, KnownNat m) :- KnownNat o
@@ -106,18 +109,20 @@ ifZeroElse z s =
 samePredecessor :: forall n n1 n2. (n ~ (1 + n1), n ~ (1 + n2)) :- (n1 ~ n2)
 samePredecessor = Sub axiom
 
-instance (Serialize a, KnownNat n) => Serialize (Vector a n) where
+instance (Serialize a, SingI n) => Serialize (Vector a n) where
     serialize (v :: Vector a n) =
-        ifZeroElse @n [] $ \_ ->
-            case v of
-                x :> xs ->
-                    serialize x ++ serialize xs \\ samePredecessor @n
+        withKnownNat @n sing $
+            ifZeroElse @n [] $ \_ ->
+                case v of
+                    x :> xs ->
+                        serialize x ++ serialize xs \\ samePredecessor @n
     deserialize bs =
-        ifZeroElse @n (Nil, bs) $ \(Proxy :: Proxy n1) ->
-            case deserialize @a bs of
-                (a, bs') ->
-                    case deserialize @(Vector a n1) bs' of
-                        (as, bs'') -> (a :> as, bs'')
+        withKnownNat @n sing $
+            ifZeroElse @n (Nil, bs) $ \(Proxy :: Proxy n1) ->
+                case deserialize @a bs of
+                    (a, bs') ->
+                        case deserialize @(Vector a n1) bs' of
+                            (as, bs'') -> (a :> as, bs'')
 
 instance Serialize (f p) => Serialize (GHC.Rec1 f p) where
     serialize (GHC.Rec1 a) = serialize a
@@ -261,25 +266,18 @@ type family
 class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
     p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
-
--- This instance might be overly broad. And I don't want Dict1 when there's QuantifiedConstraints...
--- See trac #14937.
-instance (forall a. KnownNat a => c (f a)) => Dict1 c f where
-    dict1 SNat = Dict
-
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'Requiring ~ DepLevelOf r
-    , Dict1 Serialize r -- TODO: Can hopefully some day be replaced with the below. See trac #14937.
-    --, forall (x :: k). SingI x => Serialize (r x)
+    , forall (x :: k). SingI x => Serialize (r x)
     )
     => Product1Serialize 'Learning 'Requiring (l :: k -> Type) (r :: k -> Type) where
-    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withDict (dict1 s :: Dict (Serialize (r a))) $ serialize b)
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withSingI s $ serialize b)
     p1deserialize bs =
         case deserialize bs of
             (Some1 (s :: Sing a) a, bs') ->
-                case withDict (dict1 s :: Dict (Serialize (r a))) $ deserialize bs' of
+                case withSingI s $ deserialize bs' of
                     (b, bs'') ->
                         (Some1 s (a GHC.:*: b), bs'')
 instance
