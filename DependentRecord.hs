@@ -40,6 +40,7 @@ import qualified GHC.Generics as GHC hiding (from, to)
 import Generics.SOP hiding (Sing, Nil, SingI, sing)
 import qualified Generics.SOP as SOP
 import Generics.SOP.Classes (Same)
+import GHC.TypeLits (TypeError(..), ErrorMessage(..))
 
 import Data.Proxy
 import Data.Constraint
@@ -291,6 +292,40 @@ type family
 class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
     p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+
+-- Negative cases:
+-- TODO: Could recurse down to first "Requiring" field, for a considerably nicer error message.
+instance (DepLevelOf l ~ 'Requiring, DepLevelOf r ~ dlr,
+    TypeError (Text "Can't deserialize a "
+               :<>: ShowType l
+               :<>: Text " before the type index (of kind "
+               :<>: ShowType k
+               :<>: Text ") is known.")
+    ) => Product1Serialize 'Requiring dlr (l :: k -> Type) r where
+    p1serialize = error "unreachable"
+    p1deserialize = error "unreachable"
+-- TODO: Could recurse down to first "Requiring" field, for a considerably nicer error message.
+instance (DepLevelOf l ~ 'NonDep, DepLevelOf r ~ 'Requiring,
+    TypeError (Text "Can't deserialize a "
+                :<>: ShowType r
+                :<>: Text " before the type index (of kind "
+                :<>: ShowType k
+                :<>: Text ") is known.")
+    ) => Product1Serialize 'NonDep 'Requiring (l :: k -> Type) r where
+    p1serialize = error "unreachable"
+    p1deserialize = error "unreachable"
+-- TODO: Can this case even possibly be hit?
+instance (DepLevelOf l ~ 'NonDep, DepLevelOf r ~ 'NonDep,
+    TypeError (Text "Can't learn type index (of kind "
+                :<>: ShowType k
+                :<>: Text ") from deserializing either of "
+                :<>: ShowType l
+                :<>: Text "or "
+                :<>: ShowType r)
+    ) => Product1Serialize 'NonDep 'NonDep (l :: k -> Type) r where
+    p1serialize = error "unreachable"
+    p1deserialize = error "unreachable"
+
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
