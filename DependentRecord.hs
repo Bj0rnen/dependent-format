@@ -230,17 +230,15 @@ data NeverUseSize (size :: Nat) = NeverUseSize
 dnus :: NeverUseSize a
 dnus = GHC.to1 $ fst $ deserialize [1, 2]
 
--- (Serialize (Some1 f)) means: We can deserialize an `f a` without knowing a, and doing so teaches us `a`'s value.
--- (Dict1 Serialize f) means: We can deserialize an `f a` given a (Dict (Serialize (f a))).
--- The way I see it, we need to somehow track where we know `a` and where we need to know `a`.
--- The deserialization is happening in order from first record field to last. We're allowed to make that assumption.
--- (:*:) is the most intriguing part, but even the simple ones like (M1) will appear at various stages.
--- Some of them will deserialize without knowing `a` and teach us a (Those that wrap a Sing).
--- Some will need to know `a` in order to deserialize. In this case of just one variable, these don't teach us more.
--- Some will deserialize fine with or without `a`, and won't teach us `a` if we don't know it.
--- For (:*:), the above cases apply in the outward-facing sense, but there's also interaction between the inner parts.
--- How
-
+-- Requiring: (forall (x :: k). SingI x => Serialize (f x))
+--     A field that's only (de)serializable when the type index is known.
+--
+-- NonDep:    (forall x. Serialize (f x), forall x y. Coercible (f x) (f y))
+--     A field that's always (de)serializable, independently if type index.
+--
+-- Learning:  (Serialize (Some1 f))
+--     A field that can (de)serialize without knowing the type index.
+--     Deserializing recovers the type index.
 data DepLevel = Requiring | NonDep | Learning
 type family
     ProductDepLevel (l :: DepLevel) (r :: DepLevel) :: DepLevel where
