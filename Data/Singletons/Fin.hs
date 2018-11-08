@@ -32,13 +32,13 @@ data instance Sing :: Fin n -> Type where
 instance KnownFin a => SingI a where
   sing = SFin
 
-instance SingKind (Fin 256) where  -- TODO: Can we write this for any n?
-  type Demote (Fin 256) = Word8
-  fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
-  toSing n =
-    case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+--instance SingKind (Fin 256) where  -- TODO: Can we write this for any n?
+--  type Demote (Fin 256) = Word8
+--  fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+--  toSing n =
+--    case someFinVal $ fromIntegral n of
+--        Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
+--        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
 
 type SFin (n :: Nat) (a :: Fin n) = Sing a
 
