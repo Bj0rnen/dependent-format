@@ -207,6 +207,14 @@ instance Serialize (SomeSing t) => Serialize (Some1 (Sing :: t -> Type)) where
         case deserialize bs of
             (SomeSing s, bs') -> (Some1 s s, bs')
 
+serializeSome1 :: (GHC.Generic1 f, Serialize (Some1 (GHC.Rep1 f))) => Some1 f -> [Word8]
+serializeSome1 (Some1 s a) = serialize (Some1 s (GHC.from1 a))
+deserializeSome1 :: (GHC.Generic1 f, Serialize (Some1 (GHC.Rep1 f))) => [Word8] -> (Some1 f, [Word8])
+deserializeSome1 bs =
+    case deserialize bs of
+        (Some1 (s :: Sing a) a, bs') ->
+            (Some1 s (GHC.to1 a), bs')
+
 someLol :: Some1 (GHC.Rep1 DependentPair)
 someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 sdp = serialize someLol
@@ -227,9 +235,9 @@ instance Serialize Word16 where
         case deserialize bs of
             (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
 
-someUST :: Some1 (GHC.Rep1 UseSizeTwice)
-someUST = Some1 SNat $ GHC.from1 $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
-sust = serialize someUST
+someUST :: Some1 UseSizeTwice
+someUST = Some1 SNat $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
+sust = serializeSome1 someUST
 
 data NeverUseSize (size :: Nat) = NeverUseSize
     { x :: Word8
