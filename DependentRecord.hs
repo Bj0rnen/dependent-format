@@ -50,6 +50,7 @@ import Data.Coerce
 import Data.Word
 import Data.Bits
 import Numeric.Natural
+import Data.Singletons.Fin
 
 import Exinst
 
@@ -219,25 +220,32 @@ someLol :: Some1 (GHC.Rep1 DependentPair)
 someLol = Some1 SNat $ GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 sdp = serialize someLol
 
-data UseSizeTwice (size :: Nat) = UseSizeTwice
-    { whatever :: Word8
-    , size :: Sing size
-    , arr1 :: Vector Word8 size
-    , sizeAgain :: Sing size
-    , arr2 :: Vector Word16 size
-    , arr3 :: Vector Word8 size
-    , sizeAgainAgain :: Sing size
-    } deriving (GHC.Generic1)
-
 instance Serialize Word16 where
     serialize a = [fromIntegral (a .&. 0xFF00) `shiftR` 8, fromIntegral (a .&. 0xFF)]
     deserialize bs =
         case deserialize bs of
             (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
 
-someUST :: Some1 UseSizeTwice
-someUST = Some1 SNat $ UseSizeTwice 123 SNat (1 :> 2 :> 3 :> Nil) SNat (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
+data UseSizeManyTimes (size :: Nat) = UseSizeManyTimes
+    { whatever :: Word8
+    , size :: Sing size
+    , arr1 :: Vector Word8 size
+    , sizeAgain :: Sing size
+    , whatever2 :: Word8
+    , arr2 :: Vector Word16 size
+    , arr3 :: Vector Word8 size
+    , sizeAgainAgain :: Sing size
+    } deriving (GHC.Generic1, Show)
+
+someUST :: Some1 UseSizeManyTimes
+someUST = Some1 SNat $ UseSizeManyTimes 123 SNat (1 :> 2 :> 3 :> Nil) SNat 42 (4 :> 5 :> 6 :> Nil) (7 :> 8 :> 9:> Nil) SNat
 sust = serializeSome1 someUST
+
+dust :: Some1 UseSizeManyTimes
+dust = fst $ deserializeSome1 [123,3,1,2,3,3,42,0,4,0,5,0,6,7,8,9,3]
+
+dust2 :: Some1 UseSizeManyTimes
+dust2 = fst $ deserializeSome1 [0,0,0,0,0]
 
 data NeverUseSize (size :: Nat) = NeverUseSize
     { x :: Word8
@@ -350,6 +358,35 @@ instance
 instance (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
     serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
     deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
+
+
+instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
+    serialize SFin = [fromIntegral $ finVal @a]
+    deserialize (a : bs) =
+        withKnownFin @a sing $
+            if fromIntegral a == finVal @a then
+                (SFin, bs)
+            else
+                error "Deserialized wrong SNat"
+instance SingI n => Serialize (SomeSing (Fin n)) where
+    serialize (SomeSing (SFin :: Sing a)) = serialize (SFin @n @a)
+    deserialize bs =
+        case deserialize bs of
+            (n :: Word8, bs') ->
+                case sing @n of
+                    SNat ->
+                        case someFinVal (fromIntegral n) of
+                            Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
+                            Just (SomeFin (Proxy :: Proxy a)) ->
+                                (SomeSing @(Fin n) @a SFin, bs')
+data IndexedOnFin256 (size :: Fin 256) = IndexedOnWord8
+    { x :: Sing size
+    } deriving (GHC.Generic1, Show, Serialize)
+
+diow8 :: Some1 IndexedOnFin256
+diow8 = fst $ deserializeSome1 [1]
+siow8 :: [Word8]
+siow8 = serializeSome1 diow8
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
