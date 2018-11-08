@@ -24,7 +24,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
@@ -70,6 +70,15 @@ lol = GHC.from1 (DependentPair SNat (1 :> 2 :> Nil))
 class Serialize a where
     serialize :: a -> [Word8]
     deserialize :: [Word8] -> (a, [Word8])
+
+    default serialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x)) => a -> [Word8]
+    serialize a = serialize $ GHC.from1 a
+
+    default deserialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x)) => [Word8] -> (a, [Word8])
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') ->
+                (GHC.to1 a, bs')
 
 instance Serialize Word8 where
     serialize a = [a]
@@ -225,10 +234,12 @@ sust = serialize someUST
 data NeverUseSize (size :: Nat) = NeverUseSize
     { x :: Word8
     , y :: Word8
-    } deriving (GHC.Generic1, Show)
+    } deriving (GHC.Generic1, Show, Serialize)
 
 dnus :: NeverUseSize a
-dnus = GHC.to1 $ fst $ deserialize [1, 2]
+dnus = fst $ deserialize [1, 2]
+snus :: [Word8]
+snus = serialize dnus
 
 -- Requiring: (forall (x :: k). SingI x => Serialize (f x))
 --     A field that's only (de)serializable when the type index is known.
