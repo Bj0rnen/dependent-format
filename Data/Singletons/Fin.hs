@@ -32,7 +32,7 @@ data instance Sing :: Fin n -> Type where
 instance KnownFin a => SingI a where
   sing = SFin
 
-instance SingKind (Fin 256) where  -- TODO: Can we write
+instance SingKind (Fin 256) where  -- TODO: Can we write this for any n?
   type Demote (Fin 256) = Word8
   fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
   toSing n =
