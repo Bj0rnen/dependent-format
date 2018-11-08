@@ -70,17 +70,9 @@ readKnowingNat' s str =
 {-
 ev :: SomeSing Nat -> Some1 EmptyVec
 ev s =
-    suppose forall (n :: Nat). SingI n =>
-        singIToKnownNat @n
-    in
-        readKnowingTypeIndex s "EmptyVec"
-
-ev :: SomeSing Nat -> Some1 EmptyVec
-ev s =
-    suppose forall (n :: Nat). SingI n =>
-        sing @n
-    in
-        readKnowingTypeIndex s "EmptyVec"
+    case forall n. SingI n => sing @n of
+        SNat ->
+            readKnowingTypeIndex s "EmptyVec"
 
 suppose1 :: forall a b r. (forall x. a x => Dict (b x)) -> ((forall x. a x => b x) => r) -> r
 suppose1 Dict a = a
