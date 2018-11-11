@@ -86,6 +86,13 @@ instance Serialize Word8 where
     serialize a = [a]
     deserialize (b : bs) = (b, bs)
 
+--instance KnownNat n => Serialize (Sing (n :: Nat)) where  -- 8-bit
+--    serialize SNat = [fromIntegral $ natVal @n Proxy]
+--    deserialize (n : bs) =
+--        if fromIntegral n == natVal @n Proxy then
+--            (SNat, bs)
+--        else
+--            error "Deserialized wrong SNat"
 instance SingI n => Serialize (Sing (n :: Nat)) where  -- 8-bit
     serialize SNat = [fromIntegral $ natVal @n Proxy]
     deserialize (n : bs) =
@@ -258,7 +265,7 @@ dnus = fst $ deserialize [1, 2]
 snus :: [Word8]
 snus = serialize dnus
 
--- Requiring: (forall (x :: k). SingI x => Serialize (f x))
+-- Requiring: (forall x. SingI x => Serialize (f x))
 --     A field that's only (de)serializable when the type index is known.
 --
 -- NonDep:    (forall x. Serialize (f x), forall x y. Coercible (f x) (f y))
@@ -326,18 +333,52 @@ instance (DepLevelOf l ~ 'NonDep, DepLevelOf r ~ 'NonDep,
     p1serialize = error "unreachable"
     p1deserialize = error "unreachable"
 
+-- TODO: Shame this generalized instance below doesn't quite get us all the way where we want to get.
+-- TODO: See Trac #14937.
+--instance
+--    ( 'Learning ~ DepLevelOf l
+--    , Serialize (Some1 l)
+--    , 'Requiring ~ DepLevelOf r
+--    , forall (x :: k). SingI x => Serialize (r x)
+--    )
+--    => Product1Serialize 'Learning 'Requiring (l :: k -> Type) (r :: k -> Type) where
+--    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withSingI s $ serialize b)
+--    p1deserialize bs =
+--        case deserialize bs of
+--            (Some1 (s :: Sing a) a, bs') ->
+--                case withSingI s $ deserialize bs' of
+--                    (b, bs'') ->
+--                        (Some1 s (a GHC.:*: b), bs'')
+
+--instance
+--    ( 'Learning ~ DepLevelOf l
+--    , Serialize (Some1 l)
+--    , 'Requiring ~ DepLevelOf r
+--    , forall (x :: Nat). KnownNat x => Serialize (r x)
+--    )
+--    => Product1Serialize 'Learning 'Requiring (l :: Nat -> Type) (r :: Nat -> Type) where
+--    p1serialize (Some1 (SNat :: Sing a) (a GHC.:*: b)) = serialize (Some1 SNat a) ++ serialize b
+--    p1deserialize bs =
+--        case deserialize bs of
+--            (Some1 (SNat :: Sing a) a, bs') ->
+--                case deserialize bs' of
+--                    (b, bs'') ->
+--                        (Some1 SNat (a GHC.:*: b), bs'')
+
+instance (forall x. KnownNat x => c (f x)) => Dict1 c (f :: Nat -> Type) where
+    dict1 SNat = Dict
 instance
     ( 'Learning ~ DepLevelOf l
     , Serialize (Some1 l)
     , 'Requiring ~ DepLevelOf r
-    , forall (x :: k). SingI x => Serialize (r x)
+    , Dict1 Serialize r
     )
     => Product1Serialize 'Learning 'Requiring (l :: k -> Type) (r :: k -> Type) where
-    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withSingI s $ serialize b)
+    p1serialize (Some1 (s :: Sing a) (a GHC.:*: b)) = serialize (Some1 s a) ++ (withDict @(Serialize (r a)) (dict1 s) $ serialize b)
     p1deserialize bs =
         case deserialize bs of
             (Some1 (s :: Sing a) a, bs') ->
-                case withSingI s $ deserialize bs' of
+                case withDict @(Serialize (r a)) (dict1 s) $ deserialize bs' of
                     (b, bs'') ->
                         (Some1 s (a GHC.:*: b), bs'')
 instance
@@ -426,13 +467,7 @@ siow8 = serializeSome1 diow8
 
 data RequiringSize (size :: Nat) = RequiringSize
     { arr :: Vector Word8 size
-    } deriving (GHC.Generic1, Show)
--- TODO: Would there be any way to make it OK to just put
--- TODO: Serialize in the deriving list above instead?
--- TODO: Problem now is that that doesn't add the
--- TODO: (SingI x) constraint, but instead a (KnownNat x)
--- TODO: constraint, it seems. But why?
-deriving instance SingI x => Serialize (RequiringSize x)
+    } deriving (GHC.Generic1, Show, Serialize)
 
 data ProvidingSize (size :: Nat) = ProvidingSize
     { size :: Sing size
@@ -448,8 +483,6 @@ sps =
             RequiringSize (1 :> 2 :> 3 :> Nil)
 dps :: Some1 ProvidingSize
 dps = fst $ deserializeSome1 sps
-instance Dict1 Show ProvidingSize where
-    dict1 SNat = Dict
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
@@ -476,6 +509,9 @@ instance Dict1 Show ProvidingSize where
 -- TODO: I rely only on Generic. Then I inject distinct values on each type variable (or element of HList/tuple) as "tags" for a TaggedHList
 -- TODO: I'm simply wondering if that approach is more or less a hand-baked GenericN? That would honestly be blog post worthy...
 
+
+
+{-
 instance Serialize (NP I xs) => Serialize (SOP I '[xs]) where
     serialize (SOP (Z as)) = serialize as
     deserialize bs =
@@ -711,3 +747,4 @@ type family
 --    GSome2 :: Sing a -> Sing b -> f (G a) (G b) -> GSome2 f
 data SomeRep2 (f :: G a -> G b -> Type) where
     SomeRep2 :: Sing a -> Sing b -> Rep (f ('G a) ('G b)) -> SomeRep2 f
+-}
