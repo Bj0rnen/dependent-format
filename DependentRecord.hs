@@ -416,12 +416,40 @@ instance SingI n => Serialize (SomeSing (Fin n)) where
                                 (SomeSing @(Fin n) @a SFin, bs')
 data IndexedOnFin256 (size :: Fin 256) = IndexedOnWord8
     { x :: Sing size
+    --, arr :: Vector Word8 size
     } deriving (GHC.Generic1, Show, Serialize)
 
 diow8 :: Some1 IndexedOnFin256
 diow8 = fst $ deserializeSome1 [1]
 siow8 :: [Word8]
 siow8 = serializeSome1 diow8
+
+data RequiringSize (size :: Nat) = RequiringSize
+    { arr :: Vector Word8 size
+    } deriving (GHC.Generic1, Show)
+-- TODO: Would there be any way to make it OK to just put
+-- TODO: Serialize in the deriving list above instead?
+-- TODO: Problem now is that that doesn't add the
+-- TODO: (SingI x) constraint, but instead a (KnownNat x)
+-- TODO: constraint, it seems. But why?
+deriving instance SingI x => Serialize (RequiringSize x)
+
+data ProvidingSize (size :: Nat) = ProvidingSize
+    { size :: Sing size
+    , rs :: RequiringSize size
+    } deriving (GHC.Generic1, Show)
+
+--srs :: [Word8]
+--srs = serializeSome1 $ Some1 SNat $ RequiringSize (1 :> Nil)
+sps :: [Word8]
+sps =
+    serializeSome1 $ Some1 SNat $
+        ProvidingSize SNat $
+            RequiringSize (1 :> 2 :> 3 :> Nil)
+dps :: Some1 ProvidingSize
+dps = fst $ deserializeSome1 sps
+instance Dict1 Show ProvidingSize where
+    dict1 SNat = Dict
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
