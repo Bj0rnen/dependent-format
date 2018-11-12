@@ -73,10 +73,10 @@ class Serialize a where
     serialize :: a -> [Word8]
     deserialize :: [Word8] -> (a, [Word8])
 
-    default serialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x), OpenDepLevel f) => a -> [Word8]
+    default serialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x), HasDepLevel f) => a -> [Word8]
     serialize a = serialize $ GHC.from1 a
 
-    default deserialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x), OpenDepLevel f) => [Word8] -> (a, [Word8])
+    default deserialize :: (a ~ f x, GHC.Generic1 f, Serialize (GHC.Rep1 f x), HasDepLevel f) => [Word8] -> (a, [Word8])
     deserialize bs =
         case deserialize bs of
             (a, bs') ->
@@ -261,7 +261,7 @@ dust2 = fst $ deserializeSome1 [0,0,0,0,0]
 data NeverUseSize (size :: Nat) = NeverUseSize
     { x :: Word8
     , y :: Word8
-    } deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 
 dnus :: NeverUseSize a
 dnus = fst $ deserialize [1, 2]
@@ -289,23 +289,29 @@ type family
     ProductDepLevel 'Learning  'Requiring = 'Learning
     ProductDepLevel 'Learning  'NonDep    = 'Learning
     ProductDepLevel 'Learning  'Learning  = 'Learning
-type family
-    DepLevelOf (f :: k -> Type) :: DepLevel where
-    DepLevelOf GHC.U1 = 'NonDep
-    DepLevelOf (GHC.Rec0 _) = 'NonDep
-    DepLevelOf (GHC.K1 _ _) = 'NonDep
-    DepLevelOf (GHC.Rec1 f) = DepLevelOf f
-    DepLevelOf (GHC.S1 _ f) = DepLevelOf f
-    DepLevelOf (GHC.M1 _ _ f) = DepLevelOf f
-    DepLevelOf (l GHC.:*: r) = ProductDepLevel (DepLevelOf l) (DepLevelOf r)
-    DepLevelOf f = OpenDepLevelOf f
-class OpenDepLevel (f :: k -> Type) where
-    type OpenDepLevelOf f :: DepLevel
-    type OpenDepLevelOf f = DepLevelOf (GHC.Rep1 f)
-instance OpenDepLevel Sing where
-    type OpenDepLevelOf Sing = 'Learning
-instance OpenDepLevel (Vector a) where
-    type OpenDepLevelOf (Vector a) = 'Requiring
+class HasDepLevel (f :: k -> Type) where
+    type DepLevelOf f :: DepLevel
+    type DepLevelOf f = DepLevelOf (GHC.Rep1 f)
+-- GHC.Generic instantances
+instance HasDepLevel GHC.U1 where
+    type DepLevelOf GHC.U1 = 'NonDep
+instance HasDepLevel (GHC.Rec0 c) where
+    type DepLevelOf (GHC.Rec0 c) = 'NonDep
+instance HasDepLevel (GHC.K1 i c) where
+    type DepLevelOf (GHC.K1 i c) = 'NonDep
+instance HasDepLevel (GHC.Rec1 f) where
+    type DepLevelOf (GHC.Rec1 f) = DepLevelOf f
+instance HasDepLevel (GHC.S1 c f) where
+    type DepLevelOf (GHC.S1 c f) = DepLevelOf f
+instance HasDepLevel (GHC.M1 i c f) where
+    type DepLevelOf (GHC.M1 i c f) = DepLevelOf f
+instance HasDepLevel (l GHC.:*: r) where
+    type DepLevelOf (l GHC.:*: r) = ProductDepLevel (DepLevelOf l) (DepLevelOf r)
+--
+instance HasDepLevel Sing where
+    type DepLevelOf Sing = 'Learning
+instance HasDepLevel (Vector a) where
+    type DepLevelOf (Vector a) = 'Requiring
 class (ldep ~ DepLevelOf l, rdep ~ DepLevelOf r) => Product1Serialize (ldep :: DepLevel) (rdep :: DepLevel) (l :: k -> Type) (r :: k -> Type) where
     p1serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p1deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
@@ -468,7 +474,7 @@ instance SingI n => Serialize (SomeSing (Fin n)) where
 data IndexedOnFin256 (size :: Fin 256) = IndexedOnWord8
     { x :: Sing size
     --, arr :: Vector Word8 size
-    } deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 
 diow8 :: Some1 IndexedOnFin256
 diow8 = fst $ deserializeSome1 [1]
@@ -478,7 +484,7 @@ siow8 = serializeSome1 diow8
 data RequiringSize (size :: Nat) = RequiringSize
     { arr1 :: Vector Word8 size
     , arr2 :: Vector Word8 size
-    } deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 srs :: [Word8]
 srs = serialize $ RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
 drs :: KnownNat size => (RequiringSize size, [Word8])
@@ -488,7 +494,7 @@ data ProvidingSize (size :: Nat) = ProvidingSize
     { uws :: UnitWithSize size
     , size :: Sing size
     , rs :: RequiringSize size
-    } deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 sps :: [Word8]
 sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps :: Some1 ProvidingSize
@@ -498,14 +504,14 @@ dps' = fst $ deserialize sps
 
 data IgnoringSize (size :: Nat) = IgnoringSize
     { size :: Word8
-    } deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 sis :: [Word8]
 sis = serialize $ IgnoringSize 123
 dis :: IgnoringSize size
 dis = fst $ deserialize sis
 
 data UnitWithSize (size :: Nat) = UnitWithSize
-    {} deriving (GHC.Generic1, Show, OpenDepLevel, Serialize)
+    {} deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
 snws :: [Word8]
 snws = serialize $ UnitWithSize
 dnws :: UnitWithSize size
