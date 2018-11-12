@@ -168,6 +168,9 @@ instance Serialize a => Serialize (GHC.K1 i a p) where
         case deserialize bs of
             (a, bs') -> (GHC.K1 a, bs')
 
+instance Serialize (GHC.U1 p) where
+    serialize GHC.U1 = []
+    deserialize bs = (GHC.U1, bs)
 
 slol = serialize lol
 dlol :: (GHC.Rep1 DependentPair 2, [Word8])
@@ -288,9 +291,13 @@ type family
     ProductDepLevel 'Learning  'Learning  = 'Learning
 type family
     DepLevelOf (f :: k -> Type) :: DepLevel where
+    DepLevelOf GHC.U1 = 'NonDep
     DepLevelOf (GHC.Rec0 _) = 'NonDep
     DepLevelOf (GHC.K1 _ _) = 'NonDep
     DepLevelOf Sing = 'Learning
+    DepLevelOf UnitWithSize = 'NonDep  -- TODO: This is incredibly out of place here,
+                                       -- TODO: but it proves that Sing also shouldn't be here.
+                                       -- TODO: Sing isn't the only "learning thing". We need another way to capture that.
     DepLevelOf (GHC.Rec1 f) = DepLevelOf f
     DepLevelOf (GHC.S1 _ f) = DepLevelOf f
     DepLevelOf (GHC.M1 _ _ f) = DepLevelOf f
@@ -466,23 +473,40 @@ siow8 :: [Word8]
 siow8 = serializeSome1 diow8
 
 data RequiringSize (size :: Nat) = RequiringSize
-    { arr :: Vector Word8 size
+    { arr1 :: Vector Word8 size
+    , arr2 :: Vector Word8 size
     } deriving (GHC.Generic1, Show, Serialize)
+srs :: [Word8]
+srs = serialize $ RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
+drs :: KnownNat size => (RequiringSize size, [Word8])
+drs = deserialize srs
 
 data ProvidingSize (size :: Nat) = ProvidingSize
-    { size :: Sing size
+    { uws :: UnitWithSize size
+    , size :: Sing size
     , rs :: RequiringSize size
-    } deriving (GHC.Generic1, Show)
-
---srs :: [Word8]
---srs = serializeSome1 $ Some1 SNat $ RequiringSize (1 :> Nil)
+    } deriving (GHC.Generic1, Show, Serialize)
 sps :: [Word8]
-sps =
-    serializeSome1 $ Some1 SNat $
-        ProvidingSize SNat $
-            RequiringSize (1 :> 2 :> 3 :> Nil)
+sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps :: Some1 ProvidingSize
 dps = fst $ deserializeSome1 sps
+dps' :: KnownNat size => ProvidingSize size
+dps' = fst $ deserialize sps
+
+data IgnoringSize (size :: Nat) = IgnoringSize
+    { size :: Word8
+    } deriving (GHC.Generic1, Show, Serialize)
+sis :: [Word8]
+sis = serialize $ IgnoringSize 123
+dis :: IgnoringSize size
+dis = fst $ deserialize sis
+
+data UnitWithSize (size :: Nat) = UnitWithSize
+    {} deriving (GHC.Generic1, Show, Serialize)
+snws :: [Word8]
+snws = serialize $ UnitWithSize
+dnws :: UnitWithSize size
+dnws = fst $ deserialize snws
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
