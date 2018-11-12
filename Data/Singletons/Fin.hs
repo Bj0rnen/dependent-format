@@ -32,6 +32,9 @@ data instance Sing :: Fin n -> Type where
 instance KnownFin a => SingI a where
   sing = SFin
 
+-- TODO: Nat demotes to Natural, so is some kind of `Finite` type the way to go here?
+-- TODO: Should in that case be in Data.Kind.Fin or Numeric.Finite. Should still be indexed on Nat, I guess.
+-- TODO: Don't know how to limit its range in a nice way. Every operation returns a Maybe? Except `toNatural`.
 --instance SingKind (Fin 256) where  -- TODO: Can we write this for any n?
 --  type Demote (Fin 256) = Word8
 --  fromSing (SFin :: Sing a) = fromIntegral $ finVal @a

@@ -94,13 +94,29 @@ instance Serialize Word8 where
 --        else
 --            error "Deserialized wrong SNat"
 instance SingI n => Serialize (Sing (n :: Nat)) where  -- 8-bit
-    serialize SNat = [fromIntegral $ natVal @n Proxy]
-    deserialize (n : bs) =
+    serialize SNat = serialize $ natVal @n Proxy
+    deserialize bs =
         withKnownNat @n sing $
-            if fromIntegral n == natVal @n Proxy then
-                (SNat, bs)
-            else
-                error "Deserialized wrong SNat"
+            case deserialize bs of
+                (n :: Natural, bs') ->
+                    if n == natVal @n Proxy then
+                        (SNat , bs')
+                    else
+                        error "Deserialized wrong SNat"
+--instance Serialize (SomeSing Nat) where
+--    serialize (SomeSing (SNat :: Sing n)) = serialize (SNat @n)
+--    deserialize bs =
+--        case deserialize bs of
+--            (a :: Word8, bs') ->
+--                case someNatVal (fromIntegral a) of
+--                    SomeNat (Proxy :: Proxy n) ->
+--                        (SomeSing @Nat @n SNat, bs')
+instance Serialize Natural where  -- 8-bit
+    serialize n = [fromIntegral n]
+    deserialize bs =
+        case deserialize bs of
+            (a :: Word8, bs') ->
+                (fromIntegral a, bs')
 
 newtype Magic n = Magic (KnownNat n => Dict (KnownNat n))
 magic :: forall n m o. (Natural -> Natural -> Natural) -> (KnownNat n, KnownNat m) :- KnownNat o
@@ -179,20 +195,11 @@ dlol = deserialize [2, 1, 2]
 lol' :: DependentPair 2
 lol' = GHC.to1 (fst dlol)
 
-instance Serialize (SomeSing Nat) where
-    serialize (SomeSing (SNat :: Sing n)) = serialize (SNat @n)
-    deserialize bs =
-        case deserialize bs of
-            (a :: Word8, bs') ->
-                case someNatVal (fromIntegral a) of
-                    SomeNat (Proxy :: Proxy n) ->
-                        (SomeSing @Nat @n SNat, bs')
-
 instance Serialize (Some1 DependentPair) where
     serialize (Some1 SNat (DependentPair SNat arr)) = serialize arr
     deserialize bs =
         case deserialize bs of
-            (SomeSing (SNat :: Sing (size :: Nat)), bs') ->
+            (FromSing (SNat :: Sing (size :: Nat)), bs') ->
                 case deserialize bs' of
                     (arr :: Vector Word8 size, bs'') ->
                         (Some1 SNat (DependentPair SNat arr), bs'')
@@ -213,11 +220,11 @@ instance Serialize (Some1 f) => Serialize (Some1 (GHC.Rec1 f)) where
 --        case deserialize bs of
 --            (a, bs') -> (Some1 ? (GHC.K1 a), bs')
 
-instance Serialize (SomeSing t) => Serialize (Some1 (Sing :: t -> Type)) where
-    serialize (Some1 s1 s2) = serialize (SomeSing s2)
+instance (SingKind t, Serialize (Demote t)) => Serialize (Some1 (Sing :: t -> Type)) where
+    serialize (Some1 s1 s2) = serialize (FromSing s2)
     deserialize bs =
         case deserialize bs of
-            (SomeSing s, bs') -> (Some1 s s, bs')
+            (FromSing s, bs') -> (Some1 s s, bs')
 
 serializeSome1 :: (GHC.Generic1 f, Serialize (Some1 (GHC.Rep1 f))) => Some1 f -> [Word8]
 serializeSome1 (Some1 s a) = serialize (Some1 s (GHC.from1 a))
@@ -460,26 +467,29 @@ instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
                 (SFin, bs)
             else
                 error "Deserialized wrong SNat"
-instance SingI n => Serialize (SomeSing (Fin n)) where
-    serialize (SomeSing (SFin :: Sing a)) = serialize (SFin @n @a)
-    deserialize bs =
-        case deserialize bs of
-            (n :: Word8, bs') ->
-                case sing @n of
-                    SNat ->
-                        case someFinVal (fromIntegral n) of
-                            Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
-                            Just (SomeFin (Proxy :: Proxy a)) ->
-                                (SomeSing @(Fin n) @a SFin, bs')
-data IndexedOnFin256 (size :: Fin 256) = IndexedOnWord8
-    { x :: Sing size
-    --, arr :: Vector Word8 size
-    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
-
-diow8 :: Some1 IndexedOnFin256
-diow8 = fst $ deserializeSome1 [1]
-siow8 :: [Word8]
-siow8 = serializeSome1 diow8
+--instance SingI n => Serialize (SomeSing (Fin n)) where
+--    serialize (SomeSing (SFin :: Sing a)) = serialize (SFin @n @a)
+--    deserialize bs =
+--        case deserialize bs of
+--            (n :: Word8, bs') ->
+--                case sing @n of
+--                    SNat ->
+--                        case someFinVal (fromIntegral n) of
+--                            Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
+--                            Just (SomeFin (Proxy :: Proxy a)) ->
+--                                (SomeSing @(Fin n) @a SFin, bs')
+--instance Serialize (Fin n) where
+--    serialize a = undefined
+--    deserialize bs = undefined
+--data IndexedOnFin256 (size :: Fin 256) = IndexedOnWord8
+--    { x :: Sing size
+--    --, arr :: Vector Word8 size
+--    } deriving (GHC.Generic1, Show, HasDepLevel, Serialize)
+--
+--diow8 :: Some1 IndexedOnFin256
+--diow8 = fst $ deserializeSome1 [1]
+--siow8 :: [Word8]
+--siow8 = serializeSome1 diow8
 
 data RequiringSize (size :: Nat) = RequiringSize
     { arr1 :: Vector Word8 size
