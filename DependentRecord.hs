@@ -494,11 +494,30 @@ instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
 --siow8 :: [Word8]
 --siow8 = serializeSome1 diow8
 
+newtype GenericKWrapper f a = GenericKWrapper { unwrapGenericK :: f K.:@@: a }
+instance (K.GenericK f x, Serialize (K.RepK f x), HasDepLevel f) => Serialize (GenericKWrapper f x) where
+    serialize (GenericKWrapper a) = serialize $ K.fromK @_ @f @x a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') ->
+                (GenericKWrapper (K.toK @_ @f @x a), bs')
+
+instance Serialize (f v0) => Serialize (K.F (f K.:$: K.V0) (v0 'K.:&&: 'K.LoT0)) where
+    serialize (K.F a) = serialize a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') -> (K.F a, bs')
+instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
+    serialize (K.F a) = serialize a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') -> (K.F a, bs')
+
 data RequiringSize (size :: Nat) = RequiringSize
     { arr1 :: Vector Word8 size
     , arr2 :: Vector Word8 size
     } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
-      deriving Serialize via (Generic1Wrapper RequiringSize size)
+      deriving Serialize via (GenericKWrapper RequiringSize (size K.:&&: K.LoT0))
 instance K.GenericK RequiringSize (size K.:&&: K.LoT0) where
     type RepK RequiringSize = K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V0)
 instance K.Split (RequiringSize size) RequiringSize (size K.:&&: K.LoT0)
@@ -512,7 +531,7 @@ data ProvidingSize (size :: Nat) = ProvidingSize
     , size :: Sing size
     , rs :: RequiringSize size
     } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
-      deriving Serialize via (Generic1Wrapper ProvidingSize size)
+      deriving Serialize via (GenericKWrapper ProvidingSize (size K.:&&: K.LoT0))
 instance K.GenericK ProvidingSize (size K.:&&: K.LoT0) where
     type RepK ProvidingSize = K.F (UnitWithSize K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V0) K.:*: K.F (RequiringSize K.:$: K.V0)
 instance K.Split (ProvidingSize size) ProvidingSize (size K.:&&: K.LoT0)
@@ -526,7 +545,7 @@ dps' = fst $ deserialize sps
 data IgnoringSize (size :: Nat) = IgnoringSize
     { size :: Word8
     } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
-      deriving Serialize via (Generic1Wrapper IgnoringSize size)
+      deriving Serialize via (GenericKWrapper IgnoringSize (size K.:&&: K.LoT0))
 instance K.GenericK IgnoringSize (size K.:&&: K.LoT0) where
     type RepK IgnoringSize = K.F (K.Kon Word8)
 instance K.Split (IgnoringSize size) IgnoringSize (size K.:&&: K.LoT0)
@@ -537,7 +556,7 @@ dis = fst $ deserialize sis
 
 data UnitWithSize (size :: Nat) = UnitWithSize
     {} deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
-       deriving Serialize via (Generic1Wrapper UnitWithSize size)
+       deriving Serialize via (GenericKWrapper UnitWithSize (size K.:&&: K.LoT0))
 instance K.GenericK UnitWithSize (size K.:&&: K.LoT0) where
     type RepK UnitWithSize = K.U1
 instance K.Split (UnitWithSize size) UnitWithSize (size K.:&&: K.LoT0)
