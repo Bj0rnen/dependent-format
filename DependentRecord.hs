@@ -501,7 +501,14 @@ instance (K.GenericK f x, Serialize (K.RepK f x), HasDepLevel f) => Serialize (G
         case deserialize bs of
             (a, bs') ->
                 (GenericKWrapper (K.toK @_ @f @x a), bs')
-
+--serializeSome1K :: forall f. (forall x. K.GenericK f (x K.:&&: K.LoT0), Serialize (Some1 (K.RepK f))) => Some1 f -> [Word8]
+--serializeSome1K (Some1 s a) = serialize (Some1 s (K.fromK @_ @f a))
+--deserializeSome1K :: forall f. (forall x. K.GenericK f (x K.:&&: K.LoT0), Serialize (Some1 (K.RepK f))) => [Word8] -> (Some1 f, [Word8])
+--deserializeSome1K bs =
+--    case deserialize bs of
+--        (Some1 (s :: Sing a) a, bs') ->
+--            (Some1 s (K.toK a), bs')
+                
 instance Serialize (f v0) => Serialize (K.F (f K.:$: K.V0) (v0 'K.:&&: 'K.LoT0)) where
     serialize (K.F a) = serialize a
     deserialize bs =
@@ -516,7 +523,7 @@ instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
 data RequiringSize (size :: Nat) = RequiringSize
     { arr1 :: Vector Word8 size
     , arr2 :: Vector Word8 size
-    } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
+    } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper RequiringSize (size K.:&&: K.LoT0))
 instance K.GenericK RequiringSize (size K.:&&: K.LoT0) where
     type RepK RequiringSize = K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V0)
@@ -530,7 +537,7 @@ data ProvidingSize (size :: Nat) = ProvidingSize
     { uws :: UnitWithSize size
     , size :: Sing size
     , rs :: RequiringSize size
-    } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
+    } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper ProvidingSize (size K.:&&: K.LoT0))
 instance K.GenericK ProvidingSize (size K.:&&: K.LoT0) where
     type RepK ProvidingSize = K.F (UnitWithSize K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V0) K.:*: K.F (RequiringSize K.:$: K.V0)
@@ -538,13 +545,16 @@ instance K.Split (ProvidingSize size) ProvidingSize (size K.:&&: K.LoT0)
 sps :: [Word8]
 sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps :: Some1 ProvidingSize
-dps = fst $ deserializeSome1 sps
+--dps = fst $ deserializeSome1K sps
+dps = fst $ case deserialize sps :: (Some1 (K.RepK ProvidingSize), [Word8]) of
+                (Some1 (s :: Sing a) (a :: K.RepK ProvidingSize (a K.:&&: K.LoT0)), bs) ->
+                    (Some1 s (K.toK @_ @ProvidingSize @(a K.:&&: K.LoT0) a), bs)
 dps' :: KnownNat size => ProvidingSize size
 dps' = fst $ deserialize sps
 
 data IgnoringSize (size :: Nat) = IgnoringSize
     { size :: Word8
-    } deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
+    } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper IgnoringSize (size K.:&&: K.LoT0))
 instance K.GenericK IgnoringSize (size K.:&&: K.LoT0) where
     type RepK IgnoringSize = K.F (K.Kon Word8)
@@ -555,7 +565,7 @@ dis :: IgnoringSize size
 dis = fst $ deserialize sis
 
 data UnitWithSize (size :: Nat) = UnitWithSize
-    {} deriving (GHC.Generic1, Show, HasDepLevel, GHC.Generic)
+    {} deriving (Show, HasDepLevel, GHC.Generic)
        deriving Serialize via (GenericKWrapper UnitWithSize (size K.:&&: K.LoT0))
 instance K.GenericK UnitWithSize (size K.:&&: K.LoT0) where
     type RepK UnitWithSize = K.U1
