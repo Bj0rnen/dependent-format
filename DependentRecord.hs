@@ -502,8 +502,15 @@ instance (K.GenericK f x, Serialize (K.RepK f x), HasDepLevel f) => Serialize (G
         case deserialize bs of
             (a, bs') ->
                 (GenericKWrapper (K.toK @_ @f @x a), bs')
+--newtype Generic1KWrapper f a = Generic1KWrapper { unwrapGeneric1K :: f K.:@@: (a K.:&&: K.LoT0) }
+--instance (K.GenericK f (a K.:&&: K.LoT0), Serialize (K.RepK f (a K.:&&: K.LoT0)), HasDepLevel f) => Serialize (Generic1KWrapper f a) where
+--    serialize (Generic1KWrapper a) = serialize $ K.fromK @_ @f @(a K.:&&: K.LoT0) a
+--    deserialize bs =
+--        case deserialize bs of
+--            (a, bs') ->
+--                (Generic1KWrapper (K.toK @_ @f @(a K.:&&: K.LoT0) a), bs')
 
-instance (xs ~ (v0 'K.:&&: 'K.LoT0), Serialize (f v0)) => Serialize (K.F (f K.:$: K.V0) xs) where
+instance Serialize (f (K.Ty (K.Var K.VZ) xs)) => Serialize (K.F (f K.:$: K.V0) xs) where
     serialize (K.F a) = serialize a
     deserialize bs =
         case deserialize bs of
@@ -538,15 +545,28 @@ instance HasDepLevel (K.F (K.Kon f K.:@: K.Var K.VZ)) where
 -- TODO: Can it be written in terms of (Dict1 c (f :: Nat -> Type))?
 instance (forall x. KnownNat x => c (f (x 'K.:&&: 'K.LoT0))) => Dict1 c (f :: K.LoT (Nat -> Type) -> Type) where
     dict1 (SLoT1 SNat) = Dict
-instance Serialize (Some1 (K.F (f K.:$: K.V0))) where
-    serialize = undefined
-    deserialize = undefined
+--instance Serialize (Some1 f) => Serialize (Some1 (K.F (f K.:$: K.V0))) where
+--    serialize (Some1 (SLoT1 s) (K.F a)) = serialize (Some1 s a)
+--    deserialize bs =
+--        case deserialize @(Some1 f) bs of
+--            (Some1 (s :: Sing a) a :: Some1 f, bs') ->
+--                (Some1 (SLoT1 s :: Sing (a K.:&&: K.LoT0)) (K.F a :: K.F (f K.:$: K.V0) (a K.:&&: K.LoT0)) :: Some1 (K.F (f K.:$: K.V0)), bs')
+--                --(Some1 (SLoT1 s :: Sing (k K.:&&: K.LoT0)) (K.F a), bs')
+
+instance Serialize (Some1 f) => Serialize (Some1 (K.F (f K.:$: K.V0))) where
+    serialize (Some1 (SLoT1 s) (K.F a)) = serialize (Some1 s a)
+    deserialize bs =
+        case deserialize @(Some1 f) bs of
+            (Some1 (s :: Sing a) a :: Some1 f, bs') ->
+                -- TODO: Where have I gone wrong?!
+                undefined  --(Some1 (SLoT1 s) (K.F a), bs')
+
 --instance Serialize (Some1 (K.RepK f :: K.LoT (k -> Type) -> Type)) => Serialize (Some1 (Rep1K f :: k -> Type)) where
 --    serialize (Some1 s (Rep1K (a :: K.RepK f (a K.:&&: K.LoT0)) :: Rep1K f a)) = serialize (Some1 undefined a)
 --    deserialize bs = undefined
 
 data instance Sing :: K.LoT (k -> xs) -> Type where
-    SLoT1 :: Sing k -> Sing (k K.:&&: K.LoT0)
+    SLoT1 :: Sing a -> Sing (a K.:&&: K.LoT0)
 serializeSome1K :: forall f. (forall x. K.GenericK f (x K.:&&: K.LoT0), Serialize (Some1 (K.RepK f))) => Some1 f -> [Word8]
 serializeSome1K (Some1 s a) = serialize (Some1 (SLoT1 s) (K.fromK a))
 deserializeSome1K :: forall f. (forall x. K.GenericK f (x K.:&&: K.LoT0), Serialize (Some1 (K.RepK f))) => [Word8] -> (Some1 f, [Word8])
@@ -581,6 +601,8 @@ sps :: [Word8]
 sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps :: Some1 ProvidingSize
 dps = fst $ deserializeSome1K sps
+some1ps :: Some1 ProvidingSize
+some1ps = Some1 SNat $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps' :: KnownNat size => ProvidingSize size
 dps' = fst $ deserialize sps
 
