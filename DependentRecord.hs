@@ -627,6 +627,17 @@ snws = serialize $ UnitWithSize
 dnws :: UnitWithSize size
 dnws = fst $ deserialize snws
 
+
+data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
+    { size1 :: Sing size1
+    , size2 :: Sing size2
+    , arr1  :: Vector Word8 size1
+    , arr2  :: Vector Word8 size2
+    } --deriving (Show, HasDepLevel, GHC.Generic)
+      --deriving Serialize via (GenericKWrapper TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0))
+-- TODO: HasDepLevel expects a (k -> Type), so it goes wrong with TwoVar
+-- TODO: Which is also why the instance for (Serialize (GenericKWrapper f a)) doesn't match when deriving above. Kind mismatch.
+
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
 --instance ForallF Show f => Show (Fst f p) where
