@@ -628,15 +628,38 @@ dnws :: UnitWithSize size
 dnws = fst $ deserialize snws
 
 
+class HasDepLevel2 (f :: a -> b -> Type)
+instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevel2 f) => Serialize (GenericKWrapper f xs) where
+    serialize (GenericKWrapper a) = serialize $ K.fromK @_ @f @xs a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') ->
+                (GenericKWrapper (K.toK @_ @f @xs a), bs')
+
+instance Serialize (f (K.Ty (K.Var (K.VS K.VZ)) (a 'K.:&&: b 'K.:&&: 'K.LoT0))) => Serialize (K.F (f K.:$: K.V1) (a 'K.:&&: b 'K.:&&: 'K.LoT0))
+--instance Serialize (f (K.Ty (K.Var K.VZ) xs)) => Serialize (K.F (f K.:$: K.V0) xs) where
+--    serialize (K.F a) = serialize a
+--    deserialize bs =
+--        case deserialize bs of
+--            (a, bs') -> (K.F a, bs')
+--instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
+--    serialize (K.F a) = serialize a
+--    deserialize bs =
+--        case deserialize bs of
+--            (a, bs') -> (K.F a, bs')
+
+
 data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     { size1 :: Sing size1
     , size2 :: Sing size2
     , arr1  :: Vector Word8 size1
     , arr2  :: Vector Word8 size2
-    } --deriving (Show, HasDepLevel, GHC.Generic)
-      --deriving Serialize via (GenericKWrapper TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0))
--- TODO: HasDepLevel expects a (k -> Type), so it goes wrong with TwoVar
--- TODO: Which is also why the instance for (Serialize (GenericKWrapper f a)) doesn't match when deriving above. Kind mismatch.
+    } deriving (Show, HasDepLevel2, GHC.Generic)
+      deriving Serialize via (GenericKWrapper TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0))
+instance K.GenericK TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0) where
+    type RepK TwoVar = (K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))
+instance K.Split (TwoVar size1 size2) TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0)
+
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
