@@ -667,9 +667,24 @@ instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -
     --        (Some1 s a, bs') ->
     --            (Some1 (s :&&&: SLoT0) (K.F a), bs')
 
-instance Show (K.LoT (Nat -> Nat -> Type))
-instance SingKind (K.LoT (Nat -> Nat -> Type)) where
-    type Demote (K.LoT (Nat -> Nat -> Type)) = (K.LoT (Nat -> Nat -> Type))
+-- TODO: Not nice. Why do I even need this?
+instance Show (K.LoT Type) where
+    show K.LoT0 = "LoT0"
+deriving instance (Show a, Show (K.LoT as)) => Show (K.LoT (a -> as))
+
+instance SingKind (K.LoT Type) where
+    type Demote (K.LoT Type) = K.LoT Type
+    fromSing SLoT0 = K.LoT0
+    toSing K.LoT0 = SomeSing SLoT0
+-- TODO: Induction!
+instance SingKind a => SingKind (K.LoT (a -> Type)) where
+    type Demote (K.LoT (a -> Type)) = K.LoT (Demote a -> Type)
+    fromSing (a :&&&: SLoT0) = FromSing a K.:&&: K.LoT0
+    toSing (FromSing a K.:&&: K.LoT0) = SomeSing (a :&&&: SLoT0)
+instance (SingKind a, SingKind b) => SingKind (K.LoT (a -> b -> Type)) where
+    type Demote (K.LoT (a -> b -> Type)) = K.LoT (Demote a -> Demote b -> Type)
+    fromSing (a :&&&: b :&&&: SLoT0) = FromSing a K.:&&: FromSing b K.:&&: K.LoT0
+    toSing (FromSing a K.:&&: FromSing b K.:&&: K.LoT0) = SomeSing (a :&&&: b :&&&: SLoT0)
 
 instance SDecide (K.LoT Type) where
     SLoT0 %~ SLoT0 = Proved Refl
