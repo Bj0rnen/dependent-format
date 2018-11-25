@@ -711,14 +711,18 @@ instance (SDecide a, SDecide (K.LoT as)) => SDecide (K.LoT (a -> as)) where
             toTail :: (x K.:&&: xs) :~: (y K.:&&: ys) -> xs :~: ys
             toTail Refl = Refl
 
---instance (forall x y. (KnownNat x, KnownNat y) => c (f x y)) => Dict2 c (f :: Nat -> Nat -> Type) where
---    dict2 SNat SNat = Dict
 -- TODO: Inductive instance.
 instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (K.F (f K.:$: K.V0) K.:*: K.F (g K.:$: K.V1)) where
     dict1 ((s1 :: Sing a) :&&&: (s2 :: Sing b) :&&&: SLoT0) =
         withDict (dict1 s1 :: Dict (Serialize (f a))) $
             withDict (dict1 s2 :: Dict (Serialize (g b))) $
                 Dict
+
+instance (forall x y. (KnownNat x, KnownNat y) => c (f x y)) => Dict2 c (f :: Nat -> Nat -> Type) where
+    dict2 SNat SNat = Dict
+-- TODO: Or how about?
+--instance (forall x y. (SingI x, SingI y) => c (f x y)) => Dict2 c (f :: a -> b -> Type) where
+--    dict2 s1 s2 = withSingI s1 $ withSingI s2 $ Dict
 
 data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     { size1 :: Sing size1
