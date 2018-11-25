@@ -670,10 +670,27 @@ instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -
 instance Show (K.LoT (Nat -> Nat -> Type))
 instance SingKind (K.LoT (Nat -> Nat -> Type)) where
     type Demote (K.LoT (Nat -> Nat -> Type)) = (K.LoT (Nat -> Nat -> Type))
-instance SDecide (K.LoT (Nat -> Nat -> Type))
+
+instance SDecide (K.LoT Type) where
+    SLoT0 %~ SLoT0 = Proved Refl
+instance (SDecide a, SDecide (K.LoT as)) => SDecide (K.LoT (a -> as)) where
+    (a :&&&: as) %~ (b :&&&: bs) =
+        case a %~ b of
+            Disproved f -> Disproved (f . toHead)
+            Proved Refl ->
+                case as %~ bs of
+                    Disproved f -> Disproved (f . toTail)
+                    Proved Refl ->
+                        Proved Refl
+        where
+            toHead :: (x K.:&&: xs) :~: (y K.:&&: ys) -> x :~: y
+            toHead Refl = Refl
+            toTail :: (x K.:&&: xs) :~: (y K.:&&: ys) -> xs :~: ys
+            toTail Refl = Refl
 
 --instance (forall x y. (KnownNat x, KnownNat y) => c (f x y)) => Dict2 c (f :: Nat -> Nat -> Type) where
 --    dict2 SNat SNat = Dict
+-- TODO: Inductive instance.
 instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (K.F (f K.:$: K.V0) K.:*: K.F (g K.:$: K.V1)) where
     dict1 ((s1 :: Sing a) :&&&: (s2 :: Sing b) :&&&: SLoT0) =
         withDict (dict1 s1 :: Dict (Serialize (f a))) $
