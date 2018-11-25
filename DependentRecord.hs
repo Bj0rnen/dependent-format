@@ -545,6 +545,7 @@ instance HasDepLevel (K.F (K.Kon f K.:@: K.Var K.VZ)) where
 -- TODO: Can it be written in terms of (Dict1 c (f :: Nat -> Type))?
 instance (forall x. KnownNat x => c (f (x 'K.:&&: 'K.LoT0))) => Dict1 c (f :: K.LoT (Nat -> Type) -> Type) where
     dict1 (SNat :&&&: SLoT0) = Dict
+infixr :&&&:
 --instance Serialize (Some1 f) => Serialize (Some1 (K.F (f K.:$: K.V0))) where
 --    serialize (Some1 (SLoT1 s) (K.F a)) = serialize (Some1 s a)
 --    deserialize bs =
@@ -636,18 +637,48 @@ instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevel2 f) => Serialize
             (a, bs') ->
                 (GenericKWrapper (K.toK @_ @f @xs a), bs')
 
-instance Serialize (f (K.Ty (K.Var (K.VS K.VZ)) (a 'K.:&&: b 'K.:&&: 'K.LoT0))) => Serialize (K.F (f K.:$: K.V1) (a 'K.:&&: b 'K.:&&: 'K.LoT0))
---instance Serialize (f (K.Ty (K.Var K.VZ) xs)) => Serialize (K.F (f K.:$: K.V0) xs) where
---    serialize (K.F a) = serialize a
---    deserialize bs =
---        case deserialize bs of
---            (a, bs') -> (K.F a, bs')
+instance Serialize (f (K.Ty (K.Var (K.VS K.VZ)) (a 'K.:&&: b 'K.:&&: 'K.LoT0))) => Serialize (K.F (f K.:$: K.V1) (a 'K.:&&: b 'K.:&&: 'K.LoT0)) where
+    serialize (K.F a) = serialize a
+    deserialize bs =
+        case deserialize bs of
+            (a, bs') -> (K.F a, bs')
 --instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
 --    serialize (K.F a) = serialize a
 --    deserialize bs =
 --        case deserialize bs of
 --            (a, bs') -> (K.F a, bs')
 
+serializeSome2K :: forall f. (forall a b. K.GenericK f (a 'K.:&&: b 'K.:&&: 'K.LoT0), Serialize (Some1 (K.RepK f))) => Some2 f -> [Word8]
+serializeSome2K (Some2 s t a) = serialize (Some1 (s :&&&: t :&&&: SLoT0) (K.fromK a))
+deserializeSome2K :: forall f. (forall a b. K.GenericK f (a 'K.:&&: b 'K.:&&: 'K.LoT0), Serialize (Some1 (K.RepK f))) => [Word8] -> (Some2 f, [Word8])
+deserializeSome2K bs =
+    case deserialize @(Some1 (K.RepK f)) bs of
+        (Some1 (s :&&&: t :&&&: SLoT0) a, bs') ->
+            (Some2 s t (K.toK a), bs')
+
+instance HasDepLevel (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) where
+    type DepLevelOf (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) = DepLevelOf f
+
+instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var ('K.VS 'K.VZ))))
+instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type)))
+    --serialize (Some1 (s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+    --deserialize bs =
+    --    case deserialize bs of
+    --        (Some1 s a, bs') ->
+    --            (Some1 (s :&&&: SLoT0) (K.F a), bs')
+
+instance Show (K.LoT (Nat -> Nat -> Type))
+instance SingKind (K.LoT (Nat -> Nat -> Type)) where
+    type Demote (K.LoT (Nat -> Nat -> Type)) = (K.LoT (Nat -> Nat -> Type))
+instance SDecide (K.LoT (Nat -> Nat -> Type))
+
+--instance (forall x y. (KnownNat x, KnownNat y) => c (f x y)) => Dict2 c (f :: Nat -> Nat -> Type) where
+--    dict2 SNat SNat = Dict
+instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (K.F (f K.:$: K.V0) K.:*: K.F (g K.:$: K.V1)) where
+    dict1 ((s1 :: Sing a) :&&&: (s2 :: Sing b) :&&&: SLoT0) =
+        withDict (dict1 s1 :: Dict (Serialize (f a))) $
+            withDict (dict1 s2 :: Dict (Serialize (g b))) $
+                Dict
 
 data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     { size1 :: Sing size1
@@ -659,7 +690,12 @@ data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
 instance K.GenericK TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0) where
     type RepK TwoVar = (K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))
 instance K.Split (TwoVar size1 size2) TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0)
-
+stw :: [Word8]
+stw = serialize $ TwoVar SNat SNat (1 :> Nil) (2 :> 3 :> Nil)
+dtw :: Some2 TwoVar
+dtw = fst $ deserializeSome2K stw
+dtw' :: (KnownNat size1, KnownNat size2) => TwoVar size1 size2
+dtw' = fst $ deserialize stw
 
 --data Fst (f :: k -> Type) (p :: (k, k2)) where
 --    Fst :: f a -> Fst f '(a, b)
