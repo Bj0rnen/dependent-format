@@ -659,13 +659,21 @@ deserializeSome2K bs =
 instance HasDepLevel (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) where
     type DepLevelOf (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) = DepLevelOf f
 
-instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var ('K.VS 'K.VZ))))
-instance Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type)))
-    --serialize (Some1 (s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
-    --deserialize bs =
-    --    case deserialize bs of
-    --        (Some1 s a, bs') ->
-    --            (Some1 (s :&&&: SLoT0) (K.F a), bs')
+-- TODO: BUG: This is the tricky part. (F _) is parameterized on a LoT of two tyvars. So the Some1's are
+-- TODO: BUG: to hold singletons for such lists. So both the vars must be known after deserialization.
+-- TODO: BUG: But we're only getting info about one.
+instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: a -> Type) 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type))) where
+    serialize (Some1 (s :&&&: _ :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+    deserialize bs =
+        case deserialize bs of
+            (Some1 s a, bs') ->
+                (Some1 (s :&&&: undefined :&&&: SLoT0) (K.F a), bs')
+instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: b -> Type) 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
+    serialize (Some1 (_ :&&&: s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+    deserialize bs =
+        case deserialize bs of
+            (Some1 s a, bs') ->
+                (Some1 (undefined :&&&: s :&&&: SLoT0) (K.F a), bs')
 
 -- TODO: Not nice. Why do I even need this?
 instance Show (K.LoT Type) where
