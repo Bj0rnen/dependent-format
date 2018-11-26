@@ -458,9 +458,40 @@ instance
                     (b :: r a, bs'') ->
                         (Some1 s (a GHC.:*: b), bs'')
 
-instance (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
+--instance (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
+--    serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
+--    deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
+instance {-# OVERLAPPABLE #-} (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 (f GHC.:*: g)) where
     serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
     deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
+
+instance {-# OVERLAPS #-} (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) => Serialize (Some1 ((f :: K.LoT (a -> Type) -> Type) GHC.:*: g)) where
+    serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
+    deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
+
+class HasDepLevels (f :: K.LoT (a -> b -> Type) -> Type) where
+    type DepLevelsOf f :: [DepLevel]
+--instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) = '[ProductDepLevel (DepLevelOf l) (DepLevelOf r), NonDep]
+--instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) = '[DepLevelOf l, DepLevelOf r]
+--instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) = '[DepLevelOf r, DepLevelOf l]
+--instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
+-- And a lot more... This is a combinatorial explosion!
+-- Solution? Canonicalization, perhaps?
+type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel]
+instance HasDepLevels (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) where
+    type DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) =
+        DotProductDepLevel (DepLevelsOf l) (DepLevelsOf r)
+
+class (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
+    p2serialize :: Some1 (l GHC.:*: r) -> [Word8]
+    p2deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+instance {-# OVERLAPS #-} (Product2Serialize (DepLevelsOf f) (DepLevelsOf g) f g) => Serialize (Some1 ((f :: K.LoT (a -> b -> Type) -> Type) GHC.:*: g)) where
+    serialize a = p2serialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) a
+    deserialize bs = p2deserialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) bs
 
 
 instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
@@ -629,8 +660,7 @@ dnws :: UnitWithSize size
 dnws = fst $ deserialize snws
 
 
-class HasDepLevel2 (f :: a -> b -> Type)
-instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevel2 f) => Serialize (GenericKWrapper f xs) where
+instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevels (K.RepK f)) => Serialize (GenericKWrapper f xs) where
     serialize (GenericKWrapper a) = serialize $ K.fromK @_ @f @xs a
     deserialize bs =
         case deserialize bs of
@@ -662,18 +692,29 @@ instance HasDepLevel (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) where
 -- TODO: BUG: This is the tricky part. (F _) is parameterized on a LoT of two tyvars. So the Some1's are
 -- TODO: BUG: to hold singletons for such lists. So both the vars must be known after deserialization.
 -- TODO: BUG: But we're only getting info about one.
-instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: a -> Type) 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type))) where
-    serialize (Some1 (s :&&&: _ :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
-    deserialize bs =
-        case deserialize bs of
-            (Some1 s a, bs') ->
-                (Some1 (s :&&&: undefined :&&&: SLoT0) (K.F a), bs')
-instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: b -> Type) 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
-    serialize (Some1 (_ :&&&: s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
-    deserialize bs =
-        case deserialize bs of
-            (Some1 s a, bs') ->
-                (Some1 (undefined :&&&: s :&&&: SLoT0) (K.F a), bs')
+--instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: a -> Type) 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type))) where
+--    serialize (Some1 (s :&&&: _ :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+--    deserialize bs =
+--        case deserialize bs of
+--            (Some1 s a, bs') ->
+--                (Some1 (s :&&&: undefined :&&&: SLoT0) (K.F a), bs')
+--instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: b -> Type) 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
+--    serialize (Some1 (_ :&&&: s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+--    deserialize bs =
+--        case deserialize bs of
+--            (Some1 s a, bs') ->
+--                (Some1 (undefined :&&&: s :&&&: SLoT0) (K.F a), bs')
+
+-- TODO: Should be correct, but I've never been asked for this instance.
+--instance Serialize (Some2 f)
+--    => Serialize (Some1 (K.F 
+--        ('K.Kon (f :: a -> b -> Type) 'K.:@: 'K.Var 'K.VZ 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
+--    serialize (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.F a)) = serialize (Some2 s1 s2 a)
+--    deserialize bs =
+--        case deserialize bs of
+--            (Some2 s1 s2 a, bs') ->
+--                (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.F a), bs')
+
 
 -- TODO: Not nice. Why do I even need this?
 instance Show (K.LoT Type) where
@@ -729,8 +770,10 @@ data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     , size2 :: Sing size2
     , arr1  :: Vector Word8 size1
     , arr2  :: Vector Word8 size2
-    } deriving (Show, HasDepLevel2, GHC.Generic)
+    } deriving (Show, GHC.Generic)
       deriving Serialize via (GenericKWrapper TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0))
+instance HasDepLevels ((K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))) where
+    type DepLevelsOf ((K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))) = '[ 'Learning, 'Learning]
 instance K.GenericK TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0) where
     type RepK TwoVar = (K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))
 instance K.Split (TwoVar size1 size2) TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0)
