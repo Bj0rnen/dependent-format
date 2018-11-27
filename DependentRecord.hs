@@ -288,6 +288,48 @@ snus = serialize dnus
 --     A field that can (de)serialize without knowing the type index.
 --     Deserializing recovers the type index.
 data DepLevel = Requiring | NonDep | Learning
+data DepState = Unknown | Known
+type family
+    ApplyDepLevel (f :: DepLevel) (a :: DepState) :: DepState where
+    ApplyDepLevel 'Requiring 'Unknown = Error "Required type index no known"
+    ApplyDepLevel 'Requiring 'Known = 'Known
+    ApplyDepLevel 'NonDep 'Unknown = 'Unknown
+    ApplyDepLevel 'NonDep 'Known = 'Known
+    ApplyDepLevel 'Learning 'Unknown = 'Known
+    ApplyDepLevel 'Learning 'Known = 'Known
+type family
+    Knowledge (s :: DepState) (a :: k) :: Constraint where
+    Knowledge 'Unknown a = ()
+    Knowledge 'Known a = SingI a
+data SomeDep2 :: DepState -> DepState -> (a -> b -> Type) -> Type where
+    SomeDep2 :: forall d1 d2 f a b. (Knowledge d1 a, Knowledge d2 b) => f a b -> SomeDep2 d1 d2 f
+deriving instance (forall a b. Show (f a b)) => Show (SomeDep2 d1 d2 f)
+
+type family
+    Knowledge' (s :: Maybe k) (a :: k) :: Constraint where
+    Knowledge' 'Nothing _ = ()
+    Knowledge' ('Just a) b = (a ~ b, SingI b)
+data SomeDep2' :: Maybe a -> Maybe b -> (a -> b -> Type) -> Type where
+    SomeDep2' :: forall d1 d2 f x y. (Knowledge' d1 x, Knowledge' d2 y) => f x y -> SomeDep2' d1 d2 f
+deriving instance (forall a b. Show (f a b)) => Show (SomeDep2' d1 d2 f)
+
+data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
+    { size1 :: Sing size1
+    , size2 :: Sing size2
+    , arr1  :: Vector Word8 size1
+    , arr2  :: Vector Word8 size2
+    } deriving (Show, GHC.Generic)
+
+sd2uu = SomeDep2 @'Unknown @'Unknown $ TwoVar SNat SNat (0 :> Nil) Nil
+sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
+_ = case sd2kk of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
+--_ = case sd2uu of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
+
+sd2'uu = SomeDep2' @'Nothing @'Nothing $ TwoVar SNat SNat (0 :> Nil) Nil
+sd2'kk = SomeDep2' @('Just 1) @('Just 0) $ TwoVar SNat SNat (0 :> Nil) Nil
+_ = case sd2'kk of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
+--_ = case sd2'uu of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
+
 type family
     ProductDepLevel (l :: DepLevel) (r :: DepLevel) :: DepLevel where
     ProductDepLevel 'Requiring 'Requiring = 'Requiring
@@ -469,34 +511,6 @@ instance {-# OVERLAPS #-} (Product1Serialize (DepLevelOf f) (DepLevelOf g) f g) 
     serialize a = p1serialize @_ @(DepLevelOf f) @(DepLevelOf g) a
     deserialize bs = p1deserialize @_ @(DepLevelOf f) @(DepLevelOf g) bs
 
-class HasDepLevels (f :: K.LoT (a -> b -> Type) -> Type) where
-    type DepLevelsOf f :: [DepLevel]
---instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) where
---    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) = '[ProductDepLevel (DepLevelOf l) (DepLevelOf r), NonDep]
---instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) where
---    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) = '[DepLevelOf l, DepLevelOf r]
---instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) where
---    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) = '[DepLevelOf r, DepLevelOf l]
---instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) where
---    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
--- And a lot more... This is a combinatorial explosion!
--- Solution? Canonicalization, perhaps?
-type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel] where
-    DotProductDepLevel '[] '[] = '[]
-    DotProductDepLevel (a ': as) (b ': bs) = ProductDepLevel a b ': DotProductDepLevel as bs
-instance HasDepLevels (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) where
-    type DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) =
-        DotProductDepLevel (DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1))) (DepLevelsOf (K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)))
-
-class (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
-    p2serialize :: Some1 (l GHC.:*: r) -> [Word8]
-    p2deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
-instance (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
-
-instance {-# OVERLAPS #-} (Product2Serialize (DepLevelsOf f) (DepLevelsOf g) f g) => Serialize (Some1 ((f :: K.LoT (a -> b -> Type) -> Type) GHC.:*: g)) where
-    serialize a = p2serialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) a
-    deserialize bs = p2deserialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) bs
-
 
 instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
     serialize SFin = [fromIntegral $ finVal @a]
@@ -664,6 +678,39 @@ dnws :: UnitWithSize size
 dnws = fst $ deserialize snws
 
 
+
+
+
+{-
+class HasDepLevels (f :: K.LoT (a -> b -> Type) -> Type) where
+    type DepLevelsOf f :: [DepLevel]
+--instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) = '[ProductDepLevel (DepLevelOf l) (DepLevelOf r), NonDep]
+--instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) = '[DepLevelOf l, DepLevelOf r]
+--instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) = '[DepLevelOf r, DepLevelOf l]
+--instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) where
+--    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
+-- And a lot more... This is a combinatorial explosion!
+-- Solution? Canonicalization, perhaps?
+type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel] where
+    DotProductDepLevel '[] '[] = '[]
+    DotProductDepLevel (a ': as) (b ': bs) = ProductDepLevel a b ': DotProductDepLevel as bs
+instance HasDepLevels (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) where
+    type DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) =
+        DotProductDepLevel (DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1))) (DepLevelsOf (K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)))
+
+class (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
+    p2serialize :: Some1 (l GHC.:*: r) -> [Word8]
+    p2deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+instance (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
+
+instance {-# OVERLAPS #-} (Product2Serialize (DepLevelsOf f) (DepLevelsOf g) f g) => Serialize (Some1 ((f :: K.LoT (a -> b -> Type) -> Type) GHC.:*: g)) where
+    serialize a = p2serialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) a
+    deserialize bs = p2deserialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) bs
+
+
 instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevels (K.RepK f)) => Serialize (GenericKWrapper f xs) where
     serialize (GenericKWrapper a) = serialize $ K.fromK @_ @f @xs a
     deserialize bs =
@@ -812,7 +859,7 @@ dtw' = fst $ deserialize stw
 -- TODO: I should look back to the ideas I had some time ago where instead of relying on Generic1 (and the Generic2... that I wish existed),
 -- TODO: I rely only on Generic. Then I inject distinct values on each type variable (or element of HList/tuple) as "tags" for a TaggedHList
 -- TODO: I'm simply wondering if that approach is more or less a hand-baked GenericN? That would honestly be blog post worthy...
-
+-}
 
 
 {-
