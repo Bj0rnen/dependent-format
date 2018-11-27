@@ -301,17 +301,40 @@ type family
     Knowledge (s :: DepState) (a :: k) :: Constraint where
     Knowledge 'Unknown a = ()
     Knowledge 'Known a = SingI a
+data SomeDep1 :: DepState -> (a -> Type) -> Type where
+    SomeDep1 :: forall d f x. Knowledge d x => f x -> SomeDep1 d f
+deriving instance (forall x. Show (f x)) => Show (SomeDep1 d f)
 data SomeDep2 :: DepState -> DepState -> (a -> b -> Type) -> Type where
-    SomeDep2 :: forall d1 d2 f a b. (Knowledge d1 a, Knowledge d2 b) => f a b -> SomeDep2 d1 d2 f
-deriving instance (forall a b. Show (f a b)) => Show (SomeDep2 d1 d2 f)
+    SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 d1 d2 f
+deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 d1 d2 f)
 
-type family
-    Knowledge' (s :: Maybe k) (a :: k) :: Constraint where
-    Knowledge' 'Nothing _ = ()
-    Knowledge' ('Just a) b = (a ~ b, SingI b)
-data SomeDep2' :: Maybe a -> Maybe b -> (a -> b -> Type) -> Type where
-    SomeDep2' :: forall d1 d2 f x y. (Knowledge' d1 x, Knowledge' d2 y) => f x y -> SomeDep2' d1 d2 f
-deriving instance (forall a b. Show (f a b)) => Show (SomeDep2' d1 d2 f)
+exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
+exampleOfLearning bs =
+    case deserialize bs of
+        (Some1 _ (s :: Sing x), bs') ->
+            withSingI s (SomeDep1 @'Known @Sing @x sing, bs')
+learnedFromExample :: (SomeDep1 'Known (Sing :: Nat -> Type), [Word8])
+learnedFromExample = exampleOfLearning [5]
+
+--type family
+--    Knowledge' (s :: Maybe k) (a :: k) :: Constraint where
+--    Knowledge' 'Nothing _ = ()
+--    Knowledge' ('Just a) b = (a ~ b, SingI b)
+--data SomeDep2' :: Maybe a -> Maybe b -> (a -> b -> Type) -> Type where
+--    SomeDep2' :: forall d1 d2 f x y. (Knowledge' d1 x, Knowledge' d2 y) => f x y -> SomeDep2' d1 d2 f
+--deriving instance (forall a b. Show (f a b)) => Show (SomeDep2' d1 d2 f)
+--type family
+--    ApplyDepLevel' (f :: DepLevel) (a :: Maybe k) :: Maybe k where
+--    ApplyDepLevel' 'Requiring 'Nothing = Error "Required type index no known"
+--    ApplyDepLevel' 'Requiring ('Just a) = 'Just a
+--    ApplyDepLevel' 'NonDep 'Nothing = 'Nothing
+--    ApplyDepLevel' 'NonDep ('Just a) = 'Just a
+--    ApplyDepLevel' 'Learning 'Nothing = 'Just ???
+--    ApplyDepLevel' 'Learning ('Just a) = 'Just a
+--sd2'uu = SomeDep2' @'Nothing @'Nothing $ TwoVar SNat SNat (0 :> Nil) Nil
+--sd2'kk = SomeDep2' @('Just 1) @('Just 0) $ TwoVar SNat SNat (0 :> Nil) Nil
+--_ = case sd2'kk of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
+----_ = case sd2'uu of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 
 data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     { size1 :: Sing size1
@@ -325,10 +348,6 @@ sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
 _ = case sd2kk of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
 --_ = case sd2uu of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
 
-sd2'uu = SomeDep2' @'Nothing @'Nothing $ TwoVar SNat SNat (0 :> Nil) Nil
-sd2'kk = SomeDep2' @('Just 1) @('Just 0) $ TwoVar SNat SNat (0 :> Nil) Nil
-_ = case sd2'kk of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
---_ = case sd2'uu of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 
 type family
     ProductDepLevel (l :: DepLevel) (r :: DepLevel) :: DepLevel where
