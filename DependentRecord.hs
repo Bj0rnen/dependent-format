@@ -481,14 +481,18 @@ class HasDepLevels (f :: K.LoT (a -> b -> Type) -> Type) where
 --    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
 -- And a lot more... This is a combinatorial explosion!
 -- Solution? Canonicalization, perhaps?
-type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel]
+type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel] where
+    DotProductDepLevel '[] '[] = '[]
+    DotProductDepLevel (a ': as) (b ': bs) = ProductDepLevel a b ': DotProductDepLevel as bs
 instance HasDepLevels (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) where
     type DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) =
-        DotProductDepLevel (DepLevelsOf l) (DepLevelsOf r)
+        DotProductDepLevel (DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1))) (DepLevelsOf (K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)))
 
 class (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
     p2serialize :: Some1 (l GHC.:*: r) -> [Word8]
     p2deserialize :: [Word8] -> (Some1 (l GHC.:*: r), [Word8])
+instance (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
+
 instance {-# OVERLAPS #-} (Product2Serialize (DepLevelsOf f) (DepLevelsOf g) f g) => Serialize (Some1 ((f :: K.LoT (a -> b -> Type) -> Type) GHC.:*: g)) where
     serialize a = p2serialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) a
     deserialize bs = p2deserialize @_ @_ @(DepLevelsOf f) @(DepLevelsOf g) bs
