@@ -291,7 +291,7 @@ data DepLevel = Requiring | NonDep | Learning
 data DepState = Unknown | Known
 type family
     ApplyDepLevel (f :: DepLevel) (a :: DepState) :: DepState where
-    ApplyDepLevel 'Requiring 'Unknown = Error "Required type index no known"
+    ApplyDepLevel 'Requiring 'Unknown = Error "Required type index not known"
     ApplyDepLevel 'Requiring 'Known = 'Known
     ApplyDepLevel 'NonDep 'Unknown = 'Unknown
     ApplyDepLevel 'NonDep 'Known = 'Known
@@ -308,13 +308,43 @@ data SomeDep2 :: DepState -> DepState -> (a -> b -> Type) -> Type where
     SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 d1 d2 f
 deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 d1 d2 f)
 
-exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
-exampleOfLearning bs =
-    case deserialize bs of
-        (Some1 _ (s :: Sing x), bs') ->
-            withSingI s (SomeDep1 @'Known @Sing @x sing, bs')
-learnedFromExample :: (SomeDep1 'Known (Sing :: Nat -> Type), [Word8])
-learnedFromExample = exampleOfLearning [5]
+--exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
+--exampleOfLearning bs =
+--    case deserialize bs of
+--        (Some1 _ (s :: Sing x), bs') ->
+--            withSingI s (SomeDep1 @'Known @Sing @x sing, bs')
+--learnedFromExample :: (SomeDep1 'Known (Sing :: Nat -> Type), [Word8])
+--learnedFromExample = exampleOfLearning [5]
+
+--deserializeDep :: forall d f. [Word8] -> (SomeDep1 (ApplyDepLevel (DepLevelOf f) d) f, [Word8])
+--deserializeDep = undefined
+----deserializeDep bs =
+----    case deserialize bs of
+----        (a, bs') ->
+----            (SomeDep1 a, bs')
+
+--class DeserializeDep1 (f :: k -> Type) where
+--    deserializeDep1 :: forall d. [Word8] -> (SomeDep1 (ApplyDepLevel (DepLevelOf f) d) f, [Word8])
+--instance Serialize (SomeDep1 'Known Sing) where
+--    -- TODO
+--instance DeserializeDep1 (Sing :: Nat -> Type) where
+--    deserializeDep1 bs =
+--        case deserialize bs of
+--            (SomeDep1 a :: SomeDep1 'Known Sing, bs') ->
+--                (SomeDep1 a, bs')
+--class DeserializeDep1 (d :: DepState) (f :: k -> Type) where
+--    deserializeDep1 :: Knowledge d x => [Word8] -> (SomeDep1 (ApplyDepLevel (DepLevelOf f) d) f, [Word8])
+--instance (forall x. SingI x => Serialize (f x)) => DeserializeDep1 'Known f where
+--    deserializeDep1 :: SingI x => [Word8] -> (SomeDep1 (ApplyDepLevel (DepLevelOf f) 'Known) f, [Word8])
+--    deserializeDep1 bs = undefined
+--        case deserialize bs of
+--            (a, bs') ->
+--                (SomeDep1 a, bs')
+--instance DeserializeDep1 'Unknown (Sing :: Nat -> Type) where
+--    deserializeDep1 bs =
+--        case deserialize bs of
+--            (Some1 SNat a, bs') ->
+--                (SomeDep1 a, bs')
 
 --type family
 --    Knowledge' (s :: Maybe k) (a :: k) :: Constraint where
@@ -325,7 +355,7 @@ learnedFromExample = exampleOfLearning [5]
 --deriving instance (forall a b. Show (f a b)) => Show (SomeDep2' d1 d2 f)
 --type family
 --    ApplyDepLevel' (f :: DepLevel) (a :: Maybe k) :: Maybe k where
---    ApplyDepLevel' 'Requiring 'Nothing = Error "Required type index no known"
+--    ApplyDepLevel' 'Requiring 'Nothing = Error "Required type index not known"
 --    ApplyDepLevel' 'Requiring ('Just a) = 'Just a
 --    ApplyDepLevel' 'NonDep 'Nothing = 'Nothing
 --    ApplyDepLevel' 'NonDep ('Just a) = 'Just a
