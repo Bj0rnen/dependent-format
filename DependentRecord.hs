@@ -366,44 +366,111 @@ deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 d1 d2 f)
 --_ = case sd2'kk of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 ----_ = case sd2'uu of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 
+--class DepDeserialize2 (f :: a -> b -> Type) where
+--    type Req2 f (x :: a) (y :: b) :: Constraint
+--    type Lrn2 f (x :: a) (y :: b) :: Constraint
+--    depDeserialize2 :: forall r. (forall x y. Req2 f x y) => [Word8] -> (forall x y. Lrn2 f x y => (f x y, [Word8]) -> r) -> r
+
+
+data Visibility a = Exposed a | Hidden
+type family
+    Knowledge'' (s :: Visibility k) (a :: k) :: Constraint where
+    Knowledge'' 'Hidden a = SingI a
+    Knowledge'' ('Exposed a) b = a ~ b
+data SomeDep2'' :: Visibility a -> Visibility b -> (a -> b -> Type) -> Type where
+    SomeDep2'' :: forall d1 d2 f x y. (Knowledge'' d1 x, Knowledge'' d2 y) => f x y -> SomeDep2'' d1 d2 f
+deriving instance (forall a b. Show (f a b)) => Show (SomeDep2'' d1 d2 f)
+
+
 data RR (size1 :: Nat) (size2 :: Nat) = RR
     { arr1  :: Vector Word8 size1
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
+instance (SingI x, SingI y) => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RR) where
+    deserialize bs =
+        case deserialize bs of
+            (arr1, bs') ->
+                case deserialize bs' of
+                    (arr2, bs'') ->
+                        (SomeDep2'' (RR arr1 arr2), bs'')
 
 data RN (size1 :: Nat) (size2 :: Nat) = RN
     { arr1  :: Vector Word8 size1
     } deriving (Show, GHC.Generic)
+instance SingI x => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RN) where
+    deserialize bs =
+        case deserialize bs of
+            (arr1, bs') ->
+                (SomeDep2'' (RN arr1), bs')
 
 data RL (size1 :: Nat) (size2 :: Nat) = RL
     { arr1  :: Vector Word8 size1
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
+instance KnownNat x => Serialize (SomeDep2'' ('Exposed x) 'Hidden RL) where
+    deserialize bs =
+        case deserialize bs of
+            (arr1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2'' (RL arr1 size2), bs'')
 
 data NR (size1 :: Nat) (size2 :: Nat) = NR
     { arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
+instance KnownNat y => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NR) where
+    deserialize bs =
+        case deserialize bs of
+            (arr2, bs') ->
+                (SomeDep2'' (NR arr2), bs')
 
 data NN (size1 :: Nat) (size2 :: Nat) = NN
     {} deriving (Show, GHC.Generic)
+instance Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NN) where
+    deserialize bs =
+        (SomeDep2'' NN, bs)
 
 data NL (size1 :: Nat) (size2 :: Nat) = NL
     { size2 :: Sing size2
     } deriving (Show, GHC.Generic)
+instance Serialize (SomeDep2'' ('Exposed x) 'Hidden NL) where
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size2, bs') ->
+                (SomeDep2'' (NL size2), bs')
 
 data LR (size1 :: Nat) (size2 :: Nat) = LR
     { size1 :: Sing size1
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
+instance SingI y => Serialize (SomeDep2'' 'Hidden ('Exposed y) LR) where
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize bs' of
+                    (arr2, bs'') ->
+                        (SomeDep2'' (LR size1 arr2), bs'')
 
 data LN (size1 :: Nat) (size2 :: Nat) = LN
     { size1 :: Sing size1
     } deriving (Show, GHC.Generic)
+instance Serialize (SomeDep2'' 'Hidden ('Exposed y) LN) where
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                (SomeDep2'' (LN size1), bs')
 
 data LL (size1 :: Nat) (size2 :: Nat) = LL
     { size1 :: Sing size1
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
+instance Serialize (SomeDep2'' 'Hidden 'Hidden LL) where
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2'' (LL size1 size2), bs'')
 
 --data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
 --    { size1 :: Sing size1
