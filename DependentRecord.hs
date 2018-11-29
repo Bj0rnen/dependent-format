@@ -366,17 +366,56 @@ deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 d1 d2 f)
 --_ = case sd2'kk of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 ----_ = case sd2'uu of SomeDep2' (_ :: TwoVar a b) -> SomeSing (sing @a)
 
-data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
-    { size1 :: Sing size1
-    , size2 :: Sing size2
-    , arr1  :: Vector Word8 size1
+data RR (size1 :: Nat) (size2 :: Nat) = RR
+    { arr1  :: Vector Word8 size1
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
 
-sd2uu = SomeDep2 @'Unknown @'Unknown $ TwoVar SNat SNat (0 :> Nil) Nil
-sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
-_ = case sd2kk of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
---_ = case sd2uu of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
+data RN (size1 :: Nat) (size2 :: Nat) = RN
+    { arr1  :: Vector Word8 size1
+    } deriving (Show, GHC.Generic)
+
+data RL (size1 :: Nat) (size2 :: Nat) = RL
+    { arr1  :: Vector Word8 size1
+    , size2 :: Sing size2
+    } deriving (Show, GHC.Generic)
+
+data NR (size1 :: Nat) (size2 :: Nat) = NR
+    { arr2  :: Vector Word8 size2
+    } deriving (Show, GHC.Generic)
+
+data NN (size1 :: Nat) (size2 :: Nat) = NN
+    {} deriving (Show, GHC.Generic)
+
+data NL (size1 :: Nat) (size2 :: Nat) = NL
+    { size2 :: Sing size2
+    } deriving (Show, GHC.Generic)
+
+data LR (size1 :: Nat) (size2 :: Nat) = LR
+    { size1 :: Sing size1
+    , arr2  :: Vector Word8 size2
+    } deriving (Show, GHC.Generic)
+
+data LN (size1 :: Nat) (size2 :: Nat) = LN
+    { size1 :: Sing size1
+    } deriving (Show, GHC.Generic)
+
+data LL (size1 :: Nat) (size2 :: Nat) = LL
+    { size1 :: Sing size1
+    , size2 :: Sing size2
+    } deriving (Show, GHC.Generic)
+
+--data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
+--    { size1 :: Sing size1
+--    , size2 :: Sing size2
+--    , arr1  :: Vector Word8 size1
+--    , arr2  :: Vector Word8 size2
+--    } deriving (Show, GHC.Generic)
+--
+--sd2uu = SomeDep2 @'Unknown @'Unknown $ TwoVar SNat SNat (0 :> Nil) Nil
+--sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
+--_ = case sd2kk of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
+----_ = case sd2uu of SomeDep2 (_ :: TwoVar a b) -> SomeSing (sing @a)
 
 
 type family
