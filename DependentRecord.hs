@@ -387,6 +387,7 @@ data RR (size1 :: Nat) (size2 :: Nat) = RR
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
 instance (SingI x, SingI y) => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RR) where
+    serialize (SomeDep2'' (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
     deserialize bs =
         case deserialize bs of
             (arr1, bs') ->
@@ -398,6 +399,7 @@ data RN (size1 :: Nat) (size2 :: Nat) = RN
     { arr1  :: Vector Word8 size1
     } deriving (Show, GHC.Generic)
 instance SingI x => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RN) where
+    serialize (SomeDep2'' (RN arr1)) = serialize arr1
     deserialize bs =
         case deserialize bs of
             (arr1, bs') ->
@@ -408,6 +410,7 @@ data RL (size1 :: Nat) (size2 :: Nat) = RL
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
 instance KnownNat x => Serialize (SomeDep2'' ('Exposed x) 'Hidden RL) where
+    serialize (SomeDep2'' (RL arr1 size2)) = serialize arr1 ++ serialize size2
     deserialize bs =
         case deserialize bs of
             (arr1, bs') ->
@@ -419,6 +422,7 @@ data NR (size1 :: Nat) (size2 :: Nat) = NR
     { arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
 instance KnownNat y => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NR) where
+    serialize (SomeDep2'' (NR arr2)) = serialize arr2
     deserialize bs =
         case deserialize bs of
             (arr2, bs') ->
@@ -427,6 +431,7 @@ instance KnownNat y => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NR) where
 data NN (size1 :: Nat) (size2 :: Nat) = NN
     {} deriving (Show, GHC.Generic)
 instance Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NN) where
+    serialize (SomeDep2'' NN) = []
     deserialize bs =
         (SomeDep2'' NN, bs)
 
@@ -434,6 +439,7 @@ data NL (size1 :: Nat) (size2 :: Nat) = NL
     { size2 :: Sing size2
     } deriving (Show, GHC.Generic)
 instance Serialize (SomeDep2'' ('Exposed x) 'Hidden NL) where
+    serialize (SomeDep2'' (NL size2)) = serialize size2
     deserialize bs =
         case deserialize bs of
             (Some1 SNat size2, bs') ->
@@ -444,6 +450,7 @@ data LR (size1 :: Nat) (size2 :: Nat) = LR
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
 instance SingI y => Serialize (SomeDep2'' 'Hidden ('Exposed y) LR) where
+    serialize (SomeDep2'' (LR size1 arr2)) = serialize size1 ++ serialize arr2
     deserialize bs =
         case deserialize bs of
             (Some1 SNat size1, bs') ->
@@ -455,6 +462,7 @@ data LN (size1 :: Nat) (size2 :: Nat) = LN
     { size1 :: Sing size1
     } deriving (Show, GHC.Generic)
 instance Serialize (SomeDep2'' 'Hidden ('Exposed y) LN) where
+    serialize (SomeDep2'' (LN size1)) = serialize size1
     deserialize bs =
         case deserialize bs of
             (Some1 SNat size1, bs') ->
@@ -465,6 +473,7 @@ data LL (size1 :: Nat) (size2 :: Nat) = LL
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
 instance Serialize (SomeDep2'' 'Hidden 'Hidden LL) where
+    serialize (SomeDep2'' (LL size1 size2)) = serialize size1 ++ serialize size2
     deserialize bs =
         case deserialize bs of
             (Some1 SNat size1, bs') ->
