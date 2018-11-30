@@ -492,15 +492,16 @@ instance Serialize (SomeDep2'' 'Hidden 'Hidden TwoVar) where
     --serialize (SomeDep2'' (TwoVar size1 size2 arr1 arr2)) = serialize (SomeDep2'' size1) ++ serialize (SomeDep2'' size2) ++ serialize (SomeDep2'' arr1) ++ serialize (SomeDep2'' arr2)
     deserialize bs =
         case deserialize bs of
-            (SomeDep2'' (size1 :: LN x _) :: SomeDep2'' 'Hidden ('Exposed _) LN, bs') ->
+            (SomeDep2'' (LN SNat :: LN x _) :: SomeDep2'' 'Hidden ('Exposed _) LN, bs') ->
+                let size1 = LN SNat in
                 case deserialize bs' of
-                    (SomeDep2'' (size2 :: NL _ y) :: SomeDep2'' ('Exposed _) 'Hidden NL, bs'') ->  -- Use Coercible?
+                    (SomeDep2'' (NL SNat :: NL _ y) :: SomeDep2'' ('Exposed _) 'Hidden NL, bs'') ->
+                        let size2 = NL SNat in
                         case deserialize bs'' of
-                            (SomeDep2'' (arr1 :: RN x _) :: SomeDep2'' ('Exposed x) ('Exposed _) RN, bs''') ->
+                            (SomeDep2'' arr1 :: SomeDep2'' ('Exposed x) ('Exposed y) RN, bs''') ->
                                 case deserialize bs''' of
-                                    (SomeDep2'' (arr2 :: RN _ y) :: SomeDep2'' ('Exposed _) ('Exposed y) NR, bs'''') ->
+                                    (SomeDep2'' arr2 :: SomeDep2'' ('Exposed x) ('Exposed y) NR, bs'''') ->
                                         (SomeDep2'' (TwoVar size1 size2 arr1 arr2), bs'''')
-                                        -- TODO: Are the exposed nondeps getting in the way?
 
 --sd2uu = SomeDep2 @'Unknown @'Unknown $ TwoVar SNat SNat (0 :> Nil) Nil
 --sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
