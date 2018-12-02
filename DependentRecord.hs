@@ -304,9 +304,81 @@ type family
 data SomeDep1 :: DepState -> (a -> Type) -> Type where
     SomeDep1 :: forall d f x. Knowledge d x => f x -> SomeDep1 d f
 deriving instance (forall x. Show (f x)) => Show (SomeDep1 d f)
-data SomeDep2 :: DepState -> DepState -> (a -> b -> Type) -> Type where
-    SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 d1 d2 f
-deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 d1 d2 f)
+data SomeDep2 :: (a -> b -> Type) -> DepState -> DepState -> Type where
+    SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 f d1 d2
+deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 f d1 d2)
+
+
+
+--instance Serialize (SomeDep2 RR 'Known 'Known) where
+--    serialize (SomeDep2 (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
+--    deserialize bs =
+--        case deserialize bs of
+--            (arr1, bs') ->
+--                case deserialize bs' of
+--                    (arr2, bs'') ->
+--                        (SomeDep2 (RR arr1 arr2), bs'')
+
+--instance Serialize (SomeDep2 RN 'Known 'Unknown) where
+--    serialize (SomeDep2 (RN arr1)) = serialize arr1
+--    deserialize bs =
+--        case deserialize bs of
+--            (arr1, bs') ->
+--                (SomeDep2 (RN arr1), bs')
+
+--instance Serialize (SomeDep2 RL 'Known 'Known) where
+--    serialize (SomeDep2 (RL arr1 size2)) = serialize arr1 ++ serialize size2
+--    deserialize bs =
+--        case deserialize bs of
+--            (arr1, bs') ->
+--                case deserialize bs' of
+--                    (Some1 SNat size2, bs'') ->
+--                        (SomeDep2 (RL arr1 size2), bs'')
+
+--instance Serialize (SomeDep2 NR 'Unknown 'Known) where
+--    serialize (SomeDep2 (NR arr2)) = serialize arr2
+--    deserialize bs =
+--        case deserialize bs of
+--            (arr2, bs') ->
+--                (SomeDep2 (NR arr2), bs')
+
+instance Serialize (SomeDep2 NN 'Unknown 'Unknown) where
+    serialize (SomeDep2 NN) = []
+    deserialize bs =
+        (SomeDep2 NN, bs)
+
+instance Serialize (SomeDep2 NL 'Unknown 'Known) where
+    serialize (SomeDep2 (NL size2)) = serialize size2
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size2, bs') ->
+                (SomeDep2 (NL size2), bs')
+
+--instance Serialize (SomeDep2 LR 'Known 'Known) where
+--    serialize (SomeDep2 (LR size1 arr2)) = serialize size1 ++ serialize arr2
+--    deserialize bs =
+--        case deserialize bs of
+--            (Some1 SNat size1, bs') ->
+--                case deserialize bs' of
+--                    (arr2, bs'') ->
+--                        (SomeDep2 (LR size1 arr2), bs'')
+
+instance Serialize (SomeDep2 LN 'Known 'Unknown) where
+    serialize (SomeDep2 (LN size1)) = serialize size1
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                (SomeDep2 (LN size1), bs')
+
+instance Serialize (SomeDep2 LL 'Known 'Known) where
+    serialize (SomeDep2 (LL size1 size2)) = serialize size1 ++ serialize size2
+    deserialize bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2 (LL size1 size2), bs'')
+
 
 --exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
 --exampleOfLearning bs =
@@ -377,16 +449,16 @@ type family
     Knowledge'' (s :: Visibility k) (a :: k) :: Constraint where
     Knowledge'' 'Hidden a = SingI a
     Knowledge'' ('Exposed a) b = a ~ b
-data SomeDep2'' :: Visibility a -> Visibility b -> (a -> b -> Type) -> Type where
-    SomeDep2'' :: forall d1 d2 f x y. (Knowledge'' d1 x, Knowledge'' d2 y) => f x y -> SomeDep2'' d1 d2 f
-deriving instance (forall a b. Show (f a b)) => Show (SomeDep2'' d1 d2 f)
+data SomeDep2'' :: (a -> b -> Type) -> Visibility a -> Visibility b -> Type where
+    SomeDep2'' :: forall d1 d2 f x y. (Knowledge'' d1 x, Knowledge'' d2 y) => f x y -> SomeDep2'' f d1 d2
+deriving instance (forall a b. Show (f a b)) => Show (SomeDep2'' f d1 d2)
 
 
 data RR (size1 :: Nat) (size2 :: Nat) = RR
     { arr1  :: Vector Word8 size1
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
-instance (SingI x, SingI y) => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RR) where
+instance (SingI x, SingI y) => Serialize (SomeDep2'' RR ('Exposed x) ('Exposed y)) where
     serialize (SomeDep2'' (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
     deserialize bs =
         case deserialize bs of
@@ -398,7 +470,7 @@ instance (SingI x, SingI y) => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) R
 data RN (size1 :: Nat) (size2 :: Nat) = RN
     { arr1  :: Vector Word8 size1
     } deriving (Show, GHC.Generic)
-instance SingI x => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) RN) where
+instance SingI x => Serialize (SomeDep2'' RN ('Exposed x) ('Exposed y)) where
     serialize (SomeDep2'' (RN arr1)) = serialize arr1
     deserialize bs =
         case deserialize bs of
@@ -409,7 +481,7 @@ data RL (size1 :: Nat) (size2 :: Nat) = RL
     { arr1  :: Vector Word8 size1
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
-instance KnownNat x => Serialize (SomeDep2'' ('Exposed x) 'Hidden RL) where
+instance KnownNat x => Serialize (SomeDep2'' RL ('Exposed x) 'Hidden) where
     serialize (SomeDep2'' (RL arr1 size2)) = serialize arr1 ++ serialize size2
     deserialize bs =
         case deserialize bs of
@@ -421,7 +493,7 @@ instance KnownNat x => Serialize (SomeDep2'' ('Exposed x) 'Hidden RL) where
 data NR (size1 :: Nat) (size2 :: Nat) = NR
     { arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
-instance KnownNat y => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NR) where
+instance KnownNat y => Serialize (SomeDep2'' NR ('Exposed x) ('Exposed y)) where
     serialize (SomeDep2'' (NR arr2)) = serialize arr2
     deserialize bs =
         case deserialize bs of
@@ -430,7 +502,7 @@ instance KnownNat y => Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NR) where
 
 data NN (size1 :: Nat) (size2 :: Nat) = NN
     {} deriving (Show, GHC.Generic)
-instance Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NN) where
+instance Serialize (SomeDep2'' NN ('Exposed x) ('Exposed y)) where
     serialize (SomeDep2'' NN) = []
     deserialize bs =
         (SomeDep2'' NN, bs)
@@ -438,7 +510,7 @@ instance Serialize (SomeDep2'' ('Exposed x) ('Exposed y) NN) where
 data NL (size1 :: Nat) (size2 :: Nat) = NL
     { size2 :: Sing size2
     } deriving (Show, GHC.Generic)
-instance Serialize (SomeDep2'' ('Exposed x) 'Hidden NL) where
+instance Serialize (SomeDep2'' NL ('Exposed x) 'Hidden) where
     serialize (SomeDep2'' (NL size2)) = serialize size2
     deserialize bs =
         case deserialize bs of
@@ -449,7 +521,7 @@ data LR (size1 :: Nat) (size2 :: Nat) = LR
     { size1 :: Sing size1
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
-instance SingI y => Serialize (SomeDep2'' 'Hidden ('Exposed y) LR) where
+instance SingI y => Serialize (SomeDep2'' LR 'Hidden ('Exposed y)) where
     serialize (SomeDep2'' (LR size1 arr2)) = serialize size1 ++ serialize arr2
     deserialize bs =
         case deserialize bs of
@@ -461,7 +533,7 @@ instance SingI y => Serialize (SomeDep2'' 'Hidden ('Exposed y) LR) where
 data LN (size1 :: Nat) (size2 :: Nat) = LN
     { size1 :: Sing size1
     } deriving (Show, GHC.Generic)
-instance Serialize (SomeDep2'' 'Hidden ('Exposed y) LN) where
+instance Serialize (SomeDep2'' LN 'Hidden ('Exposed y)) where
     serialize (SomeDep2'' (LN size1)) = serialize size1
     deserialize bs =
         case deserialize bs of
@@ -472,7 +544,7 @@ data LL (size1 :: Nat) (size2 :: Nat) = LL
     { size1 :: Sing size1
     , size2 :: Sing size2
     } deriving (Show, GHC.Generic)
-instance Serialize (SomeDep2'' 'Hidden 'Hidden LL) where
+instance Serialize (SomeDep2'' LL 'Hidden 'Hidden) where
     serialize (SomeDep2'' (LL size1 size2)) = serialize size1 ++ serialize size2
     deserialize bs =
         case deserialize bs of
@@ -481,6 +553,62 @@ instance Serialize (SomeDep2'' 'Hidden 'Hidden LL) where
                     (Some1 SNat size2, bs'') ->
                         (SomeDep2'' (LL size1 size2), bs'')
 
+--type family
+--    Visibility' (d :: DepLevel) (x :: a) :: Visibility a where
+--    Visibility' 'Requiring x = 'Exposed x
+--    Visibility' 'NonDep x = 'Exposed x
+--    Visibility' 'Learning x = 'Hidden
+--type family
+--    Knowledge' (d :: DepLevel) (x :: a) :: Constraint where
+--    Knowledge' 'Requiring x = SingI x
+--    Knowledge' 'NonDep x = ()
+--    Knowledge' 'Learning x = ()
+----type family
+----    Foo1 (d :: DepLevel) (a :: Type) :: Type where
+----    Foo1 'Requiring (SomeDep2'' ('Hidden :: Visibility a) v2 f, [Word8]) = forall (x :: a). Sing x -> (SomeDep2'' ('Exposed x) v2 f, [Word8])
+----    Foo1 'NonDep    (SomeDep2'' ('Hidden :: Visibility a) v2 f, [Word8]) = forall (x :: a).           (SomeDep2'' ('Exposed x) v2 f, [Word8])
+----    Foo1 'Learning a = a
+----type family
+----    Foo2 (d :: DepLevel) (a :: Type) :: Type where
+----    Foo2 'Requiring (SomeDep2'' v1 ('Hidden :: Visibility b) f, [Word8]) = forall (y :: b). Sing y -> (SomeDep2'' v1 ('Exposed y) f, [Word8])
+----    Foo2 'NonDep    (SomeDep2'' v1 ('Hidden :: Visibility b) f, [Word8]) = forall (y :: b).           (SomeDep2'' v1 ('Exposed y) f, [Word8])
+----    Foo2 'Learning a = a
+----type family
+----    Foo (d1 :: DepLevel) (d2 :: DepLevel) (f :: a -> b -> Type) (r :: Type) :: Type where
+----    Foo 'Requiring 'Requiring (f :: a -> b -> Type) r = (forall (x :: a) (y :: b). Sing x -> Sing y -> SomeDep2'' f ('Exposed x) ('Exposed y) -> r) -> r
+--class Dep2Deserialize (f :: a -> b -> Type) where
+--    type DepLevel1 f :: DepLevel
+--    type DepLevel2 f :: DepLevel
+--    --dep2deserialize :: forall x y. (Knowledge' (DepLevel1 f) x, Knowledge' (DepLevel2 f) y) => [Word8] -> (SomeDep2'' (Visibility' (DepLevel1 f) x) (Visibility' (DepLevel2 f) y) f, [Word8])
+--    --dep2deserialize :: [Word8] -> Foo1 (DepLevel1 f) (Foo2 (DepLevel2 f) (SomeDep2'' 'Hidden 'Hidden f, [Word8]))
+--    dep2deserialize :: [Word8] -> forall (x :: a). Sing x -> (forall (y :: b). Sing y -> (SomeDep2'' f ('Exposed x) ('Exposed y), [Word8]))
+
+--instance Dep2Deserialize RR where
+--    type DepLevel1 RR = 'Requiring
+--    type DepLevel2 RR = 'Requiring
+--    dep2deserialize :: forall x y. (SingI x, SingI y) => [Word8] -> (SomeDep2'' ('Exposed x) ('Exposed y) RR, [Word8])
+--    dep2deserialize = deserialize
+--instance Dep2Deserialize NN where
+--    type DepLevel1 NN = 'NonDep
+--    type DepLevel2 NN = 'NonDep
+--    dep2deserialize :: forall x y. ((), ()) => [Word8] -> (SomeDep2'' ('Exposed x) ('Exposed y) NN, [Word8])
+--    dep2deserialize = deserialize
+--instance Dep2Deserialize LL where
+--    type DepLevel1 LL = 'Learning
+--    type DepLevel2 LL = 'Learning
+--    dep2deserialize :: forall x y. ((), ()) => [Word8] -> (SomeDep2'' 'Hidden 'Hidden LL, [Word8])
+--    dep2deserialize = deserialize
+--
+--data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
+--
+--instance (Dep2Deserialize l, Dep2Deserialize r) => Dep2Deserialize (Prod2 l r) where
+--    type DepLevel1 (Prod2 l r) = ProductDepLevel (DepLevel1 l) (DepLevel1 r)
+--    --dep2deserialize :: forall x y. (Knowledge' (DepLevel1 (Prod2 l r)) x, Knowledge' (DepLevel2 (Prod2 l r)) y) => [Word8] -> (SomeDep2'' (Visibility' (DepLevel1 (Prod2 l r)) x) (Visibility' (DepLevel2 (Prod2 l r)) y) (Prod2 l r), [Word8])
+--    dep2deserialize bs = undefined
+--        --case deserialize @(SomeDep2'' (Visibility1 l x) (Visibility2 l y) l) bs of
+--        --    (SomeDep2'' a, bs') ->
+--        --        (undefined, bs')
+
 data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     { size1 :: LN size1 size2
     , size2 :: NL size1 size2
@@ -488,20 +616,20 @@ data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     , arr2  :: NR size1 size2
     } deriving (Show, GHC.Generic)
 
-instance Serialize (SomeDep2'' 'Hidden 'Hidden TwoVar) where
-    --serialize (SomeDep2'' (TwoVar size1 size2 arr1 arr2)) = serialize (SomeDep2'' size1) ++ serialize (SomeDep2'' size2) ++ serialize (SomeDep2'' arr1) ++ serialize (SomeDep2'' arr2)
-    deserialize bs =
-        case deserialize bs of
-            (SomeDep2'' (LN SNat :: LN x _) :: SomeDep2'' 'Hidden ('Exposed _) LN, bs') ->
-                let size1 = LN SNat in
-                case deserialize bs' of
-                    (SomeDep2'' (NL SNat :: NL _ y) :: SomeDep2'' ('Exposed _) 'Hidden NL, bs'') ->
-                        let size2 = NL SNat in
-                        case deserialize bs'' of
-                            (SomeDep2'' arr1 :: SomeDep2'' ('Exposed x) ('Exposed y) RN, bs''') ->
-                                case deserialize bs''' of
-                                    (SomeDep2'' arr2 :: SomeDep2'' ('Exposed x) ('Exposed y) NR, bs'''') ->
-                                        (SomeDep2'' (TwoVar size1 size2 arr1 arr2), bs'''')
+--instance Serialize (SomeDep2'' 'Hidden 'Hidden TwoVar) where
+--    --serialize (SomeDep2'' (TwoVar size1 size2 arr1 arr2)) = serialize (SomeDep2'' size1) ++ serialize (SomeDep2'' size2) ++ serialize (SomeDep2'' arr1) ++ serialize (SomeDep2'' arr2)
+--    deserialize bs =
+--        case deserialize bs of
+--            (SomeDep2'' (LN SNat :: LN x _) :: SomeDep2'' 'Hidden ('Exposed _) LN, bs') ->
+--                let size1 = LN SNat in
+--                case deserialize bs' of
+--                    (SomeDep2'' (NL SNat :: NL _ y) :: SomeDep2'' ('Exposed _) 'Hidden NL, bs'') ->
+--                        let size2 = NL SNat in
+--                        case deserialize bs'' of
+--                            (SomeDep2'' arr1 :: SomeDep2'' ('Exposed x) ('Exposed y) RN, bs''') ->
+--                                case deserialize bs''' of
+--                                    (SomeDep2'' arr2 :: SomeDep2'' ('Exposed x) ('Exposed y) NR, bs'''') ->
+--                                        (SomeDep2'' (TwoVar size1 size2 arr1 arr2), bs'''')
 
 --sd2uu = SomeDep2 @'Unknown @'Unknown $ TwoVar SNat SNat (0 :> Nil) Nil
 --sd2kk = SomeDep2 @'Known @'Known $ TwoVar SNat SNat (0 :> Nil) Nil
