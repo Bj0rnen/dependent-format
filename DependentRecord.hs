@@ -56,6 +56,7 @@ import Numeric.Natural
 import Data.Singletons.Fin
 
 import Exinst
+import Data.Reflection
 
 data Vector :: Type -> Nat -> Type where
     Nil :: Vector a 0
@@ -310,37 +311,41 @@ deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 f d1 d2)
 
 
 
---instance Serialize (SomeDep2 RR 'Known 'Known) where
---    serialize (SomeDep2 (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
---    deserialize bs =
---        case deserialize bs of
---            (arr1, bs') ->
---                case deserialize bs' of
---                    (arr2, bs'') ->
---                        (SomeDep2 (RR arr1 arr2), bs'')
+instance (Reifies v0 (Sing (x :: Nat)), Reifies v1 (Sing (y :: Nat))) => Serialize (SomeDep2 RR 'Known 'Known) where
+    serialize (SomeDep2 (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
+    deserialize bs =
+        withSingI (reflect @v0 Proxy) $ withSingI (reflect @v1 Proxy) $
+        case deserialize @(Vector Word8 x) bs of
+            (arr1, bs') ->
+                case deserialize @(Vector Word8 y) bs' of
+                    (arr2, bs'') ->
+                        (SomeDep2 (RR arr1 arr2), bs'')
 
---instance Serialize (SomeDep2 RN 'Known 'Unknown) where
---    serialize (SomeDep2 (RN arr1)) = serialize arr1
---    deserialize bs =
---        case deserialize bs of
---            (arr1, bs') ->
---                (SomeDep2 (RN arr1), bs')
+instance Reifies v0 (Sing (x :: Nat)) => Serialize (SomeDep2 RN 'Known 'Unknown) where
+    serialize (SomeDep2 (RN arr1)) = serialize arr1
+    deserialize bs =
+        withSingI (reflect @v0 Proxy) $
+        case deserialize @(Vector Word8 x) bs of
+            (arr1, bs') ->
+                (SomeDep2 (RN arr1), bs')
 
---instance Serialize (SomeDep2 RL 'Known 'Known) where
---    serialize (SomeDep2 (RL arr1 size2)) = serialize arr1 ++ serialize size2
---    deserialize bs =
---        case deserialize bs of
---            (arr1, bs') ->
---                case deserialize bs' of
---                    (Some1 SNat size2, bs'') ->
---                        (SomeDep2 (RL arr1 size2), bs'')
+instance Reifies v0 (Sing (x :: Nat)) => Serialize (SomeDep2 RL 'Known 'Known) where
+    serialize (SomeDep2 (RL arr1 size2)) = serialize arr1 ++ serialize size2
+    deserialize bs =
+        withSingI (reflect @v0 Proxy) $
+        case deserialize @(Vector Word8 x) bs of
+            (arr1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2 (RL arr1 size2), bs'')
 
---instance Serialize (SomeDep2 NR 'Unknown 'Known) where
---    serialize (SomeDep2 (NR arr2)) = serialize arr2
---    deserialize bs =
---        case deserialize bs of
---            (arr2, bs') ->
---                (SomeDep2 (NR arr2), bs')
+instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
+    serialize (SomeDep2 (NR arr2)) = serialize arr2
+    deserialize bs =
+        withSingI (reflect @v1 Proxy) $
+        case deserialize @(Vector Word8 y) bs of
+            (arr2, bs') ->
+                (SomeDep2 (NR arr2), bs')
 
 instance Serialize (SomeDep2 NN 'Unknown 'Unknown) where
     serialize (SomeDep2 NN) = []
@@ -354,14 +359,15 @@ instance Serialize (SomeDep2 NL 'Unknown 'Known) where
             (Some1 SNat size2, bs') ->
                 (SomeDep2 (NL size2), bs')
 
---instance Serialize (SomeDep2 LR 'Known 'Known) where
---    serialize (SomeDep2 (LR size1 arr2)) = serialize size1 ++ serialize arr2
---    deserialize bs =
---        case deserialize bs of
---            (Some1 SNat size1, bs') ->
---                case deserialize bs' of
---                    (arr2, bs'') ->
---                        (SomeDep2 (LR size1 arr2), bs'')
+instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 LR 'Known 'Known) where
+    serialize (SomeDep2 (LR size1 arr2)) = serialize size1 ++ serialize arr2
+    deserialize bs =
+        withSingI (reflect @v1 Proxy) $
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize @(Vector Word8 y) bs' of
+                    (arr2, bs'') ->
+                        (SomeDep2 (LR size1 arr2), bs'')
 
 instance Serialize (SomeDep2 LN 'Known 'Unknown) where
     serialize (SomeDep2 (LN size1)) = serialize size1
