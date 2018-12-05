@@ -295,10 +295,8 @@ type family
     ApplyDepLevel (f :: DepLevel) (a :: DepState) :: DepState where
     ApplyDepLevel 'Requiring 'Unknown = Error "Required type index not known"
     ApplyDepLevel 'Requiring 'Known = 'Known
-    ApplyDepLevel 'NonDep 'Unknown = 'Unknown
-    ApplyDepLevel 'NonDep 'Known = 'Known
-    ApplyDepLevel 'Learning 'Unknown = 'Known
-    ApplyDepLevel 'Learning 'Known = 'Known
+    ApplyDepLevel 'NonDep a = a
+    ApplyDepLevel 'Learning _ = 'Known
 data Knowledge :: DepState -> a -> Type where
     KnowledgeU :: Knowledge 'Unknown a
     KnowledgeK :: Sing a -> Knowledge 'Known a
@@ -343,15 +341,13 @@ instance Dep2Deserialize RR 'Known 'Known where
                     (arr2, bs'') ->
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RR arr1 arr2), bs'')
 
-applyNonDepIsId :: forall x. Dict (ApplyDepLevel 'NonDep x ~ x)
-applyNonDepIsId = unsafeCoerce (Dict @(x ~ x))  -- TODO: Please no unsafeCoerce!!
 instance Dep2Deserialize RN 'Known d where
     type DepLevel1 RN = 'Requiring
     type DepLevel2 RN = 'NonDep
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
-                withKnwlg y $ \y' -> withDict (applyNonDepIsId @d) (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
+                withKnwlg y $ \y' -> (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
 
 {-
 instance (Reifies v0 (Sing (x :: Nat)), Reifies v1 (Sing (y :: Nat))) => Serialize (SomeDep2 RR 'Known 'Known) where
