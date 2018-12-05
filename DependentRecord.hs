@@ -49,6 +49,7 @@ import Data.Constraint
 import Unsafe.Coerce
 import GHC.Types (Any)
 import Data.Coerce
+import Data.Functor.Const
 
 import Data.Word
 import Data.Bits
@@ -298,37 +299,44 @@ type family
     ApplyDepLevel 'NonDep 'Known = 'Known
     ApplyDepLevel 'Learning 'Unknown = 'Known
     ApplyDepLevel 'Learning 'Known = 'Known
-type family
-    Knowledge (s :: DepState) (a :: k) :: Constraint where
-    Knowledge 'Unknown a = ()
-    Knowledge 'Known a = SingI a
+data Knowledge :: DepState -> a -> Type where
+    KnowledgeU :: Knowledge 'Unknown a
+    KnowledgeK :: Sing a -> Knowledge 'Known a
+deriving instance Show (Sing a) => Show (Knowledge d a)
 data SomeDep1 :: DepState -> (a -> Type) -> Type where
-    SomeDep1 :: forall d f x. Knowledge d x => f x -> SomeDep1 d f
-deriving instance (forall x. Show (f x)) => Show (SomeDep1 d f)
+    SomeDep1 :: forall d f x. Knowledge d x -> f x -> SomeDep1 d f
+deriving instance (forall x. (Show (f x), Show (Sing x))) => Show (SomeDep1 d f)
 data SomeDep2 :: (a -> b -> Type) -> DepState -> DepState -> Type where
-    SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 f d1 d2
-deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 f d1 d2)
+    SomeDep2 :: forall d1 d2 f x y. Knowledge d1 x -> Knowledge d2 y -> f x y -> SomeDep2 f d1 d2
+deriving instance (forall x y. (Show (f x y), Show (Sing x), Show (Sing y))) => Show (SomeDep2 f d1 d2)
 
 type family
-    Knwlg (d :: DepState) (x :: a) = (w :: Type) | w -> d where
-    Knwlg 'Unknown _ = ()
-    Knwlg 'Known a = SomeSing a
+    Knwlg (d :: DepState) = (w :: Type -> Type) | w -> d where
+    Knwlg 'Unknown = Const ()
+    Knwlg 'Known = SomeSing
 data SomeDepStates :: [(Type, DepState)] -> Type where
     SomeDepStatesNil :: SomeDepStates '[]
     SomeDepStatesCons :: Knwlg w a -> SomeDepStates xs -> SomeDepStates ('(a, w) ': xs)
 infixr `SomeDepStatesCons`
 
+class WithKnwlg (d :: DepState) where
+    withKnwlg :: forall a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) -> r
+instance WithKnwlg 'Unknown where
+    withKnwlg (Const ()) f = f KnowledgeU
+instance WithKnwlg 'Known where
+    withKnwlg (SomeSing s) f = f (KnowledgeK s)
+
 -- TODO: Should this really need a class?
 class SomeDep2ToSomeDepState2 d1 d2 where
     someDep2ToSomeDepState2 :: forall a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
 instance SomeDep2ToSomeDepState2 'Unknown 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 _) = () `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = Const () `SomeDepStatesCons` Const () `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Unknown 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = () `SomeDepStatesCons` (SomeSing (sing @y)) `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = Const () `SomeDepStatesCons` (SomeSing y) `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = (SomeSing (sing @x)) `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (SomeSing x) `SomeDepStatesCons` Const () `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = (SomeSing (sing @x)) `SomeDepStatesCons` (SomeSing (sing @y)) `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (SomeSing x) `SomeDepStatesCons` (SomeSing y) `SomeDepStatesCons` SomeDepStatesNil
 
 class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
     type DepLevel1 f :: DepLevel
@@ -343,27 +351,20 @@ instance Dep2Deserialize RR 'Known 'Known where
             (arr1, bs') ->
                 case deserialize @(Vector Word8 y) bs' of
                     (arr2, bs'') ->
-                        (SomeDep2 (RR arr1 arr2), bs'')
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RR arr1 arr2), bs'')
 
--- TODO: How do we not have two instances? How do we avoid having to add the "@y" annotation in the 'Known instance?
--- TODO: I think these two things are connected. Maybe we should take Knwlg values in the SomeDep2 constructor
--- TODO: instead of the Knowledge constraints?
-instance Dep2Deserialize RN 'Known 'Unknown where
+-- TODO: Needing WithKnwlg constraint is iffy. Needing unsafeCoerce is bad!!
+applyNonDepIsId :: forall x. Dict (ApplyDepLevel 'NonDep x ~ x)
+applyNonDepIsId = unsafeCoerce (Dict @(x ~ x))
+instance WithKnwlg d => Dep2Deserialize RN 'Known d where
     type DepLevel1 RN = 'Requiring
     type DepLevel2 RN = 'NonDep
-    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil) bs =
+    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
-                (SomeDep2 (RN arr1), bs')
-instance Dep2Deserialize RN 'Known 'Known where
-    type DepLevel1 RN = 'Requiring
-    type DepLevel2 RN = 'NonDep
-    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` (SomeSing (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize @(Vector Word8 x) bs of
-            (arr1, bs') ->
-                (SomeDep2 (RN @_ @y arr1), bs')
+                withKnwlg y $ \y' -> withDict (applyNonDepIsId @d) (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
 
-
+{-
 instance (Reifies v0 (Sing (x :: Nat)), Reifies v1 (Sing (y :: Nat))) => Serialize (SomeDep2 RR 'Known 'Known) where
     serialize (SomeDep2 (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
     deserialize bs =
@@ -437,7 +438,7 @@ instance Serialize (SomeDep2 LL 'Known 'Known) where
                 case deserialize bs' of
                     (Some1 SNat size2, bs'') ->
                         (SomeDep2 (LL size1 size2), bs'')
-
+-}
 
 --exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
 --exampleOfLearning bs =
