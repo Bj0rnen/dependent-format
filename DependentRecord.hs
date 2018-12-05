@@ -302,6 +302,9 @@ type family
 data Knowledge :: DepState -> a -> Type where
     KnowledgeU :: Knowledge 'Unknown a
     KnowledgeK :: Sing a -> Knowledge 'Known a
+data Knwlg :: DepState -> Type -> Type where
+    KnwlgU :: Knwlg 'Unknown a
+    KnwlgK :: forall (x :: a). Sing x -> Knwlg 'Known a
 deriving instance Show (Sing a) => Show (Knowledge d a)
 data SomeDep1 :: DepState -> (a -> Type) -> Type where
     SomeDep1 :: forall d f x. Knowledge d x -> f x -> SomeDep1 d f
@@ -310,10 +313,6 @@ data SomeDep2 :: (a -> b -> Type) -> DepState -> DepState -> Type where
     SomeDep2 :: forall d1 d2 f x y. Knowledge d1 x -> Knowledge d2 y -> f x y -> SomeDep2 f d1 d2
 deriving instance (forall x y. (Show (f x y), Show (Sing x), Show (Sing y))) => Show (SomeDep2 f d1 d2)
 
-type family
-    Knwlg (d :: DepState) = (w :: Type -> Type) | w -> d where
-    Knwlg 'Unknown = Const ()
-    Knwlg 'Known = SomeSing
 data SomeDepStates :: [(Type, DepState)] -> Type where
     SomeDepStatesNil :: SomeDepStates '[]
     SomeDepStatesCons :: Knwlg w a -> SomeDepStates xs -> SomeDepStates ('(a, w) ': xs)
@@ -322,21 +321,21 @@ infixr `SomeDepStatesCons`
 class WithKnwlg (d :: DepState) where
     withKnwlg :: forall a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) -> r
 instance WithKnwlg 'Unknown where
-    withKnwlg (Const ()) f = f KnowledgeU
+    withKnwlg KnwlgU f = f KnowledgeU
 instance WithKnwlg 'Known where
-    withKnwlg (SomeSing s) f = f (KnowledgeK s)
+    withKnwlg (KnwlgK s) f = f (KnowledgeK s)
 
 -- TODO: Should this really need a class?
 class SomeDep2ToSomeDepState2 d1 d2 where
     someDep2ToSomeDepState2 :: forall a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
 instance SomeDep2ToSomeDepState2 'Unknown 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = Const () `SomeDepStatesCons` Const () `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Unknown 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = Const () `SomeDepStatesCons` (SomeSing y) `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = KnwlgU `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (SomeSing x) `SomeDepStatesCons` Const () `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (KnwlgK x) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (SomeSing x) `SomeDepStatesCons` (SomeSing y) `SomeDepStatesCons` SomeDepStatesNil
+    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (KnwlgK x) `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
 
 class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
     type DepLevel1 f :: DepLevel
@@ -346,7 +345,7 @@ class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
 instance Dep2Deserialize RR 'Known 'Known where
     type DepLevel1 RR = 'Requiring
     type DepLevel2 RR = 'Requiring
-    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` (SomeSing (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+    dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 case deserialize @(Vector Word8 y) bs' of
@@ -359,7 +358,7 @@ applyNonDepIsId = unsafeCoerce (Dict @(x ~ x))
 instance WithKnwlg d => Dep2Deserialize RN 'Known d where
     type DepLevel1 RN = 'Requiring
     type DepLevel2 RN = 'NonDep
-    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
+    dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 withKnwlg y $ \y' -> withDict (applyNonDepIsId @d) (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
