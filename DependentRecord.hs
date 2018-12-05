@@ -309,50 +309,59 @@ data SomeDep2 :: (a -> b -> Type) -> DepState -> DepState -> Type where
     SomeDep2 :: forall d1 d2 f x y. (Knowledge d1 x, Knowledge d2 y) => f x y -> SomeDep2 f d1 d2
 deriving instance (forall x y. Show (f x y)) => Show (SomeDep2 f d1 d2)
 
-data SomeDepState2 :: Type -> Type -> DepState -> DepState -> Type where  -- TODO: Express in a way that scales. Take [DepState], perhaps.
-    SomeDepState2UU ::                             SomeDepState2 a b 'Unknown 'Unknown
-    SomeDepState2UK ::               SomeSing b -> SomeDepState2 a b 'Unknown 'Known
-    SomeDepState2KU :: SomeSing a ->               SomeDepState2 a b 'Known   'Unknown
-    SomeDepState2KK :: SomeSing a -> SomeSing b -> SomeDepState2 a b 'Known   'Known
+type family
+    Knwlg (d :: DepState) (x :: a) = (w :: Type) | w -> d where
+    Knwlg 'Unknown _ = ()
+    Knwlg 'Known a = SomeSing a
+data SomeDepStates :: [(Type, DepState)] -> Type where
+    SomeDepStatesNil :: SomeDepStates '[]
+    SomeDepStatesCons :: Knwlg w a -> SomeDepStates xs -> SomeDepStates ('(a, w) ': xs)
+infixr `SomeDepStatesCons`
 
 -- TODO: Should this really need a class?
 class SomeDep2ToSomeDepState2 d1 d2 where
-    someDep2ToSomeDepState2 :: forall a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepState2 a b d1 d2
+    someDep2ToSomeDepState2 :: forall a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
 instance SomeDep2ToSomeDepState2 'Unknown 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 _) = SomeDepState2UU
+    someDep2ToSomeDepState2 (SomeDep2 _) = () `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Unknown 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = SomeDepState2UK (SomeSing (sing @y))
+    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = () `SomeDepStatesCons` (SomeSing (sing @y)) `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = SomeDepState2KU (SomeSing (sing @x))
+    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = (SomeSing (sing @x)) `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil
 instance SomeDep2ToSomeDepState2 'Known 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = SomeDepState2KK (SomeSing (sing @x)) (SomeSing (sing @y))
+    someDep2ToSomeDepState2 (SomeDep2 (a :: f x y)) = (SomeSing (sing @x)) `SomeDepStatesCons` (SomeSing (sing @y)) `SomeDepStatesCons` SomeDepStatesNil
 
 class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
     type DepLevel1 f :: DepLevel
     type DepLevel2 f :: DepLevel
-    dep2Deserialize :: SomeDepState2 a b d1 d2 -> [Word8] -> (SomeDep2 f (ApplyDepLevel (DepLevel1 f) d1) (ApplyDepLevel (DepLevel2 f) d2), [Word8])
+    dep2Deserialize :: SomeDepStates '[ '(a, d1), '(b, d2)] -> [Word8] -> (SomeDep2 f (ApplyDepLevel (DepLevel1 f) d1) (ApplyDepLevel (DepLevel2 f) d2), [Word8])
 
 instance Dep2Deserialize RR 'Known 'Known where
     type DepLevel1 RR = 'Requiring
     type DepLevel2 RR = 'Requiring
-    dep2Deserialize (SomeDepState2KK (SomeSing (SNat :: Sing x)) (SomeSing (SNat :: Sing y))) bs =
+    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` (SomeSing (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 case deserialize @(Vector Word8 y) bs' of
                     (arr2, bs'') ->
                         (SomeDep2 (RR arr1 arr2), bs'')
 
-instance Dep2Deserialize RN 'Known d2 where
+-- TODO: How do we not have two instances? How do we avoid having to add the "@y" annotation in the 'Known instance?
+-- TODO: I think these two things are connected. Maybe we should take Knwlg values in the SomeDep2 constructor
+-- TODO: instead of the Knowledge constraints?
+instance Dep2Deserialize RN 'Known 'Unknown where
     type DepLevel1 RN = 'Requiring
     type DepLevel2 RN = 'NonDep
-    dep2Deserialize (SomeDepState2KU (SomeSing (SNat :: Sing x))) bs =
+    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` () `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 (SomeDep2 (RN arr1), bs')
-    dep2Deserialize (SomeDepState2KK (SomeSing (SNat :: Sing x)) (SomeSing (SNat :: Sing y))) bs = undefined  -- TODO: This has to work too. No harm in already knowing y!
-        --case deserialize @(Vector Word8 x) bs of
-        --    (arr1, bs') ->
-        --        (SomeDep2 (RN arr1), bs')
+instance Dep2Deserialize RN 'Known 'Known where
+    type DepLevel1 RN = 'Requiring
+    type DepLevel2 RN = 'NonDep
+    dep2Deserialize ((SomeSing (SNat :: Sing x)) `SomeDepStatesCons` (SomeSing (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize @(Vector Word8 x) bs of
+            (arr1, bs') ->
+                (SomeDep2 (RN @_ @y arr1), bs')
 
 
 instance (Reifies v0 (Sing (x :: Nat)), Reifies v1 (Sing (y :: Nat))) => Serialize (SomeDep2 RR 'Known 'Known) where
