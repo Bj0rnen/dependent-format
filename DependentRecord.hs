@@ -349,35 +349,17 @@ instance Dep2Deserialize RN 'Known d where
             (arr1, bs') ->
                 withKnwlg y $ \y' -> (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
 
-{-
-instance (Reifies v0 (Sing (x :: Nat)), Reifies v1 (Sing (y :: Nat))) => Serialize (SomeDep2 RR 'Known 'Known) where
-    serialize (SomeDep2 (RR arr1 arr2)) = serialize arr1 ++ serialize arr2
-    deserialize bs =
-        withSingI (reflect @v0 Proxy) $ withSingI (reflect @v1 Proxy) $
-        case deserialize @(Vector Word8 x) bs of
-            (arr1, bs') ->
-                case deserialize @(Vector Word8 y) bs' of
-                    (arr2, bs'') ->
-                        (SomeDep2 (RR arr1 arr2), bs'')
-
-instance Reifies v0 (Sing (x :: Nat)) => Serialize (SomeDep2 RN 'Known 'Unknown) where
-    serialize (SomeDep2 (RN arr1)) = serialize arr1
-    deserialize bs =
-        withSingI (reflect @v0 Proxy) $
-        case deserialize @(Vector Word8 x) bs of
-            (arr1, bs') ->
-                (SomeDep2 (RN arr1), bs')
-
-instance Reifies v0 (Sing (x :: Nat)) => Serialize (SomeDep2 RL 'Known 'Known) where
-    serialize (SomeDep2 (RL arr1 size2)) = serialize arr1 ++ serialize size2
-    deserialize bs =
-        withSingI (reflect @v0 Proxy) $
+instance Dep2Deserialize RL 'Known d where
+    type DepLevel1 RL = 'Requiring
+    type DepLevel2 RL = 'Learning
+    dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =  -- TODO: Ignoring second var, but should we care about inconsistent knowns?
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 case deserialize bs' of
                     (Some1 SNat size2, bs'') ->
-                        (SomeDep2 (RL arr1 size2), bs'')
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RL arr1 size2), bs'')
 
+{-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
     serialize (SomeDep2 (NR arr2)) = serialize arr2
     deserialize bs =
