@@ -318,12 +318,9 @@ data SomeDepStates :: [(Type, DepState)] -> Type where
     SomeDepStatesCons :: Knwlg w a -> SomeDepStates xs -> SomeDepStates ('(a, w) ': xs)
 infixr `SomeDepStatesCons`
 
-class WithKnwlg (d :: DepState) where
-    withKnwlg :: forall a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) -> r
-instance WithKnwlg 'Unknown where
-    withKnwlg KnwlgU f = f KnowledgeU
-instance WithKnwlg 'Known where
-    withKnwlg (KnwlgK s) f = f (KnowledgeK s)
+withKnwlg :: forall d a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) -> r
+withKnwlg KnwlgU f = f KnowledgeU
+withKnwlg (KnwlgK s) f = f (KnowledgeK s)
 
 -- TODO: Should this really need a class?
 class SomeDep2ToSomeDepState2 d1 d2 where
@@ -352,10 +349,9 @@ instance Dep2Deserialize RR 'Known 'Known where
                     (arr2, bs'') ->
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RR arr1 arr2), bs'')
 
--- TODO: Needing WithKnwlg constraint is iffy. Needing unsafeCoerce is bad!!
 applyNonDepIsId :: forall x. Dict (ApplyDepLevel 'NonDep x ~ x)
-applyNonDepIsId = unsafeCoerce (Dict @(x ~ x))
-instance WithKnwlg d => Dep2Deserialize RN 'Known d where
+applyNonDepIsId = unsafeCoerce (Dict @(x ~ x))  -- TODO: Please no unsafeCoerce!!
+instance Dep2Deserialize RN 'Known d where
     type DepLevel1 RN = 'Requiring
     type DepLevel2 RN = 'NonDep
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
