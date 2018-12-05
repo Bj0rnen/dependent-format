@@ -322,17 +322,11 @@ withKnwlg :: forall d a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) ->
 withKnwlg KnwlgU f = f KnowledgeU
 withKnwlg (KnwlgK s) f = f (KnowledgeK s)
 
--- TODO: Should this really need a class?
-class SomeDep2ToSomeDepState2 d1 d2 where
-    someDep2ToSomeDepState2 :: forall a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
-instance SomeDep2ToSomeDepState2 'Unknown 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
-instance SomeDep2ToSomeDepState2 'Unknown 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = KnwlgU `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
-instance SomeDep2ToSomeDepState2 'Known 'Unknown where
-    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (KnwlgK x) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
-instance SomeDep2ToSomeDepState2 'Known 'Known where
-    someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (KnwlgK x) `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
+someDep2ToSomeDepState2 :: forall d1 d2 a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
+someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
+someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = KnwlgU `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
+someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (KnwlgK x) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
+someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (KnwlgK x) `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
 
 class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
     type DepLevel1 f :: DepLevel
