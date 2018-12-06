@@ -331,13 +331,13 @@ someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) KnowledgeU a) = (KnwlgK x) `Som
 someDep2ToSomeDepState2 (SomeDep2 (KnowledgeK x) (KnowledgeK y) a) = (KnwlgK x) `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
 
 class Dep2Deserialize (f :: a -> b -> Type) d1 d2 where
-    type DepLevel1 f :: DepLevel
-    type DepLevel2 f :: DepLevel
-    dep2Deserialize :: SomeDepStates '[ '(a, d1), '(b, d2)] -> [Word8] -> (SomeDep2 f (ApplyDepLevel (DepLevel1 f) d1) (ApplyDepLevel (DepLevel2 f) d2), [Word8])
+    type DepLevel1 f (d :: DepState) :: DepState
+    type DepLevel2 f (d :: DepState) :: DepState
+    dep2Deserialize :: SomeDepStates '[ '(a, d1), '(b, d2)] -> [Word8] -> (SomeDep2 f (DepLevel1 f d1) (DepLevel2 f d2), [Word8])
 
 instance Dep2Deserialize RR 'Known 'Known where
-    type DepLevel1 RR = 'Requiring
-    type DepLevel2 RR = 'Requiring
+    type DepLevel1 RR d = ApplyDepLevel 'Requiring d
+    type DepLevel2 RR d = ApplyDepLevel 'Requiring d
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
@@ -346,16 +346,16 @@ instance Dep2Deserialize RR 'Known 'Known where
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RR arr1 arr2), bs'')
 
 instance Dep2Deserialize RN 'Known d where
-    type DepLevel1 RN = 'Requiring
-    type DepLevel2 RN = 'NonDep
+    type DepLevel1 RN d = ApplyDepLevel 'Requiring d
+    type DepLevel2 RN d = ApplyDepLevel 'NonDep d
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
                 withKnwlg y $ \y' -> (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
 
 instance Dep2Deserialize RL 'Known d where
-    type DepLevel1 RL = 'Requiring
-    type DepLevel2 RL = 'Learning
+    type DepLevel1 RL d = ApplyDepLevel 'Requiring d
+    type DepLevel2 RL d = ApplyDepLevel 'Learning d
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =  -- TODO: Ignoring second var, but should we care about inconsistent knowns?
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
@@ -365,17 +365,17 @@ instance Dep2Deserialize RL 'Known d where
 
 data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
 
-instance (Dep2Deserialize l d1 d2, Dep2Deserialize r (ApplyDepLevel (DepLevel1 l) d1) (ApplyDepLevel (DepLevel2 l) d2)) =>  Dep2Deserialize (Prod2 l r) d1 d2 where
-    -- TODO: ProductDepLevel is tricky to fit into this...
-    --type DepLevel1 (Prod2 l r) = ApplyDepLevel (DepLevel1 r) (ApplyDepLevel (DepLevel1 l) ?)
-    type DepLevel1 (Prod2 l r) = ProductDepLevel (DepLevel1 l) (DepLevel1 r)
-    type DepLevel2 (Prod2 l r) = ProductDepLevel (DepLevel2 l) (DepLevel2 r)
+instance (Dep2Deserialize l d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2 l d2)) =>  Dep2Deserialize (Prod2 l r) d1 d2 where
+    type DepLevel1 (Prod2 l r) d = DepLevel1 r (DepLevel1 l d)
+    type DepLevel2 (Prod2 l r) d = DepLevel2 r (DepLevel2 l d)
     dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
         case dep2Deserialize @l (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs of
-            (sdl@(SomeDep2 k3 k4 l), bs') ->
+            (sdl@(SomeDep2 (k3 :: Knowledge (DepLevel1 l d1) x1_) (k4 :: Knowledge (DepLevel2 l d2) y1_) l), bs') ->
                 case dep2Deserialize @r (knowledgeToKnwlg k3 `SomeDepStatesCons` knowledgeToKnwlg k4 `SomeDepStatesCons` SomeDepStatesNil) bs' of
-                    (SomeDep2 (k5 :: Knowledge (ApplyDepLevel (DepLevel1 (Prod2 l r)) d1) x) (k6 :: Knowledge (ApplyDepLevel (DepLevel2 (Prod2 l r)) d2) y) r, bs'') ->
-                        undefined  --(SomeDep2 k5 k6 (Prod2 l r), bs'')
+                    (SomeDep2 (k5 :: Knowledge (DepLevel1 (Prod2 l r) d1) x2_) (k6 :: Knowledge (DepLevel2 (Prod2 l r) d2) y2_) r, bs'') ->
+                        case (undefined :: x1_ :~: x2_, undefined :: y1_ :~: y2_) of  -- TODO: Prove something like this. Exactly this might be too strong... Not sure.
+                            (Refl, Refl) ->
+                                (SomeDep2 k5 k6 (Prod2 l r), bs'')
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
