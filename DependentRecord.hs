@@ -320,6 +320,10 @@ withKnwlg :: forall d a r. Knwlg d a -> (forall (x :: a). Knowledge d x -> r) ->
 withKnwlg KnwlgU f = f KnowledgeU
 withKnwlg (KnwlgK s) f = f (KnowledgeK s)
 
+knowledgeToKnwlg :: forall d (x :: a). Knowledge d x -> Knwlg d a
+knowledgeToKnwlg KnowledgeU = KnwlgU
+knowledgeToKnwlg (KnowledgeK s) = KnwlgK s
+
 someDep2ToSomeDepState2 :: forall d1 d2 a b f. SomeDep2 (f :: a -> b -> Type) d1 d2 -> SomeDepStates '[ '(a, d1), '(b, d2)]
 someDep2ToSomeDepState2 (SomeDep2 KnowledgeU KnowledgeU _) = KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil
 someDep2ToSomeDepState2 (SomeDep2 KnowledgeU (KnowledgeK y) a) = KnwlgU `SomeDepStatesCons` (KnwlgK y) `SomeDepStatesCons` SomeDepStatesNil
@@ -358,6 +362,20 @@ instance Dep2Deserialize RL 'Known d where
                 case deserialize bs' of
                     (Some1 SNat size2, bs'') ->
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RL arr1 size2), bs'')
+
+data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
+
+instance (Dep2Deserialize l d1 d2, Dep2Deserialize r (ApplyDepLevel (DepLevel1 l) d1) (ApplyDepLevel (DepLevel2 l) d2)) =>  Dep2Deserialize (Prod2 l r) d1 d2 where
+    -- TODO: ProductDepLevel is tricky to fit into this...
+    --type DepLevel1 (Prod2 l r) = ApplyDepLevel (DepLevel1 r) (ApplyDepLevel (DepLevel1 l) ?)
+    type DepLevel1 (Prod2 l r) = ProductDepLevel (DepLevel1 l) (DepLevel1 r)
+    type DepLevel2 (Prod2 l r) = ProductDepLevel (DepLevel2 l) (DepLevel2 r)
+    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case dep2Deserialize @l (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs of
+            (sdl@(SomeDep2 k3 k4 l), bs') ->
+                case dep2Deserialize @r (knowledgeToKnwlg k3 `SomeDepStatesCons` knowledgeToKnwlg k4 `SomeDepStatesCons` SomeDepStatesNil) bs' of
+                    (SomeDep2 (k5 :: Knowledge (ApplyDepLevel (DepLevel1 (Prod2 l r)) d1) x) (k6 :: Knowledge (ApplyDepLevel (DepLevel2 (Prod2 l r)) d2) y) r, bs'') ->
+                        undefined  --(SomeDep2 k5 k6 (Prod2 l r), bs'')
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
@@ -625,8 +643,6 @@ instance Serialize (SomeDep2'' LL 'Hidden 'Hidden) where
 --    type DepLevel2 LL = 'Learning
 --    dep2deserialize :: forall x y. ((), ()) => [Word8] -> (SomeDep2'' 'Hidden 'Hidden LL, [Word8])
 --    dep2deserialize = deserialize
---
---data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
 --
 --instance (Dep2Deserialize l, Dep2Deserialize r) => Dep2Deserialize (Prod2 l r) where
 --    type DepLevel1 (Prod2 l r) = ProductDepLevel (DepLevel1 l) (DepLevel1 r)
