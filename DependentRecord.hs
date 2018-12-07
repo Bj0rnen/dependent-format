@@ -364,8 +364,23 @@ instance Dep2Deserialize RL 'Known d where
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RL arr1 size2), bs'')
 
 data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
+    deriving Show
 
-instance (Dep2Deserialize l d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2 l d2)) =>  Dep2Deserialize (Prod2 l r) d1 d2 where
+sameKnowlege :: forall (d1 :: DepState) (d2 :: DepState) (x1 :: k) (x2 :: k).
+    SDecide k =>
+    Knowledge d1 x1 -> Knowledge d2 x2 -> Maybe (x1 :~: x2)
+sameKnowlege KnowledgeU KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: unsafeCoerce!! Replace with coerce??
+sameKnowlege KnowledgeU (KnowledgeK s) = Just (unsafeCoerce Refl)  -- TODO: same!
+sameKnowlege (KnowledgeK s) KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: same!
+sameKnowlege (KnowledgeK s1) (KnowledgeK s2) =
+    case s1 %~ s2 of
+        Proved r -> Just r
+        Disproved f -> Nothing
+
+instance
+    ( SDecide a, SDecide b
+    , Dep2Deserialize (l :: a -> b -> Type) d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2 l d2))
+    => Dep2Deserialize (Prod2 l r) d1 d2 where
     type DepLevel1 (Prod2 l r) d = DepLevel1 r (DepLevel1 l d)
     type DepLevel2 (Prod2 l r) d = DepLevel2 r (DepLevel2 l d)
     dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
@@ -373,9 +388,14 @@ instance (Dep2Deserialize l d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2
             (sdl@(SomeDep2 (k3 :: Knowledge (DepLevel1 l d1) x1_) (k4 :: Knowledge (DepLevel2 l d2) y1_) l), bs') ->
                 case dep2Deserialize @r (knowledgeToKnwlg k3 `SomeDepStatesCons` knowledgeToKnwlg k4 `SomeDepStatesCons` SomeDepStatesNil) bs' of
                     (SomeDep2 (k5 :: Knowledge (DepLevel1 (Prod2 l r) d1) x2_) (k6 :: Knowledge (DepLevel2 (Prod2 l r) d2) y2_) r, bs'') ->
-                        case (undefined :: x1_ :~: x2_, undefined :: y1_ :~: y2_) of  -- TODO: Prove something like this. Exactly this might be too strong... Not sure.
-                            (Refl, Refl) ->
+                        case (sameKnowlege k3 k5, sameKnowlege k4 k6) of
+                            (Just Refl, Just Refl) ->
                                 (SomeDep2 k5 k6 (Prod2 l r), bs'')
+
+testRRRR = dep2Deserialize @(Prod2 RR RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0..5]
+-- TODO: This ignores the "known" (SNat @2) and learns 0. Not fully working like it shoud.
+--testRLRR = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,0,2,3]
+testRLRR = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
