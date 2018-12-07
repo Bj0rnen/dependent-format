@@ -356,12 +356,15 @@ instance Dep2Deserialize RN 'Known d where
 instance Dep2Deserialize RL 'Known d where
     type DepLevel1 RL d = ApplyDepLevel 'Requiring d
     type DepLevel2 RL d = ApplyDepLevel 'Learning d
-    dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =  -- TODO: Ignoring second var, but should we care about inconsistent knowns?
+    dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize @(Vector Word8 x) bs of
             (arr1, bs') ->
-                case deserialize bs' of
-                    (Some1 SNat size2, bs'') ->
-                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RL arr1 size2), bs'')
+                case deserialize @(Some1 (Sing :: Nat -> Type)) bs' of
+                    (Some1 y' size2, bs'') ->
+                        withKnwlg y $ \y'' -> case sameKnowlege y'' (KnowledgeK y') of
+                            Nothing -> error $ "Already knew type index was equal to " ++ show y'' ++ ", but now learned that it is equal to " ++ show y'
+                            Just Refl ->
+                                (SomeDep2 (KnowledgeK SNat) (KnowledgeK y') (RL arr1 size2), bs'')
 
 data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
     deriving Show
@@ -393,9 +396,9 @@ instance
                                 (SomeDep2 k5 k6 (Prod2 l r), bs'')
 
 testRRRR = dep2Deserialize @(Prod2 RR RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0..5]
--- TODO: This ignores the "known" (SNat @2) and learns 0. Not fully working like it shoud.
---testRLRR = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,0,2,3]
-testRLRR = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
+testRLRRU = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
+testRLRRKGood = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
+testRLRRKBad = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
