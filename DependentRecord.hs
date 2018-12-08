@@ -400,6 +400,38 @@ testRLRRU = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons`
 testRLRRKGood = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 testRLRRKBad = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 
+
+data SomeDep2K :: DepState -> DepState -> (K.LoT (a -> b -> Type) -> Type) -> Type where
+    SomeDep2K :: forall d1 d2 f x y. Knowledge d1 x -> Knowledge d2 y -> f (x 'K.:&&: y 'K.:&&: 'K.LoT0) -> SomeDep2K d1 d2 f
+
+
+--serializeSomeDep2 ::
+--deserializeSomeDep2 :: forall d1 d2 f. (forall x y. K.GenericK f (x 'K.:&&: y 'K.:&&: 'K.LoT0), Serialize (SomeDep2K d1 d2 (K.RepK f))) => [Word8] -> (Some2 f, [Word8])
+deserializeSomeDep2 :: forall f.
+    (forall x y. K.GenericK f (x 'K.:&&: y 'K.:&&: 'K.LoT0), Serialize (SomeDep2K (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown) (K.RepK f)))
+    => [Word8] -> (SomeDep2 f (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown), [Word8])
+deserializeSomeDep2 bs =
+    case deserialize @(SomeDep2K (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown) (K.RepK f)) bs of
+        (SomeDep2K k1 k2 a, bs') ->
+            (SomeDep2 k1 k2 (K.toK a), bs')
+
+data WrapNL size1 size2 = WrapNL
+    { nl :: NL size1 size2
+    } --deriving (Dep2Deserialize )
+instance Dep2Deserialize WrapNL d1 d2 where
+    --type DepLevel1 WrapNL d = DepLevel1 (K.RepK WrapNL) d
+    --type DepLevel2 WrapNL d = DepLevel2 (K.RepK WrapNL) d
+    type DepLevel1 WrapNL d = DepLevel1 NL d
+    type DepLevel2 WrapNL d = DepLevel2 NL d
+
+testDeserializeSomeDep2 :: (SomeDep2 WrapNL 'Unknown 'Known, [Word8])
+testDeserializeSomeDep2 = undefined --deserializeSomeDep2 @WrapNL [0, 1, 2, 3]
+
+-- TODO: We want (Dep2Deserialize WrapNL) derived via GenericK. Not supposed to be implementad by hand
+-- TODO: Now, Dep2Deserialize also takes 2 DepStates. Could we possibly get rid of those from there?
+-- TODO: Also (K.RepK f) has the wrong kind, so DepLevel1 and DepLevel2 can't be defined for that.
+
+
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
     serialize (SomeDep2 (NR arr2)) = serialize arr2
