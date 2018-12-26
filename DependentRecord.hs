@@ -442,8 +442,49 @@ instance Dep2Deserialize LL d1 d2 where
                     (Some1 SNat size2, bs'') ->
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LL size1 size2), bs'')
 
-
 testLLRR = dep2Deserialize @(Prod2 LL RR) (KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2]
+
+instance Dep2Deserialize LN d1 d2 where
+    type DepLevel1 LN d = ApplyDepLevel 'Learning d
+    type DepLevel2 LN d = ApplyDepLevel 'NonDep d
+    dep2Deserialize (_ `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK SNat) k2' (LN size1), bs')
+
+instance Dep2Deserialize NL d1 d2 where
+    type DepLevel1 NL d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NL d = ApplyDepLevel 'Learning d
+    dep2Deserialize (k1 `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size2, bs') ->
+                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NL size2), bs')
+
+instance Dep2Deserialize NR 'Known d where
+    type DepLevel1 NR d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NR d = ApplyDepLevel 'Requiring d
+    dep2Deserialize (k1 `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize @(Vector Word8 y) bs of
+            (arr2, bs') ->
+                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NR arr2), bs')
+
+instance Dep2Deserialize NN d1 d2 where
+    type DepLevel1 NN d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NN d = ApplyDepLevel 'NonDep d
+    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        withKnwlg k1 $ \k1' -> withKnwlg k2 $ \k2' -> (SomeDep2 k1' k2' NN, bs)
+
+instance Dep2Deserialize LR d1 'Known where
+    type DepLevel1 LR d = ApplyDepLevel 'Learning d
+    type DepLevel2 LR d = ApplyDepLevel 'Requiring d
+    dep2Deserialize (_ `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize @(Vector Word8 y) bs of
+                    (arr2, bs'') ->
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LR size1 arr2), bs'')
+
+
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
