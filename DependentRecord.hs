@@ -432,6 +432,19 @@ testDeserializeSomeDep2 = undefined --deserializeSomeDep2 @WrapNL [0, 1, 2, 3]
 -- TODO: Also (K.RepK f) has the wrong kind, so DepLevel1 and DepLevel2 can't be defined for that.
 
 
+instance Dep2Deserialize LL d1 d2 where
+    type DepLevel1 LL d = ApplyDepLevel 'Learning d
+    type DepLevel2 LL d = ApplyDepLevel 'Learning d
+    dep2Deserialize (_ `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LL size1 size2), bs'')
+
+
+testLLRR = dep2Deserialize @(Prod2 LL RR) (KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2]
+
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
     serialize (SomeDep2 (NR arr2)) = serialize arr2
@@ -469,15 +482,6 @@ instance Serialize (SomeDep2 LN 'Known 'Unknown) where
         case deserialize bs of
             (Some1 SNat size1, bs') ->
                 (SomeDep2 (LN size1), bs')
-
-instance Serialize (SomeDep2 LL 'Known 'Known) where
-    serialize (SomeDep2 (LL size1 size2)) = serialize size1 ++ serialize size2
-    deserialize bs =
-        case deserialize bs of
-            (Some1 SNat size1, bs') ->
-                case deserialize bs' of
-                    (Some1 SNat size2, bs'') ->
-                        (SomeDep2 (LL size1 size2), bs'')
 -}
 
 --exampleOfLearning :: (SingKind k, Serialize (Demote k)) => [Word8] -> (SomeDep1 'Known (Sing :: k -> Type), [Word8])
@@ -1037,7 +1041,7 @@ data RequiringSize (size :: Nat) = RequiringSize
       deriving Serialize via (GenericKWrapper RequiringSize (size K.:&&: K.LoT0))
 instance K.GenericK RequiringSize (size K.:&&: K.LoT0) where
     type RepK RequiringSize = K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V0)
-instance K.Split (RequiringSize size) RequiringSize (size K.:&&: K.LoT0)
+--instance K.Split (RequiringSize size) RequiringSize (size K.:&&: K.LoT0)
 srs :: [Word8]
 srs = serialize $ RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
 drs :: KnownNat size => (RequiringSize size, [Word8])
@@ -1051,7 +1055,7 @@ data ProvidingSize (size :: Nat) = ProvidingSize
       deriving Serialize via (GenericKWrapper ProvidingSize (size K.:&&: K.LoT0))
 instance K.GenericK ProvidingSize (size K.:&&: K.LoT0) where
     type RepK ProvidingSize = K.F (UnitWithSize K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V0) K.:*: K.F (RequiringSize K.:$: K.V0)
-instance K.Split (ProvidingSize size) ProvidingSize (size K.:&&: K.LoT0)
+--instance K.Split (ProvidingSize size) ProvidingSize (size K.:&&: K.LoT0)
 sps :: [Word8]
 sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
 dps :: Some1 ProvidingSize
@@ -1065,7 +1069,7 @@ data IgnoringSize (size :: Nat) = IgnoringSize
       deriving Serialize via (GenericKWrapper IgnoringSize (size K.:&&: K.LoT0))
 instance K.GenericK IgnoringSize (size K.:&&: K.LoT0) where
     type RepK IgnoringSize = K.F (K.Kon Word8)
-instance K.Split (IgnoringSize size) IgnoringSize (size K.:&&: K.LoT0)
+--instance K.Split (IgnoringSize size) IgnoringSize (size K.:&&: K.LoT0)
 sis :: [Word8]
 sis = serialize $ IgnoringSize 123
 dis :: IgnoringSize size
@@ -1076,7 +1080,7 @@ data UnitWithSize (size :: Nat) = UnitWithSize
        deriving Serialize via (GenericKWrapper UnitWithSize (size K.:&&: K.LoT0))
 instance K.GenericK UnitWithSize (size K.:&&: K.LoT0) where
     type RepK UnitWithSize = K.U1
-instance K.Split (UnitWithSize size) UnitWithSize (size K.:&&: K.LoT0)
+--instance K.Split (UnitWithSize size) UnitWithSize (size K.:&&: K.LoT0)
 snws :: [Word8]
 snws = serialize $ UnitWithSize
 dnws :: UnitWithSize size
