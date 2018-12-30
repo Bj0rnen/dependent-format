@@ -345,7 +345,7 @@ instance Dep2Deserialize RR 'Known 'Known where
                     (arr2, bs'') ->
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (RR arr1 arr2), bs'')
 
-instance Dep2Deserialize RN 'Known d where
+instance Dep2Deserialize RN 'Known d2 where
     type DepLevel1 RN d = ApplyDepLevel 'Requiring d
     type DepLevel2 RN d = ApplyDepLevel 'NonDep d
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
@@ -353,7 +353,7 @@ instance Dep2Deserialize RN 'Known d where
             (arr1, bs') ->
                 withKnwlg y $ \y' -> (SomeDep2 (KnowledgeK SNat) y' (RN arr1), bs')
 
-instance Dep2Deserialize RL 'Known d where
+instance Dep2Deserialize RL 'Known d2 where
     type DepLevel1 RL d = ApplyDepLevel 'Requiring d
     type DepLevel2 RL d = ApplyDepLevel 'Learning d
     dep2Deserialize ((KnwlgK (SNat :: Sing x)) `SomeDepStatesCons` y `SomeDepStatesCons` SomeDepStatesNil) bs =
@@ -365,6 +365,57 @@ instance Dep2Deserialize RL 'Known d where
                             Nothing -> error $ "Already knew type index was equal to " ++ show y'' ++ ", but now learned that it is equal to " ++ show y'
                             Just Refl ->
                                 (SomeDep2 (KnowledgeK SNat) (KnowledgeK y') (RL arr1 size2), bs'')
+
+instance Dep2Deserialize NR 'Known d2 where
+    type DepLevel1 NR d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NR d = ApplyDepLevel 'Requiring d
+    dep2Deserialize (k1 `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize @(Vector Word8 y) bs of
+            (arr2, bs') ->
+                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NR arr2), bs')
+
+instance Dep2Deserialize NN d1 d2 where
+    type DepLevel1 NN d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NN d = ApplyDepLevel 'NonDep d
+    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        withKnwlg k1 $ \k1' -> withKnwlg k2 $ \k2' -> (SomeDep2 k1' k2' NN, bs)
+
+instance Dep2Deserialize NL d1 d2 where
+    type DepLevel1 NL d = ApplyDepLevel 'NonDep d
+    type DepLevel2 NL d = ApplyDepLevel 'Learning d
+    dep2Deserialize (k1 `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size2, bs') ->
+                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NL size2), bs')
+
+instance Dep2Deserialize LR d1 'Known where
+    type DepLevel1 LR d = ApplyDepLevel 'Learning d
+    type DepLevel2 LR d = ApplyDepLevel 'Requiring d
+    dep2Deserialize (_ `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize @(Vector Word8 y) bs of
+                    (arr2, bs'') ->
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LR size1 arr2), bs'')
+
+instance Dep2Deserialize LN d1 d2 where
+    type DepLevel1 LN d = ApplyDepLevel 'Learning d
+    type DepLevel2 LN d = ApplyDepLevel 'NonDep d
+    dep2Deserialize (_ `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK SNat) k2' (LN size1), bs')
+
+instance Dep2Deserialize LL d1 d2 where
+    type DepLevel1 LL d = ApplyDepLevel 'Learning d
+    type DepLevel2 LL d = ApplyDepLevel 'Learning d
+    dep2Deserialize (_ `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize bs of
+            (Some1 SNat size1, bs') ->
+                case deserialize bs' of
+                    (Some1 SNat size2, bs'') ->
+                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LL size1 size2), bs'')
+
 
 data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
     deriving Show
@@ -430,60 +481,6 @@ testDeserializeSomeDep2 = undefined --deserializeSomeDep2 @WrapNL [0, 1, 2, 3]
 -- TODO: We want (Dep2Deserialize WrapNL) derived via GenericK. Not supposed to be implementad by hand
 -- TODO: Now, Dep2Deserialize also takes 2 DepStates. Could we possibly get rid of those from there?
 -- TODO: Also (K.RepK f) has the wrong kind, so DepLevel1 and DepLevel2 can't be defined for that.
-
-
-instance Dep2Deserialize LL d1 d2 where
-    type DepLevel1 LL d = ApplyDepLevel 'Learning d
-    type DepLevel2 LL d = ApplyDepLevel 'Learning d
-    dep2Deserialize (_ `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize bs of
-            (Some1 SNat size1, bs') ->
-                case deserialize bs' of
-                    (Some1 SNat size2, bs'') ->
-                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LL size1 size2), bs'')
-
-testLLRR = dep2Deserialize @(Prod2 LL RR) (KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2]
-
-instance Dep2Deserialize LN d1 d2 where
-    type DepLevel1 LN d = ApplyDepLevel 'Learning d
-    type DepLevel2 LN d = ApplyDepLevel 'NonDep d
-    dep2Deserialize (_ `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize bs of
-            (Some1 SNat size1, bs') ->
-                withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK SNat) k2' (LN size1), bs')
-
-instance Dep2Deserialize NL d1 d2 where
-    type DepLevel1 NL d = ApplyDepLevel 'NonDep d
-    type DepLevel2 NL d = ApplyDepLevel 'Learning d
-    dep2Deserialize (k1 `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize bs of
-            (Some1 SNat size2, bs') ->
-                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NL size2), bs')
-
-instance Dep2Deserialize NR 'Known d where
-    type DepLevel1 NR d = ApplyDepLevel 'NonDep d
-    type DepLevel2 NR d = ApplyDepLevel 'Requiring d
-    dep2Deserialize (k1 `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize @(Vector Word8 y) bs of
-            (arr2, bs') ->
-                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (NR arr2), bs')
-
-instance Dep2Deserialize NN d1 d2 where
-    type DepLevel1 NN d = ApplyDepLevel 'NonDep d
-    type DepLevel2 NN d = ApplyDepLevel 'NonDep d
-    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
-        withKnwlg k1 $ \k1' -> withKnwlg k2 $ \k2' -> (SomeDep2 k1' k2' NN, bs)
-
-instance Dep2Deserialize LR d1 'Known where
-    type DepLevel1 LR d = ApplyDepLevel 'Learning d
-    type DepLevel2 LR d = ApplyDepLevel 'Requiring d
-    dep2Deserialize (_ `SomeDepStatesCons` (KnwlgK (SNat :: Sing y)) `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize bs of
-            (Some1 SNat size1, bs') ->
-                case deserialize @(Vector Word8 y) bs of
-                    (arr2, bs'') ->
-                        (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LR size1 arr2), bs'')
-
 
 
 {-
