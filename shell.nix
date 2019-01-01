@@ -31,7 +31,7 @@ let
 
 
   ghc = ghcPackages.ghcWithPackages
-          (pkgs: with pkgs; [ singletons_2_5_1 exinst_0_7 constraints generics-sop kind-generics reflection ]);
+          (pkgs: with pkgs; [ singletons exinst constraints generics-sop kind-generics reflection ]);
 in
 stdenv.mkDerivation {
   name = "my-haskell-env-0";

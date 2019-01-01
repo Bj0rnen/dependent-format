@@ -1029,16 +1029,16 @@ instance (K.GenericK f x, Serialize (K.RepK f x), HasDepLevel f) => Serialize (G
 --            (a, bs') ->
 --                (Generic1KWrapper (K.toK @_ @f @(a K.:&&: K.LoT0) a), bs')
 
-instance Serialize (f (K.Ty (K.Var K.VZ) xs)) => Serialize (K.F (f K.:$: K.V0) xs) where
-    serialize (K.F a) = serialize a
+instance Serialize (f (K.Interpret (K.Var K.VZ) xs)) => Serialize (K.Field (f K.:$: K.Var0) xs) where
+    serialize (K.Field a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (K.F a, bs')
-instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
-    serialize (K.F a) = serialize a
+            (a, bs') -> (K.Field a, bs')
+instance Serialize a => Serialize (K.Field ('K.Kon a) vs) where
+    serialize (K.Field a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (K.F a, bs')
+            (a, bs') -> (K.Field a, bs')
 
 --newtype Rep1K :: (k -> Type) -> k -> Type where
 --    Rep1K :: K.RepK f (a K.:&&: K.LoT0) -> Rep1K f a
@@ -1050,35 +1050,35 @@ instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
 --        (Some1 (s :: Sing a) (Rep1K a :: Rep1K f a), bs') ->
 --            (Some1 s (K.toK a), bs')
 
-instance HasDepLevel (K.F (K.Kon f K.:@: K.Var K.VZ)) where
-    type DepLevelOf (K.F (K.Kon f K.:@: K.Var K.VZ)) = DepLevelOf f
+instance HasDepLevel (K.Field (K.Kon f K.:@: K.Var K.VZ)) where
+    type DepLevelOf (K.Field (K.Kon f K.:@: K.Var K.VZ)) = DepLevelOf f
 --    Equivalently
---instance HasDepLevel (K.F (f K.:$: K.V0)) where
---    type DepLevelOf (K.F (f K.:$: K.V0)) = DepLevelOf f
+--instance HasDepLevel (K.Field (f K.:$: K.Var0)) where
+--    type DepLevelOf (K.Field (f K.:$: K.Var0)) = DepLevelOf f
 --------------------------instance Product1Serialize
 --------------------------    (DepLevelOf (GHC.Rep1 UnitWithSize))
 --------------------------    (ProductDepLevel 'Learning (DepLevelOf (GHC.Rep1 RequiringSize)))
---------------------------    (K.F (UnitWithSize K.:$: K.V0))
---------------------------    (K.F (Sing K.:$: K.V0) K.:*: K.F (RequiringSize K.:$: K.V0))
+--------------------------    (K.Field (UnitWithSize K.:$: K.Var0))
+--------------------------    (K.Field (Sing K.:$: K.Var0) K.:*: K.Field (RequiringSize K.:$: K.Var0))
 
 -- TODO: Can it be written in terms of (Dict1 c (f :: Nat -> Type))?
 instance (forall x. KnownNat x => c (f (x 'K.:&&: 'K.LoT0))) => Dict1 c (f :: K.LoT (Nat -> Type) -> Type) where
     dict1 (SNat :&&&: SLoT0) = Dict
 infixr :&&&:
---instance Serialize (Some1 f) => Serialize (Some1 (K.F (f K.:$: K.V0))) where
---    serialize (Some1 (SLoT1 s) (K.F a)) = serialize (Some1 s a)
+--instance Serialize (Some1 f) => Serialize (Some1 (K.Field (f K.:$: K.Var0))) where
+--    serialize (Some1 (SLoT1 s) (K.Field a)) = serialize (Some1 s a)
 --    deserialize bs =
 --        case deserialize @(Some1 f) bs of
 --            (Some1 (s :: Sing a) a :: Some1 f, bs') ->
---                (Some1 (SLoT1 s :: Sing (a K.:&&: K.LoT0)) (K.F a :: K.F (f K.:$: K.V0) (a K.:&&: K.LoT0)) :: Some1 (K.F (f K.:$: K.V0)), bs')
---                --(Some1 (SLoT1 s :: Sing (k K.:&&: K.LoT0)) (K.F a), bs')
+--                (Some1 (SLoT1 s :: Sing (a K.:&&: K.LoT0)) (K.Field a :: K.Field (f K.:$: K.Var0) (a K.:&&: K.LoT0)) :: Some1 (K.Field (f K.:$: K.Var0)), bs')
+--                --(Some1 (SLoT1 s :: Sing (k K.:&&: K.LoT0)) (K.Field a), bs')
 
-instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (k -> Type) Type))) where
-    serialize (Some1 (s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+instance Serialize (Some1 f) => Serialize (Some1 (K.Field ('K.Kon f 'K.:@: 'K.Var 'K.VZ :: K.Atom (k -> Type) Type))) where
+    serialize (Some1 (s :&&&: SLoT0) (K.Field a)) = serialize (Some1 s a)
     deserialize bs =
         case deserialize bs of
             (Some1 s a, bs') ->
-                (Some1 (s :&&&: SLoT0) (K.F a), bs')
+                (Some1 (s :&&&: SLoT0) (K.Field a), bs')
 
 --instance Serialize (Some1 (K.RepK f :: K.LoT (k -> Type) -> Type)) => Serialize (Some1 (Rep1K f :: k -> Type)) where
 --    serialize (Some1 s (Rep1K (a :: K.RepK f (a K.:&&: K.LoT0)) :: Rep1K f a)) = serialize (Some1 undefined a)
@@ -1101,7 +1101,7 @@ data RequiringSize (size :: Nat) = RequiringSize
     } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper RequiringSize (size K.:&&: K.LoT0))
 instance K.GenericK RequiringSize (size K.:&&: K.LoT0) where
-    type RepK RequiringSize = K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V0)
+    type RepK RequiringSize = K.Field (Vector Word8 K.:$: K.Var0) K.:*: K.Field (Vector Word8 K.:$: K.Var0)
 --instance K.Split (RequiringSize size) RequiringSize (size K.:&&: K.LoT0)
 srs :: [Word8]
 srs = serialize $ RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil)
@@ -1115,7 +1115,7 @@ data ProvidingSize (size :: Nat) = ProvidingSize
     } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper ProvidingSize (size K.:&&: K.LoT0))
 instance K.GenericK ProvidingSize (size K.:&&: K.LoT0) where
-    type RepK ProvidingSize = K.F (UnitWithSize K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V0) K.:*: K.F (RequiringSize K.:$: K.V0)
+    type RepK ProvidingSize = K.Field (UnitWithSize K.:$: K.Var0) K.:*: K.Field (Sing K.:$: K.Var0) K.:*: K.Field (RequiringSize K.:$: K.Var0)
 --instance K.Split (ProvidingSize size) ProvidingSize (size K.:&&: K.LoT0)
 sps :: [Word8]
 sps = serialize $ ProvidingSize UnitWithSize SNat (RequiringSize (1 :> 2 :> 3 :> Nil) (4 :> 5 :> 6 :> Nil))
@@ -1129,7 +1129,7 @@ data IgnoringSize (size :: Nat) = IgnoringSize
     } deriving (Show, HasDepLevel, GHC.Generic)
       deriving Serialize via (GenericKWrapper IgnoringSize (size K.:&&: K.LoT0))
 instance K.GenericK IgnoringSize (size K.:&&: K.LoT0) where
-    type RepK IgnoringSize = K.F (K.Kon Word8)
+    type RepK IgnoringSize = K.Field (K.Kon Word8)
 --instance K.Split (IgnoringSize size) IgnoringSize (size K.:&&: K.LoT0)
 sis :: [Word8]
 sis = serialize $ IgnoringSize 123
@@ -1154,22 +1154,22 @@ dnws = fst $ deserialize snws
 {-
 class HasDepLevels (f :: K.LoT (a -> b -> Type) -> Type) where
     type DepLevelsOf f :: [DepLevel]
---instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) where
---    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V0)) = '[ProductDepLevel (DepLevelOf l) (DepLevelOf r), NonDep]
---instance HasDepLevels (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) where
---    type DepLevelsOf (K.F (l K.:$: K.V0) K.:*: K.F (r K.:$: K.V1)) = '[DepLevelOf l, DepLevelOf r]
---instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) where
---    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V0)) = '[DepLevelOf r, DepLevelOf l]
---instance HasDepLevels (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) where
---    type DepLevelsOf (K.F (l K.:$: K.V1) K.:*: K.F (r K.:$: K.V1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
+--instance HasDepLevels (K.Field (l K.:$: K.Var0) K.:*: K.Field (r K.:$: K.Var0)) where
+--    type DepLevelsOf (K.Field (l K.:$: K.Var0) K.:*: K.Field (r K.:$: K.Var0)) = '[ProductDepLevel (DepLevelOf l) (DepLevelOf r), NonDep]
+--instance HasDepLevels (K.Field (l K.:$: K.Var0) K.:*: K.Field (r K.:$: K.Var1)) where
+--    type DepLevelsOf (K.Field (l K.:$: K.Var0) K.:*: K.Field (r K.:$: K.Var1)) = '[DepLevelOf l, DepLevelOf r]
+--instance HasDepLevels (K.Field (l K.:$: K.Var1) K.:*: K.Field (r K.:$: K.Var0)) where
+--    type DepLevelsOf (K.Field (l K.:$: K.Var1) K.:*: K.Field (r K.:$: K.Var0)) = '[DepLevelOf r, DepLevelOf l]
+--instance HasDepLevels (K.Field (l K.:$: K.Var1) K.:*: K.Field (r K.:$: K.Var1)) where
+--    type DepLevelsOf (K.Field (l K.:$: K.Var1) K.:*: K.Field (r K.:$: K.Var1)) = '[NonDep, ProductDepLevel (DepLevelOf l) (DepLevelOf r)]
 -- And a lot more... This is a combinatorial explosion!
 -- Solution? Canonicalization, perhaps?
 type family DotProductDepLevel (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) :: [DepLevel] where
     DotProductDepLevel '[] '[] = '[]
     DotProductDepLevel (a ': as) (b ': bs) = ProductDepLevel a b ': DotProductDepLevel as bs
-instance HasDepLevels (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) where
-    type DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1) K.:*: K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)) =
-        DotProductDepLevel (DepLevelsOf (K.F (K.Kon l K.:@: K.V0 K.:@: K.V1))) (DepLevelsOf (K.F (K.Kon r K.:@: K.V0 K.:@: K.V1)))
+instance HasDepLevels (K.Field (K.Kon l K.:@: K.Var0 K.:@: K.Var1) K.:*: K.Field (K.Kon r K.:@: K.Var0 K.:@: K.Var1)) where
+    type DepLevelsOf (K.Field (K.Kon l K.:@: K.Var0 K.:@: K.Var1) K.:*: K.Field (K.Kon r K.:@: K.Var0 K.:@: K.Var1)) =
+        DotProductDepLevel (DepLevelsOf (K.Field (K.Kon l K.:@: K.Var0 K.:@: K.Var1))) (DepLevelsOf (K.Field (K.Kon r K.:@: K.Var0 K.:@: K.Var1)))
 
 class (ldeps ~ DepLevelsOf l, rdeps ~ DepLevelsOf r) => Product2Serialize (ldeps :: [DepLevel]) (rdeps :: [DepLevel]) (l :: K.LoT (a -> b -> Type) -> Type) (r :: K.LoT (a -> b -> Type) -> Type) where
     p2serialize :: Some1 (l GHC.:*: r) -> [Word8]
@@ -1188,16 +1188,16 @@ instance (K.GenericK f xs, Serialize (K.RepK f xs), HasDepLevels (K.RepK f)) => 
             (a, bs') ->
                 (GenericKWrapper (K.toK @_ @f @xs a), bs')
 
-instance Serialize (f (K.Ty (K.Var (K.VS K.VZ)) (a 'K.:&&: b 'K.:&&: 'K.LoT0))) => Serialize (K.F (f K.:$: K.V1) (a 'K.:&&: b 'K.:&&: 'K.LoT0)) where
-    serialize (K.F a) = serialize a
+instance Serialize (f (K.Interpret (K.Var (K.VS K.VZ)) (a 'K.:&&: b 'K.:&&: 'K.LoT0))) => Serialize (K.Field (f K.:$: K.Var1) (a 'K.:&&: b 'K.:&&: 'K.LoT0)) where
+    serialize (K.Field a) = serialize a
     deserialize bs =
         case deserialize bs of
-            (a, bs') -> (K.F a, bs')
---instance Serialize a => Serialize (K.F ('K.Kon a) vs) where
---    serialize (K.F a) = serialize a
+            (a, bs') -> (K.Field a, bs')
+--instance Serialize a => Serialize (K.Field ('K.Kon a) vs) where
+--    serialize (K.Field a) = serialize a
 --    deserialize bs =
 --        case deserialize bs of
---            (a, bs') -> (K.F a, bs')
+--            (a, bs') -> (K.Field a, bs')
 
 serializeSome2K :: forall f. (forall a b. K.GenericK f (a 'K.:&&: b 'K.:&&: 'K.LoT0), Serialize (Some1 (K.RepK f))) => Some2 f -> [Word8]
 serializeSome2K (Some2 s t a) = serialize (Some1 (s :&&&: t :&&&: SLoT0) (K.fromK a))
@@ -1207,34 +1207,34 @@ deserializeSome2K bs =
         (Some1 (s :&&&: t :&&&: SLoT0) a, bs') ->
             (Some2 s t (K.toK a), bs')
 
-instance HasDepLevel (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) where
-    type DepLevelOf (K.F (K.Kon f K.:@: K.Var (K.VS K.VZ))) = DepLevelOf f
+instance HasDepLevel (K.Field (K.Kon f K.:@: K.Var (K.VS K.VZ))) where
+    type DepLevelOf (K.Field (K.Kon f K.:@: K.Var (K.VS K.VZ))) = DepLevelOf f
 
 -- TODO: BUG: This is the tricky part. (F _) is parameterized on a LoT of two tyvars. So the Some1's are
 -- TODO: BUG: to hold singletons for such lists. So both the vars must be known after deserialization.
 -- TODO: BUG: But we're only getting info about one.
---instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: a -> Type) 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type))) where
---    serialize (Some1 (s :&&&: _ :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+--instance Serialize (Some1 f) => Serialize (Some1 (K.Field ('K.Kon (f :: a -> Type) 'K.:@: 'K.Var 'K.VZ :: K.Atom (a -> b -> Type) Type))) where
+--    serialize (Some1 (s :&&&: _ :&&&: SLoT0) (K.Field a)) = serialize (Some1 s a)
 --    deserialize bs =
 --        case deserialize bs of
 --            (Some1 s a, bs') ->
---                (Some1 (s :&&&: undefined :&&&: SLoT0) (K.F a), bs')
---instance Serialize (Some1 f) => Serialize (Some1 (K.F ('K.Kon (f :: b -> Type) 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
---    serialize (Some1 (_ :&&&: s :&&&: SLoT0) (K.F a)) = serialize (Some1 s a)
+--                (Some1 (s :&&&: undefined :&&&: SLoT0) (K.Field a), bs')
+--instance Serialize (Some1 f) => Serialize (Some1 (K.Field ('K.Kon (f :: b -> Type) 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
+--    serialize (Some1 (_ :&&&: s :&&&: SLoT0) (K.Field a)) = serialize (Some1 s a)
 --    deserialize bs =
 --        case deserialize bs of
 --            (Some1 s a, bs') ->
---                (Some1 (undefined :&&&: s :&&&: SLoT0) (K.F a), bs')
+--                (Some1 (undefined :&&&: s :&&&: SLoT0) (K.Field a), bs')
 
 -- TODO: Should be correct, but I've never been asked for this instance.
 --instance Serialize (Some2 f)
---    => Serialize (Some1 (K.F 
+--    => Serialize (Some1 (K.Field 
 --        ('K.Kon (f :: a -> b -> Type) 'K.:@: 'K.Var 'K.VZ 'K.:@: 'K.Var ('K.VS 'K.VZ) :: K.Atom (a -> b -> Type) Type))) where
---    serialize (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.F a)) = serialize (Some2 s1 s2 a)
+--    serialize (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.Field a)) = serialize (Some2 s1 s2 a)
 --    deserialize bs =
 --        case deserialize bs of
 --            (Some2 s1 s2 a, bs') ->
---                (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.F a), bs')
+--                (Some1 (s1 :&&&: s2 :&&&: SLoT0) (K.Field a), bs')
 
 
 -- TODO: Not nice. Why do I even need this?
@@ -1274,7 +1274,7 @@ instance (SDecide a, SDecide (K.LoT as)) => SDecide (K.LoT (a -> as)) where
             toTail Refl = Refl
 
 -- TODO: Inductive instance.
-instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (K.F (f K.:$: K.V0) K.:*: K.F (g K.:$: K.V1)) where
+instance (Dict1 Serialize f, Dict1 Serialize g) => Dict1 Serialize (K.Field (f K.:$: K.Var0) K.:*: K.Field (g K.:$: K.Var1)) where
     dict1 ((s1 :: Sing a) :&&&: (s2 :: Sing b) :&&&: SLoT0) =
         withDict (dict1 s1 :: Dict (Serialize (f a))) $
             withDict (dict1 s2 :: Dict (Serialize (g b))) $
@@ -1293,10 +1293,10 @@ data TwoVar (size1 :: Nat) (size2 :: Nat) = TwoVar
     , arr2  :: Vector Word8 size2
     } deriving (Show, GHC.Generic)
       deriving Serialize via (GenericKWrapper TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0))
-instance HasDepLevels ((K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))) where
-    type DepLevelsOf ((K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))) = '[ 'Learning, 'Learning]
+instance HasDepLevels ((K.Field (Sing K.:$: K.Var0) K.:*: K.Field (Sing K.:$: K.Var1)) K.:*: (K.Field (Vector Word8 K.:$: K.Var0) K.:*: K.Field (Vector Word8 K.:$: K.Var1))) where
+    type DepLevelsOf ((K.Field (Sing K.:$: K.Var0) K.:*: K.Field (Sing K.:$: K.Var1)) K.:*: (K.Field (Vector Word8 K.:$: K.Var0) K.:*: K.Field (Vector Word8 K.:$: K.Var1))) = '[ 'Learning, 'Learning]
 instance K.GenericK TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0) where
-    type RepK TwoVar = (K.F (Sing K.:$: K.V0) K.:*: K.F (Sing K.:$: K.V1)) K.:*: (K.F (Vector Word8 K.:$: K.V0) K.:*: K.F (Vector Word8 K.:$: K.V1))
+    type RepK TwoVar = (K.Field (Sing K.:$: K.Var0) K.:*: K.Field (Sing K.:$: K.Var1)) K.:*: (K.Field (Vector Word8 K.:$: K.Var0) K.:*: K.Field (Vector Word8 K.:$: K.Var1))
 instance K.Split (TwoVar size1 size2) TwoVar (size1 K.:&&: size2 K.:&&: K.LoT0)
 stw :: [Word8]
 stw = serialize $ TwoVar SNat SNat (1 :> Nil) (2 :> 3 :> Nil)
