@@ -451,15 +451,15 @@ sameKnowlege (KnowledgeK s1) (KnowledgeK s2) =
         Proved r -> Just r
         Disproved f -> Nothing
 
--- TODO: How to write Ctx1, Ctx2? How do these constraints relate to the existing ones?
 instance
     ( SDecide a, SDecide b
-    , Dep2Deserialize (l :: a -> b -> Type) d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2 l d2))
-    => Dep2Deserialize (Prod2 l r) d1 d2 where
+    , Dep2Deserialize l d1 d2, Dep2Deserialize r (DepLevel1 l d1) (DepLevel2 l d2)
+    , Ctx1 (Prod2 l r) d1, Ctx2 (Prod2 l r) d2)
+    => Dep2Deserialize (Prod2 (l :: a -> b -> Type) r) d1 d2 where
     type DepLevel1 (Prod2 l r) d = DepLevel1 r (DepLevel1 l d)
     type DepLevel2 (Prod2 l r) d = DepLevel2 r (DepLevel2 l d)
-    --type Ctx1 (Prod2 l r) (d :: DepState) = ?
-    --type Ctx2 (Prod2 l r) (d :: DepState) = ?
+    type Ctx1 (Prod2 l r) (d :: DepState) = (Ctx1 l d, Ctx1 r (DepLevel1 l d))
+    type Ctx2 (Prod2 l r) (d :: DepState) = (Ctx2 l d, Ctx2 r (DepLevel2 l d))
     dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
         case dep2Deserialize @l (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs of
             (sdl@(SomeDep2 (k3 :: Knowledge (DepLevel1 l d1) x1_) (k4 :: Knowledge (DepLevel2 l d2) y1_) l), bs') ->
@@ -470,7 +470,7 @@ instance
                                 (SomeDep2 k5 k6 (Prod2 l r), bs'')
 
 testRRRR = dep2Deserialize @(Prod2 RR RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0..5]
-testRLRRU = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
+testRLRRU = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 testRLRRKGood = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 testRLRRKBad = dep2Deserialize @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 
