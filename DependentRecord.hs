@@ -554,6 +554,36 @@ instance K.GenericK L1L2R1R2 (size1 K.:&&: size2 K.:&&: K.LoT0) where
 testDeserializeSomeDep2L1L2R1R2 :: (SomeDep2 L1L2R1R2 'Known 'Known, [Word8])
 testDeserializeSomeDep2L1L2R1R2 = deserializeSomeDep2 [0, 1, 2, 3]
 
+
+instance Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type))) where
+    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0))) = 'Learning
+    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0))) = 'NonDep
+    dep2Deserialize depStates bs =
+        case dep2Deserialize depStates bs of
+            (SomeDep2 k1 k2 (LN a), bs') -> (SomeDep2 k1 k2 (Curry2 (K.Field a)), bs')
+-- TODO: Above is very hard-coded. Thinking we should have something like the below
+--data Select1of2 :: (a -> Type) -> a -> b -> Type where
+--    Select1of2 :: f x -> Select1of2 f x y
+--instance Dep2Deserialize (Select1of2 Sing :: Nat -> Nat -> Type) where
+--    type ActualDepLevel1 (Select1of2 Sing :: Nat -> Nat -> Type) = 'Learning
+--    type ActualDepLevel2 (Select1of2 Sing :: Nat -> Nat -> Type) = 'NonDep
+--instance Dep2Deserialize (Select1of2 Sing) => Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type))) where
+--    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0))) = ActualDepLevel1 (Select1of2 Sing)
+--    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0))) = ActualDepLevel2 (Select1of2 Sing)
+--    dep2Deserialize depStates bs =
+--        case dep2Deserialize depStates bs of
+--            (SomeDep2 k1 k2 (Select1of2 (a :: Sing x) :: Select1of2 (Sing :: Nat -> Type) (x :: Nat) (y :: Nat)), bs') ->
+--                (SomeDep2 k1 k2 (Curry2 (K.Field (a :: K.Interpret (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type) (x K.:&&: y K.:&&: K.LoT0)))), bs')  --undefined--(SomeDep2 k1 k2 (Curry2 (K.Field a)), bs')
+
+data SingSize1 (size1 :: Nat) (size2 :: Nat) = Sing2
+    { size1 :: Sing size1
+    } deriving (GHC.Generic, Show)
+      deriving Dep2Deserialize via Var2Wrapper SingSize1
+instance K.GenericK SingSize1 (size1 K.:&&: size2 K.:&&: K.LoT0) where
+    type RepK SingSize1 = K.Field (Sing K.:$: K.Var0)
+testDeserializeSomeDep2SingSize1 :: (SomeDep2 SingSize1 'Known 'Unknown, [Word8])
+testDeserializeSomeDep2SingSize1 = deserializeSomeDep2 [0, 1, 2, 3]
+
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
     serialize (SomeDep2 (NR arr2)) = serialize arr2
