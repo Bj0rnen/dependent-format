@@ -515,7 +515,7 @@ data WrapNL size1 size2 = WrapNL
 instance K.GenericK WrapNL (size1 K.:&&: size2 K.:&&: K.LoT0) where
     type RepK WrapNL = K.Field (NL K.:$: K.Var0 K.:@: K.Var1)
 testDeserializeSomeDep2 :: (SomeDep2 WrapNL 'Unknown 'Known, [Word8])
-testDeserializeSomeDep2 = deserializeSomeDep2 @Nat @Nat @WrapNL @'Unknown @'Known [0, 1, 2, 3]  -- TODO: can we drop the type applications?
+testDeserializeSomeDep2 = deserializeSomeDep2 [0, 1, 2, 3]
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
