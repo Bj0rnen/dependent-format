@@ -430,6 +430,16 @@ instance Dep2Deserialize LL where
                         (SomeDep2 (KnowledgeK SNat) (KnowledgeK SNat) (LL size1 size2), bs'')
 
 
+deserializeSomeDep2 :: forall a b (f :: a -> b -> Type) d1 d2.
+    ( Dep2Deserialize f
+    , d1 ~ DepLevel1 f 'Unknown
+    , d2 ~ DepLevel2 f 'Unknown
+    , Ctx1 f 'Unknown
+    , Ctx2 f 'Unknown
+    ) => [Word8] -> (SomeDep2 f (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown), [Word8])
+deserializeSomeDep2 = dep2Deserialize (KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil)
+
+
 data Prod2 (l :: a -> b -> Type) (r :: a -> b -> Type) x y = Prod2 (l x y) (r x y)
     deriving Show
 
@@ -470,54 +480,42 @@ testRLRRU = dep2Deserialize @Nat @Nat @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepS
 testRLRRKGood = dep2Deserialize @Nat @Nat @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @1) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 testRLRRKBad = dep2Deserialize @Nat @Nat @(Prod2 RL RR) (KnwlgK (SNat @1) `SomeDepStatesCons` KnwlgK (SNat @2) `SomeDepStatesCons` SomeDepStatesNil) [0,1,2,3]
 
+newtype Var2Wrapper f a b = Var2Wrapper { unwrapVar2 :: f a b }
+instance (forall x y. K.GenericK f (x K.:&&: y K.:&&: K.LoT0), Dep2Deserialize (Curry2 (K.RepK f))) => Dep2Deserialize (Var2Wrapper f) where
+    type DepLevel1 (Var2Wrapper f) d = DepLevel1 (Curry2 (K.RepK f)) d
+    type DepLevel2 (Var2Wrapper f) d = DepLevel2 (Curry2 (K.RepK f)) d
+    type Ctx1 (Var2Wrapper f) (d :: DepState) = (Ctx1 (Curry2 (K.RepK f)) d)
+    type Ctx2 (Var2Wrapper f) (d :: DepState) = (Ctx2 (Curry2 (K.RepK f)) d)
+    -- TODO: Would be nice if this was all that we needed, so that we could drop DepLevel and Ctx entirely
+    type ActualDepLevel1 (Var2Wrapper f) = ActualDepLevel1 (Curry2 (K.RepK f))
+    type ActualDepLevel2 (Var2Wrapper f) = ActualDepLevel2 (Curry2 (K.RepK f))
+    dep2Deserialize depStates bs =
+        case dep2Deserialize depStates bs of
+            (SomeDep2 k1 k2 (Curry2 a :: Curry2 (K.RepK f) x y), bs') -> (SomeDep2 k1 k2 (Var2Wrapper (K.toK a) :: Var2Wrapper f x y), bs')
 
-instance ( Dep2Deserialize f
-         , d1 ~ DepLevel1 f 'Unknown
-         , d2 ~ DepLevel2 f 'Unknown
-         , Ctx1 f 'Unknown
-         , Ctx2 f 'Unknown
-         ) => Serialize (SomeDep2 (f :: a -> b -> Type) d1 d2) where
-    --serialize (SomeDep2 k1 k2 a) = serialize a
-    deserialize bs = dep2Deserialize @a @b @f (KnwlgU `SomeDepStatesCons` KnwlgU `SomeDepStatesCons` SomeDepStatesNil) bs
-
-data SomeDep2K :: DepState -> DepState -> (K.LoT (a -> b -> Type) -> Type) -> Type where
-    SomeDep2K :: forall d1 d2 f x y. Knowledge d1 x -> Knowledge d2 y -> f (x 'K.:&&: y 'K.:&&: 'K.LoT0) -> SomeDep2K d1 d2 f
-
-instance Serialize (SomeDep2K d1 d2 (f :: K.LoT (a -> b -> Type) -> Type)) where
---    --serialize (SomeDep2K k1 k2 a) = serialize (SomeDep2 k1 k2 a)
---    deserialize bs =
---        case dep2Deserialize @a @b @f (d1 `SomeDepStatesCons` d2 `SomeDepStatesCons` SomeDepStatesNil) bs of
---            (SomeDep2 k1 k2 a, bs') ->
---                (undefined, bs')
-
---serializeSomeDep2 ::
---deserializeSomeDep2 :: forall d1 d2 f. (forall x y. K.GenericK f (x 'K.:&&: y 'K.:&&: 'K.LoT0), Serialize (SomeDep2K d1 d2 (K.RepK f))) => [Word8] -> (Some2 f, [Word8])
-deserializeSomeDep2 :: forall f.
-    (forall x y. K.GenericK f (x 'K.:&&: y 'K.:&&: 'K.LoT0), Serialize (SomeDep2K (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown) (K.RepK f)))
-    => [Word8] -> (SomeDep2 f (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown), [Word8])
-deserializeSomeDep2 bs =
-    case deserialize @(SomeDep2K (DepLevel1 f 'Unknown) (DepLevel2 f 'Unknown) (K.RepK f)) bs of
-        (SomeDep2K k1 k2 a, bs') ->
-            (SomeDep2 k1 k2 (K.toK a), bs')
+newtype Curry2 :: (K.LoT (a -> b -> Type) -> Type) -> a -> b -> Type where
+    Curry2 :: f (a K.:&&: b K.:&&: K.LoT0) -> Curry2 f a b
+instance Dep2Deserialize f => Dep2Deserialize (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) where
+    type DepLevel1 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) d = DepLevel1 f d
+    type DepLevel2 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) d = DepLevel2 f d
+    type Ctx1 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) (d :: DepState) = (Ctx1 f d)
+    type Ctx2 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) (d :: DepState) = (Ctx2 f d)
+    -- TODO: Would be nice if this was all that we needed, so that we could drop DepLevel and Ctx entirely
+    type ActualDepLevel1 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) = ActualDepLevel1 f
+    type ActualDepLevel2 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) = ActualDepLevel2 f
+    dep2Deserialize depStates bs =
+        case dep2Deserialize depStates bs of
+            (SomeDep2 k1 k2 (a :: f x y), bs') -> (SomeDep2 k1 k2 (Curry2 (K.Field a)), bs')
 
 -- TODO: We want (Dep2Deserialize WrapNL) derived via GenericK. Not supposed to be implementad by hand
 data WrapNL size1 size2 = WrapNL
     { nl :: NL size1 size2
-    } deriving (GHC.Generic)
-    --deriving (Dep2Deserialize)
+    } deriving (GHC.Generic, Show)
+      deriving Dep2Deserialize via Var2Wrapper WrapNL
 instance K.GenericK WrapNL (size1 K.:&&: size2 K.:&&: K.LoT0) where
     type RepK WrapNL = K.Field (NL K.:$: K.Var0 K.:@: K.Var1)
-instance Dep2Deserialize WrapNL where
-    type ActualDepLevel1 WrapNL = 'NonDep
-    type ActualDepLevel2 WrapNL = 'Learning
-    dep2Deserialize (k1 `SomeDepStatesCons` _ `SomeDepStatesCons` SomeDepStatesNil) bs =
-        case deserialize bs of
-            (Some1 SNat size2, bs') ->
-                withKnwlg k1 $ \k1' -> (SomeDep2 k1' (KnowledgeK SNat) (WrapNL (NL size2)), bs')
-
 testDeserializeSomeDep2 :: (SomeDep2 WrapNL 'Unknown 'Known, [Word8])
-testDeserializeSomeDep2 = deserializeSomeDep2 @WrapNL [0, 1, 2, 3]
-
+testDeserializeSomeDep2 = deserializeSomeDep2 @Nat @Nat @WrapNL @'Unknown @'Known [0, 1, 2, 3]  -- TODO: can we drop the type applications?
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
