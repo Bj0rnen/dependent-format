@@ -555,30 +555,23 @@ testDeserializeSomeDep2L1L2R1R2 :: (SomeDep2 L1L2R1R2 'Known 'Known, [Word8])
 testDeserializeSomeDep2L1L2R1R2 = deserializeSomeDep2 [0, 1, 2, 3]
 
 
---instance Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type))) where
---    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type))) = 'Learning
---    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (Nat -> Nat -> Type) Type))) = 'NonDep
---    dep2Deserialize depStates bs =
---        case dep2Deserialize depStates bs of
---            (SomeDep2 k1 k2 (LN a), bs') -> (SomeDep2 k1 k2 (Curry2 (K.Field a)), bs')
-
 -- TODO: Above is very hard-coded. Thinking we should have something like the below
 data Select1of2 :: (a -> Type) -> a -> b -> Type where
     Select1of2 :: f x -> Select1of2 f x y
-instance (SingKind a, Serialize a) => Dep2Deserialize (Select1of2 Sing :: a -> b -> Type) where
+instance (SingKind a, Serialize (Demote a), Serialize a) => Dep2Deserialize (Select1of2 Sing :: a -> b -> Type) where
     type ActualDepLevel1 (Select1of2 Sing :: a -> b -> Type) = 'Learning
     type ActualDepLevel2 (Select1of2 Sing :: a -> b -> Type) = 'NonDep
     dep2Deserialize (_ `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
         case deserialize bs of
             (Some1 s a, bs') ->
                 withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK s) k2' (Select1of2 a), bs')
---instance Dep2Deserialize (Select1of2 Sing) => Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
---    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0))) = ActualDepLevel1 (Select1of2 Sing)
---    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0))) = ActualDepLevel2 (Select1of2 Sing)
---    dep2Deserialize depStates bs =
---        case dep2Deserialize depStates bs of
---            (SomeDep2 k1 k2 (Select1of2 (a :: Sing x) :: Select1of2 (Sing :: a -> Type) (x :: a) (y :: b)), bs') ->
---                (SomeDep2 k1 k2 (Curry2 (K.Field (a :: K.Interpret (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type) (x K.:&&: y K.:&&: K.LoT0)))), bs')
+instance (Dep2Deserialize (Select1of2 Sing), SingKind a, Serialize (Demote a), Serialize a) => Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
+    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel1 (Select1of2 Sing)
+    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel2 (Select1of2 Sing)
+    dep2Deserialize depStates bs =
+        case dep2Deserialize depStates bs of
+            (SomeDep2 k1 k2 (Select1of2 a), bs') ->
+                (SomeDep2 k1 k2 (Curry2 (K.Field a)), bs')
 
 --data SingSize1 (size1 :: Nat) (size2 :: Nat) = Sing2
 --    { size1 :: Sing size1
