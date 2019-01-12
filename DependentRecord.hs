@@ -565,6 +565,13 @@ instance (SingKind a, Serialize (Demote a)) => Dep2Deserialize (Select1of2 Sing 
         case deserialize bs of
             (Some1 s a, bs') ->
                 withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK s) k2' (Select1of2 a), bs')
+instance Serialize t => Dep2Deserialize (Select1of2 (Vector t) :: Nat -> b -> Type) where
+    type ActualDepLevel1 (Select1of2 (Vector t) :: Nat -> b -> Type) = 'Requiring
+    type ActualDepLevel2 (Select1of2 (Vector t) :: Nat -> b -> Type) = 'NonDep
+    dep2Deserialize (KnwlgK (SNat :: Sing x) `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+        case deserialize @(Vector t x) bs of
+            (a, bs') ->
+                withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK SNat) k2' (Select1of2 a), bs')
 instance (Dep2Deserialize (Select1of2 t :: a -> b -> Type)) => Dep2Deserialize (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
     type DepLevel1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel1 (Select1of2 t :: a -> b -> Type) d
     type DepLevel2 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel2 (Select1of2 t :: a -> b -> Type) d
