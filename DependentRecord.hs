@@ -565,9 +565,14 @@ instance (SingKind a, Serialize (Demote a)) => Dep2Deserialize (Select1of2 Sing 
         case deserialize bs of
             (Some1 s a, bs') ->
                 withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK s) k2' (Select1of2 a), bs')
-instance (Dep2Deserialize (Select1of2 (Sing :: a -> Type)), SingKind a, Serialize (Demote a)) => Dep2Deserialize (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
-    type ActualDepLevel1 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel1 (Select1of2 Sing)
-    type ActualDepLevel2 (Curry2 (K.Field (Sing K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel2 (Select1of2 Sing)
+instance (Dep2Deserialize (Select1of2 t :: a -> b -> Type)) => Dep2Deserialize (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
+    type DepLevel1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel1 (Select1of2 t :: a -> b -> Type) d
+    type DepLevel2 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel2 (Select1of2 t :: a -> b -> Type) d
+    type Ctx1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) (d :: DepState) = Ctx1 (Select1of2 t :: a -> b -> Type) d
+    type Ctx2 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) (d :: DepState) = Ctx2 (Select1of2 t :: a -> b -> Type) d
+    -- TODO: Would be nice if this was all that we needed, so that we could drop DepLevel and Ctx entirely
+    type ActualDepLevel1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel1 (Select1of2 t :: a -> b -> Type)
+    type ActualDepLevel2 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) = ActualDepLevel2 (Select1of2 t :: a -> b -> Type)
     dep2Deserialize depStates bs =
         case dep2Deserialize depStates bs of
             (SomeDep2 k1 k2 (Select1of2 a), bs') ->
