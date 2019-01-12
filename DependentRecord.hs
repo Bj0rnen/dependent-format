@@ -565,7 +565,7 @@ testDeserializeSomeDep2L1L2R1R2 = deserializeSomeDep2 [0, 1, 2, 3]
 -- TODO: Above is very hard-coded. Thinking we should have something like the below
 data Select1of2 :: (a -> Type) -> a -> b -> Type where
     Select1of2 :: f x -> Select1of2 f x y
-instance SingKind a => Serialize a => Dep2Deserialize (Select1of2 Sing :: a -> b -> Type) where
+instance (SingKind a, Serialize a) => Dep2Deserialize (Select1of2 Sing :: a -> b -> Type) where
     type ActualDepLevel1 (Select1of2 Sing :: a -> b -> Type) = 'Learning
     type ActualDepLevel2 (Select1of2 Sing :: a -> b -> Type) = 'NonDep
     dep2Deserialize (_ `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
