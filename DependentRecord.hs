@@ -603,15 +603,16 @@ testDeserializeSomeDep2SingSize1 = deserializeSomeDep2 [0, 1, 2, 3]
 
 
 
-
+-- Already defined elsewhere.
+--data Knowledge :: DepState -> a -> Type where
+--    KnowledgeU :: Knowledge 'Unknown x
+--    KnowledgeK :: Sing (x :: a) -> Knowledge 'Known x
 data PartialKnowledge (ks :: Type) (ds :: [DepState]) where
-    PartialKnowledgeNil   ::                                            PartialKnowledge Type '[]
-    PartialKnowledgeConsU ::                  PartialKnowledge ks ds -> PartialKnowledge (a -> ks) ('Unknown ': ds)
-    PartialKnowledgeConsK :: Sing (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) ('Known   ': ds)
+    PartialKnowledgeNil  :: PartialKnowledge Type '[]
+    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) (d ': ds)
 data PartiallyKnown (ks :: Type) (f :: ks) (ds :: [DepState]) where
-    PartiallyKnownNil   ::                  f                          -> PartiallyKnown Type      f '[]
-    PartiallyKnownConsU ::                  PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f ('Unknown ': ds)
-    PartiallyKnownConsK :: Sing (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f ('Known   ': ds)
+    PartiallyKnownNil  :: f -> PartiallyKnown Type f '[]
+    PartiallyKnownCons :: Knowledge d (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f (d ': ds)
 --instance Show f => Show (PartiallyKnown Type f ds)
 --instance (forall x. Show (PartiallyKnown ks (f x) ds), forall (x :: a). Show (Sing x)) => Show (PartiallyKnown (a -> ks) f ds)
 class DepKDeserialize (f :: ks) where
@@ -619,16 +620,16 @@ class DepKDeserialize (f :: ks) where
     depKDeserialize :: PartialKnowledge ks ds -> [Word8] -> (PartiallyKnown ks f (TaughtBy f ds), [Word8])
 instance (SingKind a, Serialize (Demote a)) => DepKDeserialize (Sing :: a -> Type) where
     type TaughtBy Sing '[ _] = '[ 'Known]
-    depKDeserialize (PartialKnowledgeConsU PartialKnowledgeNil) bs =  -- TODO: PartialKnowledgeConsK should also be OK
+    depKDeserialize (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
         case deserialize bs of
             (FromSing s, bs') ->
-                (PartiallyKnownConsK s (PartiallyKnownNil s), bs')
+                (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil s), bs')
 instance Serialize t => DepKDeserialize (Vector t) where
     type TaughtBy (Vector t) '[ 'Known] = '[ 'Known]
-    depKDeserialize (PartialKnowledgeConsK (SNat :: Sing x) PartialKnowledgeNil) bs =
+    depKDeserialize (PartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) PartialKnowledgeNil) bs =
         case deserialize @(Vector t x) bs of
             (a, bs') ->
-                (PartiallyKnownConsK SNat (PartiallyKnownNil a), bs')
+                (PartiallyKnownCons (KnowledgeK (SNat :: Sing x)) (PartiallyKnownNil a), bs')
 
 --instance
 --    ( SDecide a, SDecide b
@@ -651,10 +652,29 @@ instance Serialize t => DepKDeserialize (Vector t) where
 --                            (Just Refl, Just Refl) ->
 --                                (SomeDep2 k5 k6 (Prod2 l r), bs'')
 
-instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
-    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
-    depKDeserialize (PartialKnowledgeConsK s PartialKnowledgeNil) bs = undefined
+--instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
+--    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
+--    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
 
+-- TODO: This one is just 1-variable. Need something like the above for multi-variable.
+instance (DepKDeserialize l, DepKDeserialize r) => DepKDeserialize ((l :: a -> Type) K.:*: (r :: a -> Type)) where
+    type TaughtBy ((l :: a -> Type) K.:*: (r :: a -> Type)) ds = TaughtBy r (TaughtBy l ds)
+    depKDeserialize (PartialKnowledgeCons k PartialKnowledgeNil) bs =
+        case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
+            (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
+                case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
+                    (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
+                        case unsafeCoerce Refl :: x1 :~: x2 of  -- TODO: I'm cheating! Separate type class to resolve this?
+                            Refl ->
+                                (PartiallyKnownCons k'' (PartiallyKnownNil (l K.:*: r)), bs'')
+tryIt =
+    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Vector Word8) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+            show (p, bs)
+shouldFail =  -- TODO: 2 isn't 3...
+    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+            show (p, bs)
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
