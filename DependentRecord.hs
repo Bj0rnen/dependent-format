@@ -558,6 +558,13 @@ testDeserializeSomeDep2L1L2R1R2 = deserializeSomeDep2 [0, 1, 2, 3]
 -- TODO: Above is very hard-coded. Thinking we should have something like the below
 data Select1of2 :: (a -> Type) -> a -> b -> Type where
     Select1of2 :: f x -> Select1of2 f x y
+--instance Serialize ? => Dep2Deserialize (Select1of2 t :: a -> b -> Type) where
+--    type ActualDepLevel1 (Select1of2 t :: a -> b -> Type) = DepLevelOf t
+--    type ActualDepLevel2 (Select1of2 t :: a -> b -> Type) = 'NonDep
+--    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
+--        case deserialize @? bs of
+--            (? a, bs') ->
+--                withKnwlg k2 $ \k2' -> (SomeDep2 ? k2' (Select1of2 a), bs')
 instance (SingKind a, Serialize (Demote a)) => Dep2Deserialize (Select1of2 Sing :: a -> b -> Type) where
     type ActualDepLevel1 (Select1of2 Sing :: a -> b -> Type) = 'Learning
     type ActualDepLevel2 (Select1of2 Sing :: a -> b -> Type) = 'NonDep
@@ -572,7 +579,7 @@ instance Serialize t => Dep2Deserialize (Select1of2 (Vector t) :: Nat -> b -> Ty
         case deserialize @(Vector t x) bs of
             (a, bs') ->
                 withKnwlg k2 $ \k2' -> (SomeDep2 (KnowledgeK SNat) k2' (Select1of2 a), bs')
-instance (Dep2Deserialize (Select1of2 t :: a -> b -> Type)) => Dep2Deserialize (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
+instance Dep2Deserialize (Select1of2 t :: a -> b -> Type) => Dep2Deserialize (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) where
     type DepLevel1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel1 (Select1of2 t :: a -> b -> Type) d
     type DepLevel2 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) d = DepLevel2 (Select1of2 t :: a -> b -> Type) d
     type Ctx1 (Curry2 (K.Field ((t :: a -> Type) K.:$: K.Var0 :: K.Atom (a -> b -> Type) Type))) (d :: DepState) = Ctx1 (Select1of2 t :: a -> b -> Type) d
