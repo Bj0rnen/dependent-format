@@ -678,77 +678,70 @@ data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) whe
 --    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
 class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) (ds :: [DepState]) :: [DepState]
-    depKDeserializeK :: PartialKnowledge ks ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
+    -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
+    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
 instance (SingKind a, Serialize (Demote a)) => DepKDeserializeK (GenericKWrapper (Sing :: a -> Type)) where
     type TaughtByK (GenericKWrapper (Sing :: a -> Type)) '[ _] = '[ 'Known]
-    depKDeserializeK (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
+    depKDeserializeK (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) bs =
         case deserialize bs of
             (FromSing (s :: Sing (x :: a)), bs') ->
                 (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
             show (p, bs)
 
 instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
     type TaughtByK (GenericKWrapper (Vector t)) '[ 'Known] = '[ 'Known]
-    depKDeserializeK (PartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) PartialKnowledgeNil) bs =
+    depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) bs =
         case deserialize @(Vector t x) bs of
             (a, bs') ->
                 (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) (GenericKWrapper a), bs')
 tryVectorK :: String
 tryVectorK =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Vector Word8)) (PartialKnowledgeCons (KnowledgeK (SNat @2)) PartialKnowledgeNil) [2,3,4] of
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Vector Word8)) (ExplicitPartialKnowledgeCons (KnowledgeK (SNat @2)) ExplicitPartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
             show (p, bs)
 
 instance (DepKDeserializeK l, DepKDeserializeK r) => DepKDeserializeK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
     type TaughtByK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtByK r (TaughtByK l ds)
 
-    depKDeserializeK PartialKnowledgeNil bs =
-        case depKDeserializeK @Type @l PartialKnowledgeNil bs of
-            (PartiallyKnownK ExplicitPartialKnowledgeNil l, bs') ->
-                case depKDeserializeK @Type @r PartialKnowledgeNil bs' of
-                    (PartiallyKnownK ExplicitPartialKnowledgeNil r, bs'') ->
-                        (PartiallyKnownK ExplicitPartialKnowledgeNil (l K.:*: r), bs'')
-    
-    depKDeserializeK (PartialKnowledgeCons k ks) bs =
-        case depKDeserializeK @ks @l (PartialKnowledgeCons k ks) bs of
-            (PartiallyKnownK (ExplicitPartialKnowledgeCons k' ks') l, bs') ->
-                case depKDeserializeK @ks @r (PartialKnowledgeCons k' ks') bs' of
-                    (PartiallyKnownK ExplicitPartialKnowledgeNil r, bs'') -> undefined
-                --        (PartiallyKnownK ExplicitPartialKnowledgeNil (l K.:*: r), bs'')
+    --depKDeserializeK ExplicitPartialKnowledgeNil bs =
+    --    case depKDeserializeK @Type @l ExplicitPartialKnowledgeNil bs of
+    --        (PartiallyKnownK ExplicitPartialKnowledgeNil l, bs') ->
+    --            case depKDeserializeK @Type @r ExplicitPartialKnowledgeNil bs' of
+    --                (PartiallyKnownK ExplicitPartialKnowledgeNil r, bs'') ->
+    --                    (PartiallyKnownK ExplicitPartialKnowledgeNil (l K.:*: r), bs'')
+    --
+    --depKDeserializeK (ExplicitPartialKnowledgeCons k ks :: ExplicitPartialKnowledge ks xs0 ds) bs =
+    --    case depKDeserializeK @ks @l (ExplicitPartialKnowledgeCons k ks) bs of
+    --        (PartiallyKnownK (ExplicitPartialKnowledgeCons k' ks' :: ExplicitPartialKnowledge ks xs1 (TaughtByK l ds)) l, bs') ->
+    --            case depKDeserializeK @ks @r (ExplicitPartialKnowledgeCons k' ks') bs' of
+    --                (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ks'' :: ExplicitPartialKnowledge ks xs2 (TaughtByK r (TaughtByK l ds))) r, bs'') ->
+    --                    case unsafeCoerce Refl :: xs1 :~: xs2 of  -- TODO: I'm cheating!
+    --                        Refl ->
+    --                            (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ks'') (l K.:*: r), bs'')
 
-    --    case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
-    --        (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
-    --            case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
-    --                (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
-    --                    case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
-    --                        Nothing -> error "Conflicting knowledge"
-    --                        Just Refl ->
-    --                            (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
+    depKDeserializeK (ks :: ExplicitPartialKnowledge ks xs ds) bs =
+        case depKDeserializeK @ks @l ks bs of
+            (PartiallyKnownK (ks' :: ExplicitPartialKnowledge ks xs' (TaughtByK l ds)) l, bs') ->
+                case depKDeserializeK @ks @r ks' bs' of
+                    (PartiallyKnownK (ks'' :: ExplicitPartialKnowledge ks xs'' (TaughtByK r (TaughtByK l ds))) r, bs'') ->
+                        case unsafeCoerce Refl :: xs' :~: xs'' of  -- TODO: I'm cheating!
+                            Refl ->
+                                (PartiallyKnownK ks'' (l K.:*: r), bs'')
 
-    --type TaughtByK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) ds = TaughtBy r (TaughtBy l ds)
-    --depKDeserializeK (PartialKnowledgeCons k PartialKnowledgeNil) bs =
-    --    case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
-    --        (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
-    --            case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
-    --                (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
-    --                    case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
-    --                        Nothing -> error "Conflicting knowledge"
-    --                        Just Refl ->
-    --                            (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
---tryItAgain :: String
---tryItAgain =
---    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Vector Word8)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
---        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
---            show (p, bs)
---shouldFailAgain :: String
---shouldFailAgain =
---    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Sing)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
---        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
---            show (p, bs)
+tryItAgain :: String
+tryItAgain =
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing K.:*: GenericKWrapper (Vector Word8)) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper sng K.:*: GenericKWrapper vec), bs) ->
+            show (sng, vec, bs)
+shouldFailAgain :: String
+shouldFailAgain =  -- TODO: BUG: 2 ist't 3...
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing K.:*: GenericKWrapper Sing) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper sng1 K.:*: GenericKWrapper sng2), bs) ->
+            show (sng1, sng2, bs)
 
 
 
