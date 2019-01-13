@@ -661,7 +661,7 @@ tryIt =
     case depKDeserialize @(Nat -> Type) @(Sing K.:*: Vector Word8) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
             show (p, bs)
-shouldFail =  -- TODO: 2 isn't 3...
+shouldFail =
     case depKDeserialize @(Nat -> Type) @(Sing K.:*: Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
             show (p, bs)
@@ -685,15 +685,51 @@ instance (SingKind a, Serialize (Demote a)) => DepKDeserializeK (GenericKWrapper
         case deserialize bs of
             (FromSing (s :: Sing (x :: a)), bs') ->
                 (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
---trySing =
---    case depKDeserialize @(Nat -> Type) @Sing (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
---        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
---            show (p, bs)
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
     case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil :: ExplicitPartialKnowledge (Nat -> Type) xs '[ 'Known]) (GenericKWrapper p :: GenericKWrapper (Sing :: Nat -> Type) xs), bs) ->
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
             show (p, bs)
+
+instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
+    type TaughtByK (GenericKWrapper (Vector t)) '[ 'Known] = '[ 'Known]
+    depKDeserializeK (PartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) PartialKnowledgeNil) bs =
+        case deserialize @(Vector t x) bs of
+            (a, bs') ->
+                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) (GenericKWrapper a), bs')
+tryVectorK :: String
+tryVectorK =
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Vector Word8)) (PartialKnowledgeCons (KnowledgeK (SNat @2)) PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+            show (p, bs)
+
+-- TODO: Still just 1-variable, for now
+instance (DepKDeserialize l, DepKDeserialize r, SDecide a) => DepKDeserializeK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) where
+    type TaughtByK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) ds = TaughtBy r (TaughtBy l ds)
+    depKDeserializeK (PartialKnowledgeCons k PartialKnowledgeNil) bs =
+        case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
+            (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
+                case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
+                    (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
+                        case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
+                            Nothing -> error "Conflicting knowledge"
+                            Just Refl ->
+                                (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
+tryItAgain :: String
+tryItAgain =
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Vector Word8)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+            show (p, bs)
+shouldFailAgain :: String
+shouldFailAgain =
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Sing)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+            show (p, bs)
+
+
+
+
+
 
 {-
 instance Reifies v1 (Sing (y :: Nat)) => Serialize (SomeDep2 NR 'Unknown 'Known) where
