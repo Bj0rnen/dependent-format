@@ -703,28 +703,52 @@ tryVectorK =
         (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
             show (p, bs)
 
--- TODO: Still just 1-variable, for now
-instance (DepKDeserialize l, DepKDeserialize r, SDecide a) => DepKDeserializeK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) where
-    type TaughtByK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) ds = TaughtBy r (TaughtBy l ds)
-    depKDeserializeK (PartialKnowledgeCons k PartialKnowledgeNil) bs =
-        case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
-            (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
-                case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
-                    (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
-                        case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
-                            Nothing -> error "Conflicting knowledge"
-                            Just Refl ->
-                                (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
-tryItAgain :: String
-tryItAgain =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Vector Word8)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
-            show (p, bs)
-shouldFailAgain :: String
-shouldFailAgain =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Sing)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
-            show (p, bs)
+instance (DepKDeserializeK l, DepKDeserializeK r) => DepKDeserializeK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
+    type TaughtByK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtByK r (TaughtByK l ds)
+
+    depKDeserializeK PartialKnowledgeNil bs =
+        case depKDeserializeK @Type @l PartialKnowledgeNil bs of
+            (PartiallyKnownK ExplicitPartialKnowledgeNil l, bs') ->
+                case depKDeserializeK @Type @r PartialKnowledgeNil bs' of
+                    (PartiallyKnownK ExplicitPartialKnowledgeNil r, bs'') ->
+                        (PartiallyKnownK ExplicitPartialKnowledgeNil (l K.:*: r), bs'')
+    
+    depKDeserializeK (PartialKnowledgeCons k ks) bs =
+        case depKDeserializeK @ks @l (PartialKnowledgeCons k ks) bs of
+            (PartiallyKnownK (ExplicitPartialKnowledgeCons k' ks') l, bs') ->
+                case depKDeserializeK @ks @r (PartialKnowledgeCons k' ks') bs' of
+                    (PartiallyKnownK ExplicitPartialKnowledgeNil r, bs'') -> undefined
+                --        (PartiallyKnownK ExplicitPartialKnowledgeNil (l K.:*: r), bs'')
+
+    --    case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
+    --        (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
+    --            case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
+    --                (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
+    --                    case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
+    --                        Nothing -> error "Conflicting knowledge"
+    --                        Just Refl ->
+    --                            (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
+
+    --type TaughtByK (GenericKWrapper ((l :: a -> Type) K.:*: (r :: a -> Type))) ds = TaughtBy r (TaughtBy l ds)
+    --depKDeserializeK (PartialKnowledgeCons k PartialKnowledgeNil) bs =
+    --    case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
+    --        (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
+    --            case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
+    --                (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
+    --                    case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
+    --                        Nothing -> error "Conflicting knowledge"
+    --                        Just Refl ->
+    --                            (PartiallyKnownK (ExplicitPartialKnowledgeCons k'' ExplicitPartialKnowledgeNil) (GenericKWrapper (l K.:*: r)), bs'')
+--tryItAgain :: String
+--tryItAgain =
+--    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Vector Word8)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+--        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+--            show (p, bs)
+--shouldFailAgain :: String
+--shouldFailAgain =
+--    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Sing K.:*: Sing)) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+--        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+--            show (p, bs)
 
 
 
