@@ -744,7 +744,13 @@ shouldFailAgain =  -- TODO: BUG: 2 ist't 3...
             show (sng1, sng2, bs)
 
 
-
+data SingK (size :: Nat) = SingK
+    { size :: Sing size
+    } deriving (GHC.Generic, Show)
+      --deriving DepKDeserializeK via GenericKWrapper SingK (size K.:&&: K.LoT0)
+      -- TODO: SingK itself doesn't have a kind that DepKDeserializeK accepts... Whoops!
+instance K.GenericK SingK (size K.:&&: K.LoT0) where
+    type RepK SingK = K.Field (Sing K.:$: K.Var0)
 
 
 
