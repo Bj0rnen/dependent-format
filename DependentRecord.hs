@@ -631,41 +631,31 @@ instance Serialize t => DepKDeserialize (Vector t) where
             (a, bs') ->
                 (PartiallyKnownCons (KnowledgeK (SNat :: Sing x)) (PartiallyKnownNil a), bs')
 
---instance
---    ( SDecide a, SDecide b
---    , Dep2Deserialize l, Dep2Deserialize r)
---    => Dep2Deserialize (Prod2 (l :: a -> b -> Type) r) where
---    type DepLevel1 (Prod2 l r) d = DepLevel1 r (DepLevel1 l d)
---    type DepLevel2 (Prod2 l r) d = DepLevel2 r (DepLevel2 l d)
---    type Ctx1 (Prod2 l r) (d :: DepState) = (Ctx1 l d, Ctx1 r (DepLevel1 l d))
---    type Ctx2 (Prod2 l r) (d :: DepState) = (Ctx2 l d, Ctx2 r (DepLevel2 l d))
---    -- TODO: Would be nice if this was all that we needed, so that we could drop DepLevel and Ctx entirely
---    type ActualDepLevel1 (Prod2 l r) = ProductDepLevel (ActualDepLevel1 l) (ActualDepLevel1 r)
---    type ActualDepLevel2 (Prod2 l r) = ProductDepLevel (ActualDepLevel2 l) (ActualDepLevel2 r)
---    dep2Deserialize :: forall d1 d2. (Ctx1 (Prod2 l r) d1, Ctx2 (Prod2 l r) d2) => SomeDepStates '[ '(a, d1), '(b, d2)] -> [Word8] -> (SomeDep2 (Prod2 l r) (DepLevel1 (Prod2 l r) d1) (DepLevel2 (Prod2 l r) d2), [Word8])
---    dep2Deserialize (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs =
---        case dep2Deserialize @a @b @l (k1 `SomeDepStatesCons` k2 `SomeDepStatesCons` SomeDepStatesNil) bs of
---            (sdl@(SomeDep2 (k3 :: Knowledge (DepLevel1 l d1) x1_) (k4 :: Knowledge (DepLevel2 l d2) y1_) l), bs') ->
---                case dep2Deserialize @a @b @r (knowledgeToKnwlg k3 `SomeDepStatesCons` knowledgeToKnwlg k4 `SomeDepStatesCons` SomeDepStatesNil) bs' of
---                    (SomeDep2 (k5 :: Knowledge (DepLevel1 (Prod2 l r) d1) x2_) (k6 :: Knowledge (DepLevel2 (Prod2 l r) d2) y2_) r, bs'') ->
---                        case (sameKnowlege k3 k5, sameKnowlege k4 k6) of
---                            (Just Refl, Just Refl) ->
---                                (SomeDep2 k5 k6 (Prod2 l r), bs'')
+--sameKnowlege :: forall (d1 :: DepState) (d2 :: DepState) (x1 :: k) (x2 :: k).
+--    SDecide k =>
+--    Knowledge d1 x1 -> Knowledge d2 x2 -> Maybe (x1 :~: x2)
+--sameKnowlege KnowledgeU KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: unsafeCoerce!! Replace with coerce??
+--sameKnowlege KnowledgeU (KnowledgeK s) = Just (unsafeCoerce Refl)  -- TODO: same!
+--sameKnowlege (KnowledgeK s) KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: same!
+--sameKnowlege (KnowledgeK s1) (KnowledgeK s2) =
+--    case s1 %~ s2 of
+--        Proved r -> Just r
+--        Disproved f -> Nothing
 
---instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
---    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
---    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
+--samePartialKnowlege :: PartialKnowledge k1 x1 -> PartialKnowledge k2 x2 -> Maybe (x1 :~: x2)
+--samePartialKnowlege = undefined
 
 -- TODO: This one is just 1-variable. Need something like the above for multi-variable.
-instance (DepKDeserialize l, DepKDeserialize r) => DepKDeserialize ((l :: a -> Type) K.:*: (r :: a -> Type)) where
+instance (DepKDeserialize l, DepKDeserialize r, SDecide a) => DepKDeserialize ((l :: a -> Type) K.:*: (r :: a -> Type)) where
     type TaughtBy ((l :: a -> Type) K.:*: (r :: a -> Type)) ds = TaughtBy r (TaughtBy l ds)
     depKDeserialize (PartialKnowledgeCons k PartialKnowledgeNil) bs =
         case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
             (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
                 case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
                     (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
-                        case unsafeCoerce Refl :: x1 :~: x2 of  -- TODO: I'm cheating! Separate type class to resolve this?
-                            Refl ->
+                        case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
+                            Nothing -> error "Conflicting knowledge"
+                            Just Refl ->
                                 (PartiallyKnownCons k'' (PartiallyKnownNil (l K.:*: r)), bs'')
 tryIt =
     case depKDeserialize @(Nat -> Type) @(Sing K.:*: Vector Word8) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
@@ -674,6 +664,37 @@ tryIt =
 shouldFail =  -- TODO: 2 isn't 3...
     case depKDeserialize @(Nat -> Type) @(Sing K.:*: Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+            show (p, bs)
+
+
+--data PartialKnowledge (ks :: Type) (ds :: [DepState]) where
+--    PartialKnowledgeNil  :: PartialKnowledge Type '[]
+--    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) (d ': ds)
+
+--data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) where
+--    PartiallyKnownNilK  :: f 'K.LoT0 -> PartiallyKnownK Type f '[]
+--    --PartiallyKnownConsK :: Knowledge d (x :: a) -> PartiallyKnownK ks (f x) ds -> PartiallyKnownK (a -> ks) f (d ': ds)
+data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) where
+    PartiallyKnownK :: PartialKnowledge ks ds -> f (xs :: K.LoT ks) -> PartiallyKnownK ks f ds
+--instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
+--    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
+--    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
+class DepKDeserializeK (f :: K.LoT ks -> Type) where
+    type TaughtByK (f :: K.LoT ks -> Type) (ds :: [DepState]) :: [DepState]
+    depKDeserializeK :: PartialKnowledge ks ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
+instance (SingKind a, Serialize (Demote a)) => DepKDeserializeK (GenericKWrapper (Sing :: a -> Type)) where
+    type TaughtByK (GenericKWrapper (Sing :: a -> Type)) '[ _] = '[ 'Known]
+    depKDeserializeK (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
+        case deserialize bs of
+            (FromSing (s :: Sing (x :: a)), bs') ->
+                (PartiallyKnownK (PartialKnowledgeCons (KnowledgeK s) PartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
+--trySing =
+--    case depKDeserialize @(Nat -> Type) @Sing (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+--        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+--            show (p, bs)
+trySingK =
+    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (PartialKnowledgeCons (KnowledgeK (s :: Sing (x :: Nat))) PartialKnowledgeNil) (GenericKWrapper p :: GenericKWrapper (Sing :: Nat -> Type) (x K.:&&: K.LoT0)), bs) ->
             show (p, bs)
 
 {-
