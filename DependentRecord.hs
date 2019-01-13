@@ -667,15 +667,12 @@ shouldFail =  -- TODO: 2 isn't 3...
             show (p, bs)
 
 
---data PartialKnowledge (ks :: Type) (ds :: [DepState]) where
---    PartialKnowledgeNil  :: PartialKnowledge Type '[]
---    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) (d ': ds)
+data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
+    ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type K.LoT0 '[]
+    ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x K.:&&: xs) (d ': ds)
 
---data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) where
---    PartiallyKnownNilK  :: f 'K.LoT0 -> PartiallyKnownK Type f '[]
---    --PartiallyKnownConsK :: Knowledge d (x :: a) -> PartiallyKnownK ks (f x) ds -> PartiallyKnownK (a -> ks) f (d ': ds)
 data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) where
-    PartiallyKnownK :: PartialKnowledge ks ds -> f (xs :: K.LoT ks) -> PartiallyKnownK ks f ds
+    PartiallyKnownK :: ExplicitPartialKnowledge ks xs ds -> f xs -> PartiallyKnownK ks f ds
 --instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
 --    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
 --    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
@@ -687,14 +684,15 @@ instance (SingKind a, Serialize (Demote a)) => DepKDeserializeK (GenericKWrapper
     depKDeserializeK (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
         case deserialize bs of
             (FromSing (s :: Sing (x :: a)), bs') ->
-                (PartiallyKnownK (PartialKnowledgeCons (KnowledgeK s) PartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
+                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
 --trySing =
 --    case depKDeserialize @(Nat -> Type) @Sing (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
 --        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
 --            show (p, bs)
+trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
     case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (PartialKnowledgeCons (KnowledgeK (s :: Sing (x :: Nat))) PartialKnowledgeNil) (GenericKWrapper p :: GenericKWrapper (Sing :: Nat -> Type) (x K.:&&: K.LoT0)), bs) ->
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil :: ExplicitPartialKnowledge (Nat -> Type) xs '[ 'Known]) (GenericKWrapper p :: GenericKWrapper (Sing :: Nat -> Type) xs), bs) ->
             show (p, bs)
 
 {-
