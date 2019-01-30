@@ -42,6 +42,7 @@ import Generics.SOP hiding (Sing, Nil, SingI, sing)
 import qualified Generics.SOP as SOP
 import Generics.SOP.Classes (Same)
 import GHC.TypeLits (TypeError(..), ErrorMessage(..))
+import           Generics.Kind hiding (Nat, (:~:))
 import qualified Generics.Kind as K
 
 import Data.Proxy
@@ -493,8 +494,6 @@ instance (forall x y. K.GenericK f (x K.:&&: y K.:&&: K.LoT0), Dep2Deserialize (
         case dep2Deserialize depStates bs of
             (SomeDep2 k1 k2 (Curry2 a :: Curry2 (K.RepK f) x y), bs') -> (SomeDep2 k1 k2 (Var2Wrapper (K.toK a) :: Var2Wrapper f x y), bs')
 
-newtype Curry2 :: (K.LoT (a -> b -> Type) -> Type) -> a -> b -> Type where
-    Curry2 :: f (a K.:&&: b K.:&&: K.LoT0) -> Curry2 f a b
 instance Dep2Deserialize f => Dep2Deserialize (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) where
     type DepLevel1 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) d = DepLevel1 f d
     type DepLevel2 (Curry2 (K.Field (f K.:$: K.Var0 'K.:@: K.Var1))) d = DepLevel2 f d
@@ -603,6 +602,17 @@ testDeserializeSomeDep2SingSize1 = deserializeSomeDep2 [0, 1, 2, 3]
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 -- Already defined elsewhere.
 --data Knowledge :: DepState -> a -> Type where
 --    KnowledgeU :: Knowledge 'Unknown x
@@ -615,58 +625,198 @@ data PartiallyKnown (ks :: Type) (f :: ks) (ds :: [DepState]) where
     PartiallyKnownCons :: Knowledge d (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f (d ': ds)
 --instance Show f => Show (PartiallyKnown Type f ds)
 --instance (forall x. Show (PartiallyKnown ks (f x) ds), forall (x :: a). Show (Sing x)) => Show (PartiallyKnown (a -> ks) f ds)
+
+
 class DepKDeserialize (f :: ks) where
-    type TaughtBy (f :: ks) (ds :: [DepState]) :: [DepState]
-    depKDeserialize :: PartialKnowledge ks ds -> [Word8] -> (PartiallyKnown ks f (TaughtBy f ds), [Word8])
-instance (SingKind a, Serialize (Demote a)) => DepKDeserialize (Sing :: a -> Type) where
-    type TaughtBy Sing '[ _] = '[ 'Known]
-    depKDeserialize (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
-        case deserialize bs of
-            (FromSing s, bs') ->
-                (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil s), bs')
-instance Serialize t => DepKDeserialize (Vector t) where
-    type TaughtBy (Vector t) '[ 'Known] = '[ 'Known]
-    depKDeserialize (PartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) PartialKnowledgeNil) bs =
-        case deserialize @(Vector t x) bs of
-            (a, bs') ->
-                (PartiallyKnownCons (KnowledgeK (SNat :: Sing x)) (PartiallyKnownNil a), bs')
+    --type TaughtBy (f :: ks) (ds :: [DepState]) :: [DepState]
+    --depKDeserialize :: PartialKnowledge ks ds -> [Word8] -> (PartiallyKnown ks f (TaughtBy f ds), [Word8])
+--instance (SingKind a, Serialize (Demote a)) => DepKDeserialize (Sing :: a -> Type) where
+--    type TaughtBy Sing '[ _] = '[ 'Known]
+--    depKDeserialize (PartialKnowledgeCons _ PartialKnowledgeNil) bs =
+--        case deserialize bs of
+--            (FromSing s, bs') ->
+--                (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil s), bs')
+--instance Serialize t => DepKDeserialize (Vector t) where
+--    type TaughtBy (Vector t) '[ 'Known] = '[ 'Known]
+--    depKDeserialize (PartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) PartialKnowledgeNil) bs =
+--        case deserialize @(Vector t x) bs of
+--            (a, bs') ->
+--                (PartiallyKnownCons (KnowledgeK (SNat :: Sing x)) (PartiallyKnownNil a), bs')
+--
+----sameKnowlege :: forall (d1 :: DepState) (d2 :: DepState) (x1 :: k) (x2 :: k).
+----    SDecide k =>
+----    Knowledge d1 x1 -> Knowledge d2 x2 -> Maybe (x1 :~: x2)
+----sameKnowlege KnowledgeU KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: unsafeCoerce!! Replace with coerce??
+----sameKnowlege KnowledgeU (KnowledgeK s) = Just (unsafeCoerce Refl)  -- TODO: same!
+----sameKnowlege (KnowledgeK s) KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: same!
+----sameKnowlege (KnowledgeK s1) (KnowledgeK s2) =
+----    case s1 %~ s2 of
+----        Proved r -> Just r
+----        Disproved f -> Nothing
+--
+----samePartialKnowlege :: PartialKnowledge k1 x1 -> PartialKnowledge k2 x2 -> Maybe (x1 :~: x2)
+----samePartialKnowlege = undefined
+--
+---- TODO: This one is just 1-variable. Need something like the above for multi-variable.
+--instance (DepKDeserialize l, DepKDeserialize r, SDecide a) => DepKDeserialize ((l :: a -> Type) K.:*: (r :: a -> Type)) where
+--    type TaughtBy ((l :: a -> Type) K.:*: (r :: a -> Type)) ds = TaughtBy r (TaughtBy l ds)
+--    depKDeserialize (PartialKnowledgeCons k PartialKnowledgeNil) bs =
+--        case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
+--            (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
+--                case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
+--                    (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
+--                        case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
+--                            Nothing -> error "Conflicting knowledge"
+--                            Just Refl ->
+--                                (PartiallyKnownCons k'' (PartiallyKnownNil (l K.:*: r)), bs'')
+--tryIt =
+--    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Vector Word8) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+--        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+--            show (p, bs)
+--shouldFail =
+--    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
+--        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
+--            show (p, bs)
 
---sameKnowlege :: forall (d1 :: DepState) (d2 :: DepState) (x1 :: k) (x2 :: k).
---    SDecide k =>
---    Knowledge d1 x1 -> Knowledge d2 x2 -> Maybe (x1 :~: x2)
---sameKnowlege KnowledgeU KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: unsafeCoerce!! Replace with coerce??
---sameKnowlege KnowledgeU (KnowledgeK s) = Just (unsafeCoerce Refl)  -- TODO: same!
---sameKnowlege (KnowledgeK s) KnowledgeU = Just (unsafeCoerce Refl)  -- TODO: same!
---sameKnowlege (KnowledgeK s1) (KnowledgeK s2) =
---    case s1 %~ s2 of
---        Proved r -> Just r
---        Disproved f -> Nothing
+newtype Wrap0 f where
+    Wrap0 :: f -> Wrap0 f
+newtype Curry0 f where
+    Curry0 :: f K.LoT0 -> Curry0 f
+data Uncurry0 f xs where
+    Uncurry0 :: f -> Uncurry0 f K.LoT0
+newtype Wrap1 f a where
+    Wrap1 :: f a -> Wrap1 f a
+newtype Curry1 f a where
+    Curry1 :: f (a K.:&&: K.LoT0) -> Curry1 f a
+data Uncurry1 f xs where
+    Uncurry1 :: f a -> Uncurry1 f (a K.:&&: K.LoT0)
+newtype Wrap2 f a b where
+    Wrap2 :: f a b -> Wrap2 f a b
+newtype Curry2 f a b where
+    Curry2 :: f (a K.:&&: b K.:&&: K.LoT0) -> Curry2 f a b
+data Uncurry2 f xs where
+    Uncurry2 :: f a b -> Uncurry2 f (a K.:&&: b K.:&&: K.LoT0)
+newtype Wrap3 f a b c where
+    Wrap3 :: f a b c -> Wrap3 f a b c
+newtype Curry3 f a b c where
+    Curry3 :: f (a K.:&&: b K.:&&: c K.:&&: K.LoT0) -> Curry3 f a b c
+data Uncurry3 f xs where
+    Uncurry3 :: f a b c -> Uncurry3 f (a K.:&&: b K.:&&: c K.:&&: K.LoT0)
+newtype Wrap4 f a b c d where
+    Wrap4 :: f a b c d -> Wrap4 f a b c d
+newtype Curry4 f a b c d where
+    Curry4 :: f (a K.:&&: b K.:&&: c K.:&&: d K.:&&: K.LoT0) -> Curry4 f a b c d
+data Uncurry4 f xs where
+    Uncurry4 :: f a b c d -> Uncurry4 f (a K.:&&: b K.:&&: c K.:&&: d K.:&&: K.LoT0)
 
---samePartialKnowlege :: PartialKnowledge k1 x1 -> PartialKnowledge k2 x2 -> Maybe (x1 :~: x2)
---samePartialKnowlege = undefined
+newtype UncurryK f xs where
+    UncurryK :: f K.:@@: xs -> UncurryK f xs
 
--- TODO: This one is just 1-variable. Need something like the above for multi-variable.
-instance (DepKDeserialize l, DepKDeserialize r, SDecide a) => DepKDeserialize ((l :: a -> Type) K.:*: (r :: a -> Type)) where
-    type TaughtBy ((l :: a -> Type) K.:*: (r :: a -> Type)) ds = TaughtBy r (TaughtBy l ds)
-    depKDeserialize (PartialKnowledgeCons k PartialKnowledgeNil) bs =
-        case depKDeserialize @(a -> Type) @l (PartialKnowledgeCons k PartialKnowledgeNil) bs of
-            (PartiallyKnownCons (k' :: Knowledge _ x1) (PartiallyKnownNil l), bs') ->
-                case depKDeserialize @(a -> Type) @r (PartialKnowledgeCons k' PartialKnowledgeNil) bs' of
-                    (PartiallyKnownCons (k'' :: Knowledge _ x2) (PartiallyKnownNil r), bs'') ->
-                        case sameKnowlege k' k'' :: Maybe (x1 :~: x2) of
-                            Nothing -> error "Conflicting knowledge"
-                            Just Refl ->
-                                (PartiallyKnownCons k'' (PartiallyKnownNil (l K.:*: r)), bs'')
-tryIt =
-    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Vector Word8) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
-            show (p, bs)
-shouldFail =
-    case depKDeserialize @(Nat -> Type) @(Sing K.:*: Sing) (PartialKnowledgeCons KnowledgeU PartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownCons (KnowledgeK s) (PartiallyKnownNil p), bs) ->
-            show (p, bs)
+data SingK (size :: Nat) = SingK
+    { size :: Sing size
+    } deriving (GHC.Generic, Show)
+      --deriving DepKDeserialize via Wrap1 SingK
+      -- TODO: SingK itself doesn't have a kind that DepKDeserializeK accepts... Whoops!
+instance K.GenericK SingK (size K.:&&: K.LoT0) where
+    type RepK SingK = K.Field (Sing K.:$: K.Var0)
 
 
+f1 :: K.Field (K.Kon Sing K.:@: K.Var K.VZ) (1 K.:&&: K.LoT0)
+f1 = K.Field SNat
+
+f2 :: K.Field (K.Kon Sing K.:@: K.Var K.VZ) (2 K.:&&: 3 K.:&&: K.LoT0)
+f2 = K.Field SNat
+
+f5 :: K.Field (K.Kon Sing K.:@: K.Var (K.VS K.VZ)) (4 K.:&&: 5 K.:&&: K.LoT0)
+f5 = K.Field SNat
+
+
+
+-- TODO: How do we implement something like this, in a way that breaks it down structurally?
+-- TODO: We already have an issue: we can't pass `vars` from the outside.
+-- TODO: Is something like `PartiallyKnown` the way? Or maybe RankNTypes, CPS?
+deserializeThis :: [Word8] ->
+    ( ((Field (Kon Sing :@: Var VZ) :*: Field (Kon Sing :@: Var (VS VZ)))
+        :*:
+       (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ))))
+      vars
+    , [Word8])
+deserializeThis bs = undefined
+
+xyzf :: (SingKind k1, SingKind k2,
+         Interpret t1 p ~ Sing (size1 :: k1), Interpret t2 p ~ Sing (size2 :: k2), Interpret t3 p ~ f3 size1, Interpret t4 p ~ f4 size2) =>
+                       (((Field t1 :*: Field t2) :*: (Field t3 :*: Field t4)) p, b)
+                       -> (Demote k1, Demote k2, Some1 f3, Some1 f4)
+xyzf ((Field a :*: Field b) :*: (Field c :*: Field d), bs) = (FromSing a, FromSing b, Some1 a c, Some1 b d)
+xyz = deserializeThisCPS [1,2,3,4,5] xyzf
+
+
+deserializeSize1 ::
+    forall r.
+    (SingKind k, Serialize (Demote k)) =>
+    [Word8] ->
+    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8]) -> r) ->
+    r
+deserializeSize1 bs f =
+    case deserialize bs of
+        (FromSing (s :: Sing size1), bs') ->
+            f @(size1 :&&: _) (Field s, bs')
+
+deserializeSize2 ::
+    forall r.
+    (SingKind k, Serialize (Demote k)) =>
+    [Word8] ->
+    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var (VS VZ)) vars, [Word8]) -> r) ->
+    r
+deserializeSize2 bs f =
+    case deserialize bs of
+        (FromSing (s :: Sing size2), bs') ->
+            f @(_ :&&: size2 :&&: _) (Field s, bs')
+
+deserializeArr1 :: forall size1. KnownNat size1 =>
+    forall r.
+    [Word8] ->
+    (forall vars. (Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8]) -> r) ->
+    r
+deserializeArr1 bs f =
+    case deserialize bs of
+        (arr, bs') ->
+            f @(size1 :&&: _) (Field arr, bs')
+
+deserializeArr2 :: forall size2. KnownNat size2 =>
+    forall r.
+    [Word8] ->
+    (forall vars. (Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8]) -> r) ->
+    r
+deserializeArr2 bs f =
+    case deserialize bs of
+        (arr, bs') ->
+            f @(_ :&&: size2 :&&: _) (Field arr, bs')
+-- TODO: How do these functions actually compose?
+
+deserializeThisCPS ::
+    forall r.
+    [Word8] ->
+    (forall vars.
+        ( (((Field (Kon Sing :@: Var VZ) :*: Field (Kon Sing :@: Var (VS VZ)))
+            :*:
+        (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ))))
+        vars, [Word8]) -> r)) ->
+    r
+deserializeThisCPS bs f =
+    case deserialize bs of
+        (FromSing (SNat :: Sing size1), bs') ->
+    --deserializeSize1 bs $ \(Field (SNat :: Sing size1), bs') ->
+            case deserialize bs' of
+                (FromSing (SNat :: Sing size2), bs'') ->
+                    case deserialize bs'' of
+                        (arr1, bs''') ->
+                            case deserialize bs''' of
+                                (arr2, bs'''') ->
+                            --deserializeArr2 @size2 bs''' $ \(Field arr2, bs'''') ->
+                                    f @(size1 :&&: size2 :&&: _) ((Field (SNat @size1) :*: Field (SNat @size2)) :*: (Field arr1 :*: Field arr2), bs'''')
+
+{-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type K.LoT0 '[]
     ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x K.:&&: xs) (d ': ds)
@@ -742,15 +892,21 @@ shouldFailAgain =  -- TODO: BUG: 2 ist't 3...
     case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing K.:*: GenericKWrapper Sing) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
         (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper sng1 K.:*: GenericKWrapper sng2), bs) ->
             show (sng1, sng2, bs)
+-}
 
 
-data SingK (size :: Nat) = SingK
-    { size :: Sing size
-    } deriving (GHC.Generic, Show)
-      --deriving DepKDeserializeK via GenericKWrapper SingK (size K.:&&: K.LoT0)
-      -- TODO: SingK itself doesn't have a kind that DepKDeserializeK accepts... Whoops!
-instance K.GenericK SingK (size K.:&&: K.LoT0) where
-    type RepK SingK = K.Field (Sing K.:$: K.Var0)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
