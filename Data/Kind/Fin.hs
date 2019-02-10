@@ -27,7 +27,8 @@
 
 module Data.Kind.Fin (Fin(..), KnownFin, finVal, SomeFin(..),
                       someFinVal, someFin, sameFin,
-                      FinToNat, knownFinToKnownNat) where
+                      FinToNat, knownFinToKnownNat,
+                      ifZeroElse, ltNat, predecessor, subNat) where
 
 import Data.Proxy
 import Data.Type.Equality
@@ -56,8 +57,11 @@ axiom = unsafeCoerce (Dict :: Dict (a ~ a))
 plusMinusInverse3'' :: forall n m. (n `CmpNat` (1 + m) ~ 'LT) :- ((n + (m - n)) ~ m)
 plusMinusInverse3'' = Sub axiom
 
-subNat :: forall n m. (KnownNat n, KnownNat m) :- KnownNat (n - m)
-subNat = magic (-)
+unsafeSubNat :: forall n m. (KnownNat n, KnownNat m) :- KnownNat (n - m)
+unsafeSubNat = magic (-)
+
+subNat :: forall n m. m `CmpNat` (1 + n) ~ 'LT => (KnownNat n, KnownNat m) :- KnownNat (n - m)
+subNat = unsafeSubNat
 
 predecessor :: forall n n1. ((1 + n1) ~ n) :- ((n - 1) ~ n1)
 predecessor = Sub axiom

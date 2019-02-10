@@ -55,6 +55,7 @@ import Data.Functor.Const
 import Data.Word
 import Data.Bits
 import Numeric.Natural
+import Data.Kind.Fin (ltNat, predecessor, subNat)
 import Data.Singletons.Fin
 
 import Exinst
@@ -128,8 +129,6 @@ magic :: forall n m o. (Natural -> Natural -> Natural) -> (KnownNat n, KnownNat 
 magic f = Sub $ unsafeCoerce (Magic Dict) (natVal (Proxy :: Proxy n) `f` natVal (Proxy :: Proxy m))
 axiom :: forall a b. Dict (a ~ b)
 axiom = unsafeCoerce (Dict :: Dict (a ~ a))
-predecessor :: forall n n1. ((1 + n1) ~ n) :- ((n - 1) ~ n1)
-predecessor = Sub axiom
 plusMinusInverse :: forall n m. (n `CmpNat` (1 + m) ~ 'LT) :- ((n + (m - n)) ~ m)
 plusMinusInverse = Sub axiom
 unsafeSubNat :: forall n m. (KnownNat n, KnownNat m) :- KnownNat (n - m)
@@ -147,6 +146,8 @@ ifZeroElse z s =
                 withDict (axiom :: Dict (IsNonZero n ~ 'True)) (s Proxy) \\ unsafeSubNat @n @1 \\ plusMinusInverse @1 @n
 samePredecessor :: forall n n1 n2. (n ~ (1 + n1), n ~ (1 + n2)) :- (n1 ~ n2)
 samePredecessor = Sub axiom
+addNonZero :: forall n m. (IsNonZero n ~ 'True) :- (CmpNat m (m + n) ~ 'LT)
+addNonZero = Sub axiom
 
 instance (Serialize a, SingI n) => Serialize (Vector a n) where
     serialize (v :: Vector a n) =
@@ -743,56 +744,74 @@ deserializeThis :: [Word8] ->
     , [Word8])
 deserializeThis bs = undefined
 
-xyzf :: (SingKind k1, SingKind k2,
-         Interpret t1 p ~ Sing (size1 :: k1), Interpret t2 p ~ Sing (size2 :: k2), Interpret t3 p ~ f3 size1, Interpret t4 p ~ f4 size2) =>
-                       (((Field t1 :*: Field t2) :*: (Field t3 :*: Field t4)) p, b)
+xyzf :: forall k1 k2 size1 size2 vars t1 t2 t3 t4 f3 f4.
+    (SingKind k1, SingKind k2,
+         Interpret t1 vars ~ Sing (size1 :: k1), Interpret t2 vars ~ Sing (size2 :: k2), Interpret t3 vars ~ f3 size1, Interpret t4 vars ~ f4 size2) =>
+                       (((Field t1 :*: Field t2) :*: (Field t3 :*: Field t4)) vars, [Word8], Proxy vars)
                        -> (Demote k1, Demote k2, Some1 f3, Some1 f4)
-xyzf ((Field a :*: Field b) :*: (Field c :*: Field d), bs) = (FromSing a, FromSing b, Some1 a c, Some1 b d)
+xyzf ((Field a :*: Field b) :*: (Field c :*: Field d), bs, Proxy) = (FromSing a, FromSing b, Some1 a c, Some1 b d)
 xyz = deserializeThisCPS [1,2,3,4,5] xyzf
 
 
 deserializeSize1 ::
-    forall r.
+    forall k r.
     (SingKind k, Serialize (Demote k)) =>
     [Word8] ->
-    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8]) -> r) ->
+    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeSize1 bs f =
     case deserialize bs of
         (FromSing (s :: Sing size1), bs') ->
-            f @(size1 :&&: _) (Field s, bs')
+            f @(size1 :&&: _) (Field s, bs', Proxy)
 
 deserializeSize2 ::
-    forall r.
+    forall k r.
     (SingKind k, Serialize (Demote k)) =>
     [Word8] ->
-    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var (VS VZ)) vars, [Word8]) -> r) ->
+    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var (VS VZ)) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeSize2 bs f =
     case deserialize bs of
         (FromSing (s :: Sing size2), bs') ->
-            f @(_ :&&: size2 :&&: _) (Field s, bs')
+            f @(_ :&&: size2 :&&: _) (Field s, bs', Proxy)
 
 deserializeArr1 :: forall size1. KnownNat size1 =>
     forall r.
     [Word8] ->
-    (forall vars. (Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8]) -> r) ->
+    (forall vars. Interpret (Var VZ) vars ~ size1 => (Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeArr1 bs f =
     case deserialize bs of
         (arr, bs') ->
-            f @(size1 :&&: _) (Field arr, bs')
+            f @(size1 :&&: _) (Field arr, bs', Proxy)
 
 deserializeArr2 :: forall size2. KnownNat size2 =>
     forall r.
     [Word8] ->
-    (forall vars. (Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8]) -> r) ->
+    (forall vars. Interpret (Var (VS VZ)) vars ~ size2 => (Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeArr2 bs f =
     case deserialize bs of
         (arr, bs') ->
-            f @(_ :&&: size2 :&&: _) (Field arr, bs')
--- TODO: How do these functions actually compose?
+            f @(_ :&&: size2 :&&: _) (Field arr, bs', Proxy)
+
+nth :: forall (n :: Nat). KnownNat n => Demote Nat -> Vector Word8 n -> Maybe Word8
+nth _ Nil = Nothing
+nth (FromSing (SNat :: Sing i)) (x :> xs :: Vector Word8 n) =
+    case ltNat @i @n of
+        Nothing -> Nothing
+        Just Refl -> ifZeroElse @i (Just x) $ \(Proxy :: Proxy i') ->
+            nth @(n - 1) (demote @i') xs \\ subNat @n @1 \\ addNonZero @n @1 \\ predecessor @n
+
+useDeserializeSize1 :: Demote Nat
+useDeserializeSize1 = deserializeSize1 @Nat [2, 2, 3, 4] $ \(Field s, bs, Proxy) -> FromSing s
+useDeserializeArr1 :: Maybe Word8
+useDeserializeArr1 = deserializeArr1 @2 [2, 3, 4] $ \(Field xs, bs, Proxy :: Proxy vars) -> nth 1 xs
+composeSize1Arr1 :: Maybe Word8
+composeSize1Arr1 =
+    deserializeSize1 @Nat [2, 2, 3, 4] $ \(Field SNat, bs, Proxy :: Proxy vars) ->
+        deserializeArr1 @(Interpret ('Var 'VZ) vars) bs $ \(Field xs, bs, Proxy :: Proxy vars2) ->
+            nth 1 xs
 
 deserializeThisCPS ::
     forall r.
@@ -801,7 +820,7 @@ deserializeThisCPS ::
         ( (((Field (Kon Sing :@: Var VZ) :*: Field (Kon Sing :@: Var (VS VZ)))
             :*:
         (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ))))
-        vars, [Word8]) -> r)) ->
+        vars, [Word8], Proxy vars) -> r)) ->
     r
 deserializeThisCPS bs f =
     case deserialize bs of
@@ -814,7 +833,7 @@ deserializeThisCPS bs f =
                             case deserialize bs''' of
                                 (arr2, bs'''') ->
                             --deserializeArr2 @size2 bs''' $ \(Field arr2, bs'''') ->
-                                    f @(size1 :&&: size2 :&&: _) ((Field (SNat @size1) :*: Field (SNat @size2)) :*: (Field arr1 :*: Field arr2), bs'''')
+                                    f @(size1 :&&: size2 :&&: _) ((Field (SNat @size1) :*: Field (SNat @size2)) :*: (Field arr1 :*: Field arr2), bs'''', Proxy)
 
 {-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
