@@ -754,15 +754,17 @@ xyz = deserializeThisCPS [1,2,3,4,5] xyzf
 
 
 deserializeSize1 ::
-    forall k r.
+    forall k vars r.
     (SingKind k, Serialize (Demote k)) =>
     [Word8] ->
-    (forall vars. (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
+    (forall (size1 :: k). Interpret (Var VZ) vars ~ size1 => (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeSize1 bs f =
     case deserialize bs of
         (FromSing (s :: Sing size1), bs') ->
-            f @(size1 :&&: _) (Field s, bs', Proxy)
+            case unsafeCoerce (Dict @(size1 ~ size1)) :: Dict (Interpret (Var VZ) vars ~ size1) of  -- TODO: unsafeCoerce!!
+                Dict ->
+                    f @size1 (Field s, bs', Proxy)
 
 deserializeSize2 ::
     forall k r.
@@ -775,15 +777,15 @@ deserializeSize2 bs f =
         (FromSing (s :: Sing size2), bs') ->
             f @(_ :&&: size2 :&&: _) (Field s, bs', Proxy)
 
-deserializeArr1 :: forall size1. KnownNat size1 =>
+deserializeArr1 :: forall vars. KnownNat (Interpret (Var VZ) vars) =>
     forall r.
     [Word8] ->
-    (forall vars. Interpret (Var VZ) vars ~ size1 => (Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
+    ((Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
     r
 deserializeArr1 bs f =
     case deserialize bs of
         (arr, bs') ->
-            f @(size1 :&&: _) (Field arr, bs', Proxy)
+            f (Field arr, bs', Proxy)
 
 deserializeArr2 :: forall size2. KnownNat size2 =>
     forall r.
@@ -806,11 +808,11 @@ nth (FromSing (SNat :: Sing i)) (x :> xs :: Vector Word8 n) =
 useDeserializeSize1 :: Demote Nat
 useDeserializeSize1 = deserializeSize1 @Nat [2, 2, 3, 4] $ \(Field s, bs, Proxy) -> FromSing s
 useDeserializeArr1 :: Maybe Word8
-useDeserializeArr1 = deserializeArr1 @2 [2, 3, 4] $ \(Field xs, bs, Proxy :: Proxy vars) -> nth 1 xs
-composeSize1Arr1 :: Maybe Word8
+useDeserializeArr1 = deserializeArr1 @(2 :&&: LoT0) [2, 3, 4] $ \(Field xs, bs, Proxy :: Proxy (2 :&&: LoT0)) -> nth 1 xs
+composeSize1Arr1 :: forall (vars :: LoT (Nat -> xs)). Maybe Word8
 composeSize1Arr1 =
-    deserializeSize1 @Nat [2, 2, 3, 4] $ \(Field SNat, bs, Proxy :: Proxy vars) ->
-        deserializeArr1 @(Interpret ('Var 'VZ) vars) bs $ \(Field xs, bs, Proxy :: Proxy vars2) ->
+    deserializeSize1 @Nat @vars [2, 2, 3, 4] $ \(Field SNat, bs, Proxy :: Proxy vars) ->
+        deserializeArr1 @vars bs $ \(Field xs, bs, Proxy :: Proxy vars) ->
             nth 1 xs
 
 deserializeThisCPS ::
