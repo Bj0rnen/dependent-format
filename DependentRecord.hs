@@ -747,57 +747,57 @@ deserializeThis bs = undefined
 xyzf :: forall k1 k2 size1 size2 vars t1 t2 t3 t4 f3 f4.
     (SingKind k1, SingKind k2,
          Interpret t1 vars ~ Sing (size1 :: k1), Interpret t2 vars ~ Sing (size2 :: k2), Interpret t3 vars ~ f3 size1, Interpret t4 vars ~ f4 size2) =>
-                       (((Field t1 :*: Field t2) :*: (Field t3 :*: Field t4)) vars, [Word8], Proxy vars)
+                       (((Field t1 :*: Field t2) :*: (Field t3 :*: Field t4)) vars, [Word8])
                        -> (Demote k1, Demote k2, Some1 f3, Some1 f4)
-xyzf ((Field a :*: Field b) :*: (Field c :*: Field d), bs, Proxy) = (FromSing a, FromSing b, Some1 a c, Some1 b d)
+xyzf ((Field a :*: Field b) :*: (Field c :*: Field d), bs) = (FromSing a, FromSing b, Some1 a c, Some1 b d)
 xyz = deserializeThisCPS [1,2,3,4,5] xyzf
 
 
-deserializeSize1 ::
+deserializeSing0 ::
     forall k vars r.
     (SingKind k, Serialize (Demote k)) =>
     [Word8] ->
-    (forall (size1 :: k). Interpret (Var VZ) vars ~ size1 => (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
+    (forall (size1 :: k). Interpret (Var VZ) vars ~ size1 => (Field (Kon (Sing :: k -> Type) :@: Var VZ) vars, [Word8]) -> r) ->
     r
-deserializeSize1 bs f =
+deserializeSing0 bs f =
     case deserialize bs of
         (FromSing (s :: Sing size1), bs') ->
             case unsafeCoerce (Dict @(size1 ~ size1)) :: Dict (Interpret (Var VZ) vars ~ size1) of  -- TODO: unsafeCoerce!!
                 Dict ->
-                    f @size1 (Field s, bs', Proxy)
+                    f @size1 (Field s, bs')
 
-deserializeSize2 ::
+deserializeSing1 ::
     forall k vars r.
     (SingKind k, Serialize (Demote k)) =>
     [Word8] ->
-    (forall (size2 :: k). Interpret (Var (VS VZ)) vars ~ size2 => (Field (Kon (Sing :: k -> Type) :@: Var (VS VZ)) vars, [Word8], Proxy vars) -> r) ->
+    (forall (size2 :: k). Interpret (Var (VS VZ)) vars ~ size2 => (Field (Kon (Sing :: k -> Type) :@: Var (VS VZ)) vars, [Word8]) -> r) ->
     r
-deserializeSize2 bs f =
+deserializeSing1 bs f =
     case deserialize bs of
         (FromSing (s :: Sing size2), bs') ->
             case unsafeCoerce (Dict @(size2 ~ size2)) :: Dict (Interpret (Var (VS VZ)) vars ~ size2) of  -- TODO: unsafeCoerce!!
                 Dict ->
-                    f @size2 (Field s, bs', Proxy)
+                    f @size2 (Field s, bs')
 
-deserializeArr1 :: forall vars. KnownNat (Interpret (Var VZ) vars) =>
+deserializeVector0 :: forall vars. SingI (Interpret (Var VZ) vars) =>
     forall r.
     [Word8] ->
-    ((Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8], Proxy vars) -> r) ->
+    ((Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8]) -> r) ->
     r
-deserializeArr1 bs f =
+deserializeVector0 bs f =
     case deserialize bs of
         (arr, bs') ->
-            f (Field arr, bs', Proxy)
+            f (Field arr, bs')
 
-deserializeArr2 :: forall vars. KnownNat (Interpret (Var (VS VZ)) vars) =>
+deserializeVector1 :: forall vars. SingI (Interpret (Var (VS VZ)) vars) =>
     forall r.
     [Word8] ->
-    ((Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8], Proxy vars) -> r) ->
+    ((Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8]) -> r) ->
     r
-deserializeArr2 bs f =
+deserializeVector1 bs f =
     case deserialize bs of
         (arr, bs') ->
-            f (Field arr, bs', Proxy)
+            f (Field arr, bs')
 
 nth :: forall (n :: Nat). KnownNat n => Demote Nat -> Vector Word8 n -> Maybe Word8
 nth _ Nil = Nothing
@@ -807,29 +807,29 @@ nth (FromSing (SNat :: Sing i)) (x :> xs :: Vector Word8 n) =
         Just Refl -> ifZeroElse @i (Just x) $ \(Proxy :: Proxy i') ->
             nth @(n - 1) (demote @i') xs \\ subNat @n @1 \\ addNonZero @n @1 \\ predecessor @n
 
-useDeserializeSize1 :: Demote Nat
-useDeserializeSize1 = deserializeSize1 @Nat [2, 2, 3, 4] $ \(Field s, bs, Proxy) -> FromSing s
-useDeserializeArr1 :: Maybe Word8
-useDeserializeArr1 = deserializeArr1 @(2 :&&: LoT0) [2, 3, 4] $ \(Field xs, bs, Proxy :: Proxy (2 :&&: LoT0)) -> nth 1 xs
+useDeserializeSing0 :: Demote Nat
+useDeserializeSing0 = deserializeSing0 @Nat [2, 2, 3, 4] $ \(Field s, bs) -> FromSing s
+useDeserializeVector0 :: Maybe Word8
+useDeserializeVector0 = deserializeVector0 @(2 :&&: LoT0) [2, 3, 4] $ \(Field xs, bs) -> nth 1 xs
 deserializeThisCPS
-    :: forall (vars :: LoT (Nat -> Nat -> xs)) r.
+    :: forall xs (vars :: LoT (Nat -> Nat -> xs)) r.
        [Word8]
     -> ( ( ( ( (Field (Kon Sing :@: Var VZ)                 :*: Field (Kon Sing :@: Var (VS VZ)))
              :*:
                (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)))
-             )
-             vars, [Word8], Proxy vars
+             ) vars
+           , [Word8]
            )
          -> r
          )
        )
     -> r
 deserializeThisCPS bs f =
-    deserializeSize1 @Nat @vars bs $ \(Field SNat, bs', Proxy :: Proxy vars) ->
-        deserializeSize2 @Nat @vars bs' $ \(Field SNat, bs'', Proxy :: Proxy vars) ->
-            deserializeArr1 @vars bs'' $ \(Field arr1, bs''', Proxy :: Proxy vars) ->
-                deserializeArr2 @vars bs''' $ \(Field arr2, bs'''', Proxy :: Proxy vars) ->
-                    f ((Field SNat :*: Field SNat) :*: (Field arr1 :*: Field arr2), bs'''', Proxy)
+    deserializeSing0 @Nat @vars bs $ \(a@(Field SNat), bs') ->
+        deserializeSing1 @Nat @vars bs' $ \(b@(Field SNat), bs'') ->
+            deserializeVector0 @vars bs'' $ \(c@(Field arr1), bs''') ->
+                deserializeVector1 @vars bs''' $ \(d@(Field arr2), bs'''') ->
+                    f ((a :*: b) :*: (c :*: d), bs'''')
 
 {-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
