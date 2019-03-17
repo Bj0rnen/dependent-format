@@ -839,6 +839,16 @@ deserializeSingVZTwice f bs =
                 deserializeVector @'VZ @vars (\(c, bs'''') ->
                     deserializeVector @('VS 'VZ) @vars (\(d, bs''''') ->
                         f ((a :*: b) :*: (c :*: d), bs''''')) bs'''') bs''') bs'') bs') bs
+
+class KDeserialize f vars where
+    kdeserialize :: forall r. ((f vars, [Word8]) -> r) -> [Word8] -> r
+instance (SingKind k, SDecide k, Serialize (Demote k), ConditionalSingI s (Interpret ('Var v) vars)) => KDeserialize (Field (Kon (Sing :: k -> Type) :@: Var v)) vars where
+    kdeserialize = deserializeSing @k @v @s @vars
+instance ConditionalSingI 'True (Interpret ('Var v) vars) => KDeserialize (Field (Kon Vector :@: Kon Word8 :@: Var v)) vars where
+    kdeserialize = deserializeVector @v @vars
+instance KDeserialize (f :*: g) vars where
+    kdeserialize = undefined  -- TODO: Any hope that this can be written?
+
 {-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type K.LoT0 '[]
