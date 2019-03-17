@@ -777,22 +777,12 @@ deserializeSing f bs =
                 Proved Refl -> withSingI s $ f (Field s, bs')
                 Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
 
-deserializeVector0 :: forall vars. ConditionalSingI 'True (Interpret (Var VZ) vars) =>
+deserializeVector :: forall v vars. ConditionalSingI 'True (Interpret (Var v) vars) =>
     forall r.
-    ((Field (Kon Vector :@: Kon Word8 :@: Var VZ) vars, [Word8]) -> r) ->
+    ((Field (Kon Vector :@: Kon Word8 :@: Var v) vars, [Word8]) -> r) ->
     [Word8] ->
     r
-deserializeVector0 f bs =
-    case deserialize bs of
-        (arr, bs') ->
-            f (Field arr, bs')
-
-deserializeVector1 :: forall vars. ConditionalSingI 'True (Interpret (Var (VS VZ)) vars) =>
-    forall r.
-    ((Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)) vars, [Word8]) -> r) ->
-    [Word8] ->
-    r
-deserializeVector1 f bs =
+deserializeVector f bs =
     case deserialize bs of
         (arr, bs') ->
             f (Field arr, bs')
@@ -808,9 +798,9 @@ nth (FromSing (SNat :: Sing i)) (x :> xs :: Vector Word8 n) =
 useDeserializeSing0 :: Demote Nat
 useDeserializeSing0 = deserializeSing @Nat @'VZ @'False (\(Field s, bs) -> FromSing s) [2, 2, 3, 4]
 useDeserializeVector0 :: Maybe Word8
-useDeserializeVector0 = deserializeVector0 @(2 :&&: LoT0) (\(Field xs, bs) -> nth 1 xs) [2, 3, 4]
+useDeserializeVector0 = deserializeVector @'VZ @(2 :&&: LoT0) (\(Field xs, bs) -> nth 1 xs) [2, 3, 4]
 deserializeThisCPS
-    :: forall xs (vars :: LoT (Nat -> Nat -> xs)) r.
+    :: forall vars r.
        ( ( ( ( (Field (Kon Sing :@: Var VZ)                 :*: Field (Kon Sing :@: Var (VS VZ)))
              :*:
                (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)))
@@ -825,12 +815,12 @@ deserializeThisCPS
 deserializeThisCPS f bs =
     deserializeSing @Nat @'VZ @'False @vars (\(a, bs') ->
         deserializeSing @Nat @('VS 'VZ) @'False @vars (\(b, bs'') ->
-            deserializeVector0 @vars (\(c, bs''') ->
-                deserializeVector1 @vars (\(d, bs'''') ->
+            deserializeVector @'VZ @vars (\(c, bs''') ->
+                deserializeVector @('VS 'VZ) @vars (\(d, bs'''') ->
                     f ((a :*: b) :*: (c :*: d), bs'''')) bs''') bs'') bs') bs
 
 deserializeSingVZTwice
-    :: forall xs (vars :: LoT (Nat -> Nat -> xs)) r.
+    :: forall vars r.
        ( ( ( ( (Field (Kon Sing :@: Var VZ)                 :*: Field (Kon Sing :@: Var (VS VZ)))
              :*:
                (Field (Kon Vector :@: Kon Word8 :@: Var VZ) :*: Field (Kon Vector :@: Kon Word8 :@: Var (VS VZ)))
@@ -846,8 +836,8 @@ deserializeSingVZTwice f bs =
     deserializeSing @Nat @'VZ @'False @vars (\(a, bs') ->
         deserializeSing @Nat @'VZ @'False @vars (\(a', bs'') ->  -- TODO: Ideally, @False shouldn't be allowed here.
             deserializeSing @Nat @('VS 'VZ) @'False @vars (\(b, bs''') ->
-                deserializeVector0 @vars (\(c, bs'''') ->
-                    deserializeVector1 @vars (\(d, bs''''') ->
+                deserializeVector @'VZ @vars (\(c, bs'''') ->
+                    deserializeVector @('VS 'VZ) @vars (\(d, bs''''') ->
                         f ((a :*: b) :*: (c :*: d), bs''''')) bs'''') bs''') bs'') bs') bs
 {-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
