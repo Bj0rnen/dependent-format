@@ -763,19 +763,56 @@ instance ()      => ConditionalSingI 'False a where
     type ConditionalSingIConstraint 'False a = ()
     maybeSameType (s :: Sing x) = Proved (unsafeCoerce Refl :: a :~: x)  -- TODO: unsafeCoerce!!
 
+class MaybeSingI (a :: k) where
+    maybeSameType' :: forall x. Sing x -> Decision (a :~: x)
+-- Here be dragons
+-- TODO: Plenty of unsafeCoerce here. Maybe unavoidable, but needs to be rigorously verified.
+newtype DI (a :: k) = Don'tInstantiate (MaybeSingI a => Dict (MaybeSingI a))
+noSingI :: forall k (a :: k). Dict (MaybeSingI a)
+noSingI = withMaybeSingI Dict
+    where
+        withMaybeSingI :: (MaybeSingI a => Dict (MaybeSingI a)) -> Dict (MaybeSingI a)
+        withMaybeSingI d = unsafeCoerce (Don'tInstantiate d) ((\(s :: Sing x) -> Proved (unsafeCoerce Refl :: a :~: x)) :: forall x. Sing x -> Decision (a :~: x))
+yesSingI :: forall k (a :: k). SDecide k => Sing a -> Dict (MaybeSingI a)
+yesSingI s = withMaybeSingI Dict
+    where
+        withMaybeSingI :: (MaybeSingI a => Dict (MaybeSingI a)) -> Dict (MaybeSingI a)
+        withMaybeSingI d = unsafeCoerce (Don'tInstantiate d) ((\x -> s %~ x) :: forall x. Sing x -> Decision (a :~: x))
+
 deserializeSing ::
-    forall k v s vars r.
-    ConditionalSingI s (Interpret (Var v) vars) =>
+    forall k v vars r.
+    MaybeSingI (Interpret (Var v) vars) =>
     (SingKind k, SDecide k, Serialize (Demote k)) =>
-    (ConditionalSingI 'True (Interpret (Var v) vars) => (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
+    (forall vars'. (SingI (Interpret (Var v) vars'), MaybeSingI (Interpret (Var v) vars'), vars ~ vars') => (Field (Kon (Sing :: k -> Type) :@: Var v) vars', [Word8], Proxy vars') -> r) ->
     [Word8] ->
     r
 deserializeSing f bs =
     case deserialize bs of
         (FromSing s, bs') ->
-            case maybeSameType @k @s @(Interpret (Var v) vars) s of
-                Proved Refl -> withSingI s $ f (Field s, bs')
+            case maybeSameType' @k @(Interpret (Var v) vars) s of
+                Proved Refl -> withDict (yesSingI @k @(Interpret (Var v) vars) s) $ withSingI s $ f @vars (Field s, bs', Proxy)
                 Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
+
+deserializeSing' ::
+    forall k v vars svars (ssvars :: LoT (Maybe (Sing (_ :: k)) -> svars)) r.
+    (SingKind k, SDecide k, Serialize (Demote k), Interpret ('Var 'VZ) ssvars ~ Maybe (Sing (Interpret (Var v) vars))) =>
+    LoT (k -> svars) ->
+    (LoT (Sing (Interpret (Var v) vars) -> Type) -> (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
+    [Word8] ->
+    r
+deserializeSing' (Nothing :&&: LoT0) f bs =
+    case deserialize bs of
+        (FromSing (s :: Sing x), bs') ->
+            case unsafeCoerce Refl :: (Interpret (Var v) vars) :~: x of
+                Refl ->
+                    f (s :&&: LoT0) (Field s, bs')
+deserializeSing' (Just a :&&: LoT0) f bs =
+    case deserialize bs of
+        (FromSing s, bs') ->
+            case a %~ s of
+                Proved Refl -> f (s :&&: LoT0) (Field s, bs')
+                Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
+
 
 deserializeVector :: forall v vars. ConditionalSingI 'True (Interpret (Var v) vars) =>
     forall r.
@@ -795,8 +832,14 @@ nth (FromSing (SNat :: Sing i)) (x :> xs :: Vector Word8 n) =
         Just Refl -> ifZeroElse @i (Just x) $ \(Proxy :: Proxy i') ->
             nth @(n - 1) (demote @i') xs \\ subNat @n @1 \\ addNonZero @n @1 \\ predecessor @n
 
-useDeserializeSing0 :: Demote Nat
-useDeserializeSing0 = deserializeSing @Nat @'VZ @'False (\(Field s, bs) -> FromSing s) [2, 2, 3, 4]
+useDeserializeSingNoSingI :: forall (vars :: LoT (Nat -> Type)). Demote Nat
+useDeserializeSingNoSingI = withDict (noSingI @Nat @(Interpret ('Var 'VZ) vars)) $ deserializeSing @Nat @'VZ @vars (\(Field s, bs, Proxy) -> FromSing s) [2, 2, 3, 4]
+useDeserializeSingYesSingIOK :: forall (vars :: LoT (Nat -> Type)). vars ~ (2 :&&: LoT0) => Demote Nat
+useDeserializeSingYesSingIOK = withDict (yesSingI @Nat @(Interpret ('Var 'VZ) vars) (SNat @2)) $ deserializeSing @Nat @'VZ @vars (\(Field s, bs, Proxy) -> FromSing s) [2, 2, 3, 4]
+useDeserializeSingYesSingIContradictory :: forall (vars :: LoT (Nat -> Type)). vars ~ (3 :&&: LoT0) => Demote Nat
+useDeserializeSingYesSingIContradictory = withDict (yesSingI @Nat @(Interpret ('Var 'VZ) vars) (SNat @3)) $ deserializeSing @Nat @'VZ @vars (\(Field s, bs, Proxy) -> FromSing s) [2, 2, 3, 4]
+
+
 useDeserializeVector0 :: Maybe Word8
 useDeserializeVector0 = deserializeVector @'VZ @(2 :&&: LoT0) (\(Field xs, bs) -> nth 1 xs) [2, 3, 4]
 deserializeThisCPS
@@ -813,10 +856,12 @@ deserializeThisCPS
     -> [Word8]
     -> r
 deserializeThisCPS f bs =
-    deserializeSing @Nat @'VZ @'False @vars (\(a, bs') ->
-        deserializeSing @Nat @('VS 'VZ) @'False @vars (\(b, bs'') ->
-            deserializeVector @'VZ @vars (\(c, bs''') ->
-                deserializeVector @('VS 'VZ) @vars (\(d, bs'''') ->
+    withDict (noSingI @Nat @(Interpret ('Var 'VZ) vars)) $
+    withDict (noSingI @Nat @(Interpret ('Var ('VS 'VZ)) vars)) $
+    deserializeSing @Nat @'VZ @vars (\(a, bs', Proxy :: Proxy vars') ->
+        deserializeSing @Nat @('VS 'VZ) @vars' (\(b, bs'', Proxy :: Proxy vars'') ->
+            deserializeVector @'VZ @vars'' (\(c, bs''') ->
+                deserializeVector @('VS 'VZ) @vars'' (\(d, bs'''') ->
                     f ((a :*: b) :*: (c :*: d), bs'''')) bs''') bs'') bs') bs
 
 deserializeSingVZTwice
@@ -833,21 +878,26 @@ deserializeSingVZTwice
     -> [Word8]
     -> r
 deserializeSingVZTwice f bs =
-    deserializeSing @Nat @'VZ @'False @vars (\(a, bs') ->
-        deserializeSing @Nat @'VZ @'False @vars (\(a', bs'') ->  -- TODO: Ideally, @False shouldn't be allowed here.
-            deserializeSing @Nat @('VS 'VZ) @'False @vars (\(b, bs''') ->
-                deserializeVector @'VZ @vars (\(c, bs'''') ->
-                    deserializeVector @('VS 'VZ) @vars (\(d, bs''''') ->
+    withDict (noSingI @Nat @(Interpret ('Var 'VZ) vars)) $
+    withDict (noSingI @Nat @(Interpret ('Var ('VS 'VZ)) vars)) $
+    deserializeSing @Nat @'VZ @vars (\(a, bs', Proxy :: Proxy vars') ->
+        deserializeSing @Nat @'VZ @vars' (\(a', bs'', Proxy :: Proxy vars'') ->
+            deserializeSing @Nat @('VS 'VZ) @vars'' (\(b, bs''', Proxy :: Proxy vars''') ->
+                deserializeVector @'VZ @vars''' (\(c, bs'''') ->
+                    deserializeVector @('VS 'VZ) @vars''' (\(d, bs''''') ->
                         f ((a :*: b) :*: (c :*: d), bs''''')) bs'''') bs''') bs'') bs') bs
 
-class KDeserialize f vars where
+
+class {-KDeserializeConstraint f vars =>-} KDeserialize f (vars :: LoT ks) where
+    --type KDeserializeConstraint f :: LoT ks -> Constraint
     kdeserialize :: forall r. ((f vars, [Word8]) -> r) -> [Word8] -> r
 instance (SingKind k, SDecide k, Serialize (Demote k), ConditionalSingI s (Interpret ('Var v) vars)) => KDeserialize (Field (Kon (Sing :: k -> Type) :@: Var v)) vars where
-    kdeserialize = deserializeSing @k @v @s @vars
-instance ConditionalSingI 'True (Interpret ('Var v) vars) => KDeserialize (Field (Kon Vector :@: Kon Word8 :@: Var v)) vars where
-    kdeserialize = deserializeVector @v @vars
-instance KDeserialize (f :*: g) vars where
-    kdeserialize = undefined  -- TODO: Any hope that this can be written?
+    --type KDeserializeConstraint (Field (Kon (Sing :: k -> Type) :@: Var v)) vars = ConditionalSingI s (Interpret ('Var v) vars)
+    --kdeserialize = deserializeSing @k @v @s @vars
+--instance ConditionalSingI 'True (Interpret ('Var v) vars) => KDeserialize (Field (Kon Vector :@: Kon Word8 :@: Var v)) vars where
+--    kdeserialize = deserializeVector @v @vars
+--instance KDeserialize (f :*: g) vars where
+--    kdeserialize = undefined  -- TODO: Any hope that this can be written?
 
 {-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
