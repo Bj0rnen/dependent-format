@@ -793,24 +793,42 @@ deserializeSing f bs =
                 Proved Refl -> withDict (yesSingI @k @(Interpret (Var v) vars) s) $ withSingI s $ f @vars (Field s, bs', Proxy)
                 Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
 
+data PartialSings :: Type -> [Bool] -> Type where
+    PartialSings0 ::                                        PartialSings Type '[]
+    MisSing       ::                  PartialSings ks bs -> PartialSings (k -> ks) ('False ': bs)
+    (:&&+:)       :: Sing (a :: k) -> PartialSings ks bs -> PartialSings (k -> ks) ('True  ': bs)
+
+type family InterpretPartialSings (t :: Atom ks k) (tys :: PartialSings ks bs) :: Maybe (Sing (a :: k))
+    where
+        InterpretPartialSings ('Var 'VZ) (t ':&&+: ts) = 'Just t
+        InterpretPartialSings ('Var ('VS v)) (t ':&&+: ts) = InterpretPartialSings ('Var v) ts
+        InterpretPartialSings ('Var 'VZ) (MisSing ts) = 'Nothing
+        InterpretPartialSings ('Var ('VS v)) (MisSing ts) = InterpretPartialSings ('Var v) ts
+        --InterpretPartialSings ('Kon t) tys = t
+        --InterpretPartialSings (f ':@: x) tys = InterpretPartialSings f tys (InterpretPartialSings x tys)
+        --InterpretPartialSings (c ':&: d2) tys = (InterpretPartialSings c tys, InterpretPartialSings d2 tys)
+        --InterpretPartialSings ('ForAll f) tys = ForAllI f tys
+        --InterpretPartialSings (c ':=>>: f) tys = SuchThatI c f tys
+
+
 deserializeSing' ::
-    forall k v vars svars (ssvars :: LoT (Maybe (Sing (_ :: k)) -> svars)) r.
-    (SingKind k, SDecide k, Serialize (Demote k), Interpret ('Var 'VZ) ssvars ~ Maybe (Sing (Interpret (Var v) vars))) =>
-    LoT (k -> svars) ->
-    (LoT (Sing (Interpret (Var v) vars) -> Type) -> (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
+    forall k v (vars :: LoT ks) bs r.
+    (SingKind k, SDecide k, Serialize (Demote k)) =>
+    PartialSings ks bs ->
+    (Sing (Interpret (Var v) vars) -> (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
     [Word8] ->
     r
-deserializeSing' (Nothing :&&: LoT0) f bs =
+deserializeSing' Nothing f bs =
     case deserialize bs of
         (FromSing (s :: Sing x), bs') ->
             case unsafeCoerce Refl :: (Interpret (Var v) vars) :~: x of
                 Refl ->
-                    f (s :&&: LoT0) (Field s, bs')
-deserializeSing' (Just a :&&: LoT0) f bs =
+                    f s (Field s, bs')
+deserializeSing' (Just a) f bs =
     case deserialize bs of
         (FromSing s, bs') ->
             case a %~ s of
-                Proved Refl -> f (s :&&: LoT0) (Field s, bs')
+                Proved Refl -> f s (Field s, bs')
                 Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
 
 
