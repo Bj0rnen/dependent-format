@@ -810,26 +810,48 @@ type family InterpretPartialSings (t :: Atom ks k) (tys :: PartialSings ks bs) :
         --InterpretPartialSings ('ForAll f) tys = ForAllI f tys
         --InterpretPartialSings (c ':=>>: f) tys = SuchThatI c f tys
 
-
-deserializeSing' ::
-    forall k v (vars :: LoT ks) bs r.
-    (SingKind k, SDecide k, Serialize (Demote k)) =>
-    PartialSings ks bs ->
-    (Sing (Interpret (Var v) vars) -> (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
-    [Word8] ->
-    r
-deserializeSing' Nothing f bs =
+data Conditional :: Bool -> Type -> Type where
+    None ::      Conditional 'False a
+    Some :: a -> Conditional 'True  a
+deserializeSing'
+    :: forall k i b vars.
+       (SingKind k, SDecide k, Serialize (Demote k))
+    => Conditional b (Sing (Interpret (Var i) vars))
+    -> [Word8]
+    -> (Field (Kon (Sing :: k -> Type) :@: Var i) vars, [Word8], Conditional 'True (Sing (Interpret (Var i) vars)))
+deserializeSing' None bs =
     case deserialize bs of
-        (FromSing (s :: Sing x), bs') ->
-            case unsafeCoerce Refl :: (Interpret (Var v) vars) :~: x of
+        (FromSing (x :: Sing x), bs') ->
+            case unsafeCoerce Refl :: (Interpret (Var i) vars) :~: x of
                 Refl ->
-                    f s (Field s, bs')
-deserializeSing' (Just a) f bs =
+                    (Field x, bs', Some x)
+deserializeSing' (Some a) bs =
     case deserialize bs of
-        (FromSing s, bs') ->
-            case a %~ s of
-                Proved Refl -> f s (Field s, bs')
+        (FromSing (x :: Sing x), bs') ->
+            case a %~ x of
+                Proved Refl -> (Field x, bs', Some a)
                 Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
+
+
+--deserializeSing' ::
+--    forall k v (vars :: LoT ks) bs r.
+--    (SingKind k, SDecide k, Serialize (Demote k)) =>
+--    PartialSings ks bs ->
+--    (Sing (Interpret (Var v) vars) -> (Field (Kon (Sing :: k -> Type) :@: Var v) vars, [Word8]) -> r) ->
+--    [Word8] ->
+--    r
+--deserializeSing' Nothing f bs =
+--    case deserialize bs of
+--        (FromSing (s :: Sing x), bs') ->
+--            case unsafeCoerce Refl :: (Interpret (Var v) vars) :~: x of
+--                Refl ->
+--                    f s (Field s, bs')
+--deserializeSing' (Just a) f bs =
+--    case deserialize bs of
+--        (FromSing s, bs') ->
+--            case a %~ s of
+--                Proved Refl -> f s (Field s, bs')
+--                Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
 
 
 deserializeVector :: forall v vars. ConditionalSingI 'True (Interpret (Var v) vars) =>
@@ -908,7 +930,7 @@ deserializeSingVZTwice f bs =
 
 class {-KDeserializeConstraint f vars =>-} KDeserialize f (vars :: LoT ks) where
     --type KDeserializeConstraint f :: LoT ks -> Constraint
-    kdeserialize :: forall r. ((f vars, [Word8]) -> r) -> [Word8] -> r
+    --kdeserialize :: forall r. ((f vars, [Word8]) -> r) -> [Word8] -> r
 instance (SingKind k, SDecide k, Serialize (Demote k), ConditionalSingI s (Interpret ('Var v) vars)) => KDeserialize (Field (Kon (Sing :: k -> Type) :@: Var v)) vars where
     --type KDeserializeConstraint (Field (Kon (Sing :: k -> Type) :@: Var v)) vars = ConditionalSingI s (Interpret ('Var v) vars)
     --kdeserialize = deserializeSing @k @v @s @vars
@@ -917,7 +939,7 @@ instance (SingKind k, SDecide k, Serialize (Demote k), ConditionalSingI s (Inter
 --instance KDeserialize (f :*: g) vars where
 --    kdeserialize = undefined  -- TODO: Any hope that this can be written?
 
-{-
+
 data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type K.LoT0 '[]
     ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x K.:&&: xs) (d ': ds)
@@ -931,18 +953,22 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) (ds :: [DepState]) :: [DepState]
     -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
     depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
-instance (SingKind a, Serialize (Demote a)) => DepKDeserializeK (GenericKWrapper (Sing :: a -> Type)) where
-    type TaughtByK (GenericKWrapper (Sing :: a -> Type)) '[ _] = '[ 'Known]
+
+-- TODO: Get rid of (v ~ 'VZ), of course!
+instance (SingKind k, Serialize (Demote k), v ~ 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) '[_] = '[ 'Known]
     depKDeserializeK (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) bs =
         case deserialize bs of
             (FromSing (s :: Sing (x :: a)), bs') ->
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper s :: GenericKWrapper (Sing :: a -> Type) (x K.:&&: K.LoT0)), bs')
+                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (Field s :: Field (Kon (Sing :: k -> Type) :@: Var v) (x K.:&&: K.LoT0)), bs')
+
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper Sing) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+    case depKDeserializeK @(Nat -> Type) @(Field (Kon Sing :@: Var 'VZ)) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (Field p), bs) ->
             show (p, bs)
 
+{-
 instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
     type TaughtByK (GenericKWrapper (Vector t)) '[ 'Known] = '[ 'Known]
     depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) bs =
@@ -2074,3 +2100,21 @@ type family
 data SomeRep2 (f :: G a -> G b -> Type) where
     SomeRep2 :: Sing a -> Sing b -> Rep (f ('G a) ('G b)) -> SomeRep2 f
 -}
+
+type family
+    Lookup (i :: Nat) (xs :: [a]) :: a where
+    Lookup 0 (a ': _ ) = a
+    Lookup i (_ ': as) = Lookup (i-1) as
+type family
+    Update (i :: Nat) (a :: k) (xs :: [k]) :: [k] where
+    Update 0 a (_ ': xs) = (a ': xs)
+    Update i a (x ': xs) = x ': Update (i-1) a xs
+
+lookupNP :: forall i ts. Sing i -> NP I ts -> Lookup i ts
+lookupNP SNat (I a :* as) =
+    ifZeroElse @i a (\(Proxy :: Proxy i1) -> unsafeCoerce $ lookupNP (sing @i1) as)
+updateNP :: forall i ts a. Sing i -> a -> NP I ts -> NP I (Update i a ts)
+updateNP SNat a (I x :* xs) =
+    ifZeroElse @i (I a :* xs) (\(Proxy :: Proxy i1) -> unsafeCoerce $ I x :* updateNP (sing @i1) a xs)
+
+--}--}--}--}--}--}
