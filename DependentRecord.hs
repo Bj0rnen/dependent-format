@@ -954,18 +954,18 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
     -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
     depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
 
--- TODO: Get rid of (v ~ 'VZ), of course!
-instance (SingKind k, Serialize (Demote k), v ~ 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
-    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) '[_] = '[ 'Known]
-    depKDeserializeK (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) bs =
+-- TODO: Get rid of (v ~ 'VS 'VZ), of course!
+instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) '[k1, _] = '[k1, 'Known]
+    depKDeserializeK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
         case deserialize bs of
-            (FromSing (s :: Sing (x :: a)), bs') ->
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (Field s :: Field (Kon (Sing :: k -> Type) :@: Var v) (x K.:&&: K.LoT0)), bs')
+            (FromSing (s :: Sing (x :: k)), bs') ->
+                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
 
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
-    case depKDeserializeK @(Nat -> Type) @(Field (Kon Sing :@: Var 'VZ)) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (Field p), bs) ->
+    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
             show (p, bs)
 
 {-
