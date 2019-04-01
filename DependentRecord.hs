@@ -940,27 +940,43 @@ instance (SingKind k, SDecide k, Serialize (Demote k), ConditionalSingI s (Inter
 --    kdeserialize = undefined  -- TODO: Any hope that this can be written?
 
 
-data ExplicitPartialKnowledge (ks :: Type) (xs :: K.LoT ks) (ds :: [DepState]) where
-    ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type K.LoT0 '[]
-    ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x K.:&&: xs) (d ': ds)
+data DepStateList d where
+    DZ :: DepStateList Type
+    DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
 
-data PartiallyKnownK (ks :: Type) (f :: K.LoT ks -> Type) (ds :: [DepState]) where
+type family
+    LearnIth (i :: TyVar d k) (as :: DepStateList d) :: DepStateList d where
+    LearnIth 'VZ ('DS _ as) = 'DS 'Known as
+    LearnIth ('VS i) ('DS a as) = 'DS a (LearnIth i as)
+
+data ExplicitPartialKnowledge (ks :: Type) (xs :: LoT ks) (ds :: DepStateList ks) where
+    ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type LoT0 'DZ
+    ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x :&&: xs) ('DS d ds)
+
+data PartiallyKnownK (ks :: Type) (f :: LoT ks -> Type) (ds :: DepStateList ks) where
     PartiallyKnownK :: ExplicitPartialKnowledge ks xs ds -> f xs -> PartiallyKnownK ks f ds
 --instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
 --    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
 --    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
+
 class DepKDeserializeK (f :: K.LoT ks -> Type) where
-    type TaughtByK (f :: K.LoT ks -> Type) (ds :: [DepState]) :: [DepState]
+    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
     -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
     depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
 
+
+learnIth :: forall d k (v :: TyVar d k) (a :: k) xs ds. Sing a -> ExplicitPartialKnowledge d xs ds -> ExplicitPartialKnowledge d xs (LearnIth v ds)
+learnIth = undefined
+
 -- TODO: Get rid of (v ~ 'VS 'VZ), of course!
 instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
-    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) '[k1, _] = '[k1, 'Known]
-    depKDeserializeK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
+    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = LearnIth v ds
+    depKDeserializeK ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
         case deserialize bs of
             (FromSing (s :: Sing (x :: k)), bs') ->
                 (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
+--              (PartiallyKnownK (learnIth @_ @k @v @x @xs @ds s ds :: ExplicitPartialKnowledge _ xs (LearnIth v ds)) (Field s), bs')
+
 
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
