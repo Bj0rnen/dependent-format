@@ -967,24 +967,31 @@ vectorToList :: Vector a n -> [a]
 vectorToList Nil = []
 vectorToList (a :> as) = a : vectorToList as
 
+class PartialKnowledgeToSomeSing (v :: TyVar ks k) (ds :: DepStateList ks) where
+    partialKnowledgeToSomeSing :: forall xs. ExplicitPartialKnowledge ks xs ds -> SomeSing k
+instance PartialKnowledgeToSomeSing 'VZ ('DS 'Known ds) where
+    partialKnowledgeToSomeSing a =
+        case a of
+            ExplicitPartialKnowledgeCons (KnowledgeK s) _ ->
+                SomeSing s
+instance PartialKnowledgeToSomeSing v ds => PartialKnowledgeToSomeSing ('VS (v :: TyVar ks k)) ('DS knwlg (ds :: DepStateList ks)) where
+    partialKnowledgeToSomeSing a =
+        case a of
+            ExplicitPartialKnowledgeCons _ knwlg ->
+                partialKnowledgeToSomeSing @ks @k @v knwlg
+
+partiallyKnownToSomeSing :: forall (v :: TyVar ks k) f ds. PartialKnowledgeToSomeSing v ds => PartiallyKnownK ks f ds -> SomeSing k
+partiallyKnownToSomeSing a =
+    case a of
+        PartiallyKnownK knowledge _ ->
+            partialKnowledgeToSomeSing @ks @k @v knowledge
+
+
 examplePartiallyKnownSingVar2 :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Sing :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Known 'DZ))
 examplePartiallyKnownSingVar2 = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil)) (Field (SNat @1337))
 
 examplePartiallyKnownSingVar2Unknown :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Sing :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Unknown 'DZ))
 examplePartiallyKnownSingVar2Unknown = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeU) ExplicitPartialKnowledgeNil)) (Field (SNat @1337))
-
-getKnownExampleSingNatural :: Natural
-getKnownExampleSingNatural =
-    case examplePartiallyKnownSingVar2 of
-        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) _ ->
-            natVal @n Proxy
-
-getUnknownExampleSingNatural :: Natural
-getUnknownExampleSingNatural =
-    case examplePartiallyKnownSingVar2Unknown of
-        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field s) ->
-            myDemote s
-
 
 examplePartiallyKnownVecVar2 :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Vector Word8 :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Known 'DZ))
 examplePartiallyKnownVecVar2 = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil)) (Field (0 :> 1 :> Nil))
@@ -992,17 +999,20 @@ examplePartiallyKnownVecVar2 = PartiallyKnownK (ExplicitPartialKnowledgeCons Kno
 examplePartiallyKnownVecVar2Unknown :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Vector Word8 :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Unknown 'DZ))
 examplePartiallyKnownVecVar2Unknown = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeU) ExplicitPartialKnowledgeNil)) (Field (0 :> 1 :> Nil))
 
-getKnownExampleList :: [Word8]
-getKnownExampleList =
-    case examplePartiallyKnownVecVar2 of
-        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) (Field v) ->
-            vectorToList v
+-- Can do:
+getKnownExampleSing :: SomeSing Nat
+getKnownExampleSing = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownSingVar2
 
-getUnknownExampleList :: [Word8]
-getUnknownExampleList =
-    case examplePartiallyKnownVecVar2Unknown of
-        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field v) ->
-            vectorToList v
+getKnownExampleVec :: SomeSing Nat
+getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownVecVar2
+
+-- Can't do:
+--getUnknownExampleSing :: SomeSing Nat
+--getUnknownExampleSing = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownSingVar2Unknown
+--
+--getUnknownExampleList :: SomeSing Nat
+--getUnknownExampleList = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownVecVar2Unknown
+
 
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
