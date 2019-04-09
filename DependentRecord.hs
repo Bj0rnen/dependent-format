@@ -959,30 +959,75 @@ data PartiallyKnownK (ks :: Type) (f :: LoT ks -> Type) (ds :: DepStateList ks) 
 --    type TaughtBy ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtBy r (TaughtBy l ds)
 --    depKDeserialize (PartialKnowledgeCons s PartialKnowledgeNil) bs = undefined
 
-class DepKDeserializeK (f :: K.LoT ks -> Type) where
-    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
-    -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
-    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
+
+myDemote :: forall k (a :: k). SingKind k => Sing a -> Demote k
+myDemote s = withSingI s (demote @a)
+
+vectorToList :: Vector a n -> [a]
+vectorToList Nil = []
+vectorToList (a :> as) = a : vectorToList as
+
+examplePartiallyKnownSingVar2 :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Sing :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Known 'DZ))
+examplePartiallyKnownSingVar2 = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil)) (Field (SNat @1337))
+
+examplePartiallyKnownSingVar2Unknown :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Sing :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Unknown 'DZ))
+examplePartiallyKnownSingVar2Unknown = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeU) ExplicitPartialKnowledgeNil)) (Field (SNat @1337))
+
+getKnownExampleSingNatural :: Natural
+getKnownExampleSingNatural =
+    case examplePartiallyKnownSingVar2 of
+        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) _ ->
+            natVal @n Proxy
+
+getUnknownExampleSingNatural :: Natural
+getUnknownExampleSingNatural =
+    case examplePartiallyKnownSingVar2Unknown of
+        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field s) ->
+            myDemote s
 
 
-learnIth :: forall d k (v :: TyVar d k) (a :: k) xs ds. Sing a -> ExplicitPartialKnowledge d xs ds -> ExplicitPartialKnowledge d xs (LearnIth v ds)
-learnIth = undefined
+examplePartiallyKnownVecVar2 :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Vector Word8 :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Known 'DZ))
+examplePartiallyKnownVecVar2 = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK SNat) ExplicitPartialKnowledgeNil)) (Field (0 :> 1 :> Nil))
 
--- TODO: Get rid of (v ~ 'VS 'VZ), of course!
-instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
-    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = LearnIth v ds
-    depKDeserializeK ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
-        case deserialize bs of
-            (FromSing (s :: Sing (x :: k)), bs') ->
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
---              (PartiallyKnownK (learnIth @_ @k @v @x @xs @ds s ds :: ExplicitPartialKnowledge _ xs (LearnIth v ds)) (Field s), bs')
+examplePartiallyKnownVecVar2Unknown :: PartiallyKnownK (k -> Nat -> Type) (Field (Kon (Vector Word8 :: Nat -> Type) :@: Var ('VS 'VZ))) ('DS 'Unknown ('DS 'Unknown 'DZ))
+examplePartiallyKnownVecVar2Unknown = PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeU) ExplicitPartialKnowledgeNil)) (Field (0 :> 1 :> Nil))
 
+getKnownExampleList :: [Word8]
+getKnownExampleList =
+    case examplePartiallyKnownVecVar2 of
+        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) (Field v) ->
+            vectorToList v
 
-trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
-trySingK =
-    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
-            show (p, bs)
+getUnknownExampleList :: [Word8]
+getUnknownExampleList =
+    case examplePartiallyKnownVecVar2Unknown of
+        PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field v) ->
+            vectorToList v
+
+--class DepKDeserializeK (f :: K.LoT ks -> Type) where
+--    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
+--    -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
+--    depKDeserializeK :: Proxy ks -> ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
+--
+--
+--learnIth :: forall ks k (v :: TyVar ks k) (a :: k) xs ds. Proxy ks -> Sing a -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge ks xs (LearnIth v ds)
+--learnIth = undefined
+--
+---- TODO: Get rid of (v ~ 'VS 'VZ), of course!
+--instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+--    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = LearnIth v ds
+--    depKDeserializeK p ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
+--        case deserialize bs of
+--            (FromSing (s :: Sing (x :: k)), bs') ->
+----                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
+--              (PartiallyKnownK (learnIth @_ @k @v @x p s ds) (Field s), bs')
+--
+--
+--trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
+--trySingK =
+--    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (Proxy @(Nat -> Nat -> Type)) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+--        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
+--            show (p, bs)
 
 {-
 instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
