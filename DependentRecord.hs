@@ -1016,6 +1016,7 @@ getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyK
 
 class MergePartialKnowledge (ds1 :: DepStateList ks) (ds2 :: DepStateList ks) where
     type MergedPartialKnowledge ds1 ds2 :: DepStateList ks
+    -- TODO: I bet using the same xs throughout will bite me.
     mergePartialKnowledge :: forall xs. ExplicitPartialKnowledge ks xs ds1 -> ExplicitPartialKnowledge ks xs ds2 -> ExplicitPartialKnowledge ks xs (MergedPartialKnowledge ds1 ds2)
 instance MergePartialKnowledge 'DZ 'DZ where
     type MergedPartialKnowledge 'DZ 'DZ = 'DZ
@@ -1036,8 +1037,8 @@ instance (SDecide k, MergePartialKnowledge ds1 ds2) => MergePartialKnowledge ('D
     type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
     mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ks2) =
         case s1 %~ s2 of
-            _ ->
-                ExplicitPartialKnowledgeCons (KnowledgeK s1) (mergePartialKnowledge ks1 ks2)
+            Proved Refl -> ExplicitPartialKnowledgeCons (KnowledgeK s1) (mergePartialKnowledge ks1 ks2)
+            Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
 
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
