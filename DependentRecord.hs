@@ -1032,7 +1032,7 @@ instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Unknown ds
     type MergedPartialKnowledge ('DS 'Unknown ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
     mergePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s) ks2) =
         ExplicitPartialKnowledgeCons (KnowledgeK s) (mergePartialKnowledge ks1 ks2)
-instance SDecide k => MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Known (ds1 :: DepStateList (k -> ks))) ('DS 'Known ds2) where
+instance (SDecide k, MergePartialKnowledge ds1 ds2) => MergePartialKnowledge ('DS 'Known ds1 :: DepStateList (k -> ks)) ('DS 'Known ds2) where
     type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
     mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ks2) =
         case s1 %~ s2 of
