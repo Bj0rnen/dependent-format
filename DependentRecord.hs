@@ -1014,6 +1014,31 @@ getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyK
 --getUnknownExampleList = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownVecVar2Unknown
 
 
+class MergePartialKnowledge (ds1 :: DepStateList ks) (ds2 :: DepStateList ks) where
+    type MergedPartialKnowledge ds1 ds2 :: DepStateList ks
+    mergePartialKnowledge :: forall xs. ExplicitPartialKnowledge ks xs ds1 -> ExplicitPartialKnowledge ks xs ds2 -> ExplicitPartialKnowledge ks xs (MergedPartialKnowledge ds1 ds2)
+instance MergePartialKnowledge 'DZ 'DZ where
+    type MergedPartialKnowledge 'DZ 'DZ = 'DZ
+    mergePartialKnowledge ExplicitPartialKnowledgeNil ExplicitPartialKnowledgeNil = ExplicitPartialKnowledgeNil
+instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Unknown ds1) ('DS 'Unknown ds2) where
+    type MergedPartialKnowledge ('DS 'Unknown ds1) ('DS 'Unknown ds2) = 'DS 'Unknown (MergedPartialKnowledge ds1 ds2)
+    mergePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1) (ExplicitPartialKnowledgeCons KnowledgeU ks2) =
+        ExplicitPartialKnowledgeCons KnowledgeU (mergePartialKnowledge ks1 ks2)
+instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Known ds1) ('DS 'Unknown ds2) where
+    type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Unknown ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
+    mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) ks1) (ExplicitPartialKnowledgeCons KnowledgeU ks2) =
+        ExplicitPartialKnowledgeCons (KnowledgeK s) (mergePartialKnowledge ks1 ks2)
+instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Unknown ds1) ('DS 'Known ds2) where
+    type MergedPartialKnowledge ('DS 'Unknown ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
+    mergePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s) ks2) =
+        ExplicitPartialKnowledgeCons (KnowledgeK s) (mergePartialKnowledge ks1 ks2)
+instance SDecide k => MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Known (ds1 :: DepStateList (k -> ks))) ('DS 'Known ds2) where
+    type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
+    mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ks2) =
+        case s1 %~ s2 of
+            _ ->
+                ExplicitPartialKnowledgeCons (KnowledgeK s1) (mergePartialKnowledge ks1 ks2)
+
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
 --    -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
