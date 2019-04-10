@@ -953,6 +953,9 @@ data ExplicitPartialKnowledge (ks :: Type) (xs :: LoT ks) (ds :: DepStateList ks
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type LoT0 'DZ
     ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x :&&: xs) ('DS d ds)
 
+data SomePartialKnowledge (ks :: Type) (ds :: DepStateList ks) where
+    SomePartialKnowledge :: ExplicitPartialKnowledge ks xs ds -> SomePartialKnowledge ks ds
+
 data PartiallyKnownK (ks :: Type) (f :: LoT ks -> Type) (ds :: DepStateList ks) where
     PartiallyKnownK :: ExplicitPartialKnowledge ks xs ds -> f xs -> PartiallyKnownK ks f ds
 --instance DepKDeserialize ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
@@ -1052,14 +1055,17 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
 -- TODO: Get rid of (v ~ 'VS 'VZ), of course!
 instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) = 'DS 'Unknown ('DS 'Known 'DZ)
-    depKDeserializeK p ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil)) bs =
+    depKDeserializeK p ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds) bs =
         case deserialize bs of
             (FromSing (s :: Sing (s :: k)), bs') ->
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
+                let newKnowledge =
+                        ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))
+                    --merged = mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge
+                in
+--                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
+                            undefined
 --                (PartiallyKnownK
---                    (mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ))
---                        ds
---                        (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)))
+--                    (mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge)
 --                    (Field s), bs')
 
 
