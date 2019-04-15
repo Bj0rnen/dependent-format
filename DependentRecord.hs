@@ -944,11 +944,6 @@ data DepStateList d where
     DZ :: DepStateList Type
     DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
 
-type family
-    LearnIth (i :: TyVar d k) (as :: DepStateList d) :: DepStateList d where
-    LearnIth 'VZ ('DS _ as) = 'DS 'Known as
-    LearnIth ('VS i) ('DS a as) = 'DS a (LearnIth i as)
-
 data ExplicitPartialKnowledge (ks :: Type) (xs :: LoT ks) (ds :: DepStateList ks) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge Type LoT0 'DZ
     ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge (a -> ks) (x :&&: xs) ('DS d ds)
@@ -1017,6 +1012,35 @@ getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyK
 --getUnknownExampleList = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownVecVar2Unknown
 
 
+type family
+    LearnVth (v :: TyVar ks k) (as :: DepStateList ks) :: DepStateList ks where
+    LearnVth 'VZ ('DS _ as) = 'DS 'Known as
+    LearnVth ('VS v) ('DS a as) = 'DS a (LearnVth v as)
+
+class LearningVth (v :: TyVar ks k) where
+    learnVth :: forall (a :: k) (xs :: LoT ks) (ds :: DepStateList ks). Sing a -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge ks xs (LearnVth v ds)
+instance LearningVth 'VZ where
+    learnVth s (ExplicitPartialKnowledgeCons k epks) = ExplicitPartialKnowledgeCons (KnowledgeK s) epks
+
+--class DepKDeserializeK (f :: K.LoT ks -> Type) where
+--    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
+--    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
+--
+--instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
+--    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) ('DS k1 ('DS k2 'DZ)) = 'DS k1 ('DS 'Known 'DZ)
+--    depKDeserializeK ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds) bs =
+--        case deserialize bs of
+--            (FromSing (s :: Sing (s :: k)), bs') ->
+--                --case unsafeCoerce (Refl @xs) :: xs :~: (w ':&&: (s ':&&: 'LoT0)) of
+--                --    Refl ->
+--                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
+--
+--trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
+--trySingK =
+--    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+--        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
+--            show (p, bs)
+
 class MergePartialKnowledge (ds1 :: DepStateList ks) (ds2 :: DepStateList ks) where
     type MergedPartialKnowledge ds1 ds2 :: DepStateList ks
     -- TODO: I bet using the same xs throughout will bite me.
@@ -1048,10 +1072,6 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
     -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
     depKDeserializeK :: MergePartialKnowledge ds (TaughtByK f) => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (MergedPartialKnowledge ds (TaughtByK f)), [Word8])
 
-
---learnIth :: forall ks k (v :: TyVar ks k) (a :: k) xs ds. Proxy ks -> Sing a -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge ks xs (LearnIth v ds)
---learnIth = undefined
---
 -- TODO: Get rid of (v ~ 'VS 'VZ), of course!
 instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) = 'DS 'Unknown ('DS 'Known 'DZ)
