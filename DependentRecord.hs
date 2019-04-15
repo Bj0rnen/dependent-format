@@ -1046,7 +1046,7 @@ instance (SDecide k, MergePartialKnowledge ds1 ds2) => MergePartialKnowledge ('D
 class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) :: DepStateList ks
     -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
-    depKDeserializeK :: MergePartialKnowledge ds (TaughtByK f) => Proxy ks -> ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (MergedPartialKnowledge ds (TaughtByK f)), [Word8])
+    depKDeserializeK :: MergePartialKnowledge ds (TaughtByK f) => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (MergedPartialKnowledge ds (TaughtByK f)), [Word8])
 
 
 --learnIth :: forall ks k (v :: TyVar ks k) (a :: k) xs ds. Proxy ks -> Sing a -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge ks xs (LearnIth v ds)
@@ -1055,25 +1055,25 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
 -- TODO: Get rid of (v ~ 'VS 'VZ), of course!
 instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) = 'DS 'Unknown ('DS 'Known 'DZ)
-    depKDeserializeK p ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds) bs =
+    depKDeserializeK ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds) bs =
         case deserialize bs of
             (FromSing (s :: Sing (s :: k)), bs') ->
-                let newKnowledge =
-                        ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))
+                case ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) of
+                    (newKnowledge :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))) ->
                     --merged = mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge
-                in
+                        case unsafeCoerce (Refl @xs) :: xs :~: (w ':&&: (s ':&&: 'LoT0)) of
+                            Refl ->
 --                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
-                            undefined
---                (PartiallyKnownK
---                    (mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge)
---                    (Field s), bs')
+                                (PartiallyKnownK
+                                    (mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge)
+                                    (Field s), bs')
 
 
---trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
---trySingK =
---    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (Proxy @(Nat -> Nat -> Type)) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
---        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
---            show (p, bs)
+trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
+trySingK =
+    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
+            show (p, bs)
 
 {-
 instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
