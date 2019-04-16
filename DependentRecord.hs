@@ -618,12 +618,12 @@ testDeserializeSomeDep2SingSize1 = deserializeSomeDep2 [0, 1, 2, 3]
 --data Knowledge :: DepState -> a -> Type where
 --    KnowledgeU :: Knowledge 'Unknown x
 --    KnowledgeK :: Sing (x :: a) -> Knowledge 'Known x
-data PartialKnowledge (ks :: Type) (ds :: [DepState]) where
-    PartialKnowledgeNil  :: PartialKnowledge Type '[]
-    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) (d ': ds)
-data PartiallyKnown (ks :: Type) (f :: ks) (ds :: [DepState]) where
-    PartiallyKnownNil  :: f -> PartiallyKnown Type f '[]
-    PartiallyKnownCons :: Knowledge d (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f (d ': ds)
+--data PartialKnowledge (ks :: Type) (ds :: [DepState]) where
+--    PartialKnowledgeNil  :: PartialKnowledge Type '[]
+--    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) (d ': ds)
+--data PartiallyKnown (ks :: Type) (f :: ks) (ds :: [DepState]) where
+--    PartiallyKnownNil  :: f -> PartiallyKnown Type f '[]
+--    PartiallyKnownCons :: Knowledge d (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f (d ': ds)
 --instance Show f => Show (PartiallyKnown Type f ds)
 --instance (forall x. Show (PartiallyKnown ks (f x) ds), forall (x :: a). Show (Sing x)) => Show (PartiallyKnown (a -> ks) f ds)
 
@@ -1012,15 +1012,51 @@ getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyK
 --getUnknownExampleList = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyKnownVecVar2Unknown
 
 
-type family
-    LearnVth (v :: TyVar ks k) (as :: DepStateList ks) :: DepStateList ks where
-    LearnVth 'VZ ('DS _ as) = 'DS 'Known as
-    LearnVth ('VS v) ('DS a as) = 'DS a (LearnVth v as)
+-- This works btw.
+--type family
+--    LearnVth (v :: TyVar ks k) (as :: DepStateList ks) :: DepStateList ks where
+--    LearnVth 'VZ ('DS _ as) = 'DS 'Known as
+--    LearnVth ('VS v) ('DS a as) = 'DS a (LearnVth v as)
+--class LearningVth (v :: TyVar ks k) where
+--    learnVth :: forall (a :: k) (xs :: LoT ks) (ds :: DepStateList ks). Sing a -> SomePartialKnowledge ks ds -> SomePartialKnowledge ks (LearnVth v ds)
+--instance LearningVth 'VZ where
+--    learnVth s (SomePartialKnowledge (ExplicitPartialKnowledgeCons k epks)) = SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) epks)
+--instance LearningVth v => LearningVth ('VS v) where
+--    learnVth s (SomePartialKnowledge (ExplicitPartialKnowledgeCons k epks)) =
+--        case learnVth @_ @_ @v s (SomePartialKnowledge epks) of
+--            SomePartialKnowledge learned ->
+--                SomePartialKnowledge (ExplicitPartialKnowledgeCons k learned)
 
+type family
+    FillUnkowns (ks :: Type) :: DepStateList ks where
+    FillUnkowns Type = 'DZ
+    FillUnkowns (k -> ks) = 'DS 'Unknown (FillUnkowns ks)
+class FillingUnknowns (ks :: Type) where
+    fillUnkowns :: SomePartialKnowledge ks (FillUnkowns ks)
+instance FillingUnknowns Type where
+    fillUnkowns = SomePartialKnowledge ExplicitPartialKnowledgeNil
+instance FillingUnknowns ks => FillingUnknowns (k -> ks) where
+    fillUnkowns =
+        case fillUnkowns of
+            SomePartialKnowledge filled ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU filled)
+
+type family
+    LearnVth (v :: TyVar ks k) :: DepStateList ks where
+    LearnVth ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
+    LearnVth ('VS v) = 'DS 'Unknown (LearnVth v)
 class LearningVth (v :: TyVar ks k) where
-    learnVth :: forall (a :: k) (xs :: LoT ks) (ds :: DepStateList ks). Sing a -> ExplicitPartialKnowledge ks xs ds -> ExplicitPartialKnowledge ks xs (LearnVth v ds)
-instance LearningVth 'VZ where
-    learnVth s (ExplicitPartialKnowledgeCons k epks) = ExplicitPartialKnowledgeCons (KnowledgeK s) epks
+    learnVth :: forall (a :: k). Sing a -> SomePartialKnowledge ks (LearnVth v)
+instance FillingUnknowns ks => LearningVth ('VZ :: TyVar (k -> ks) k) where
+    learnVth s =
+        case fillUnkowns of
+            SomePartialKnowledge filled ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) filled)
+instance LearningVth v => LearningVth ('VS v) where
+    learnVth s =
+        case learnVth @_ @_ @v s of
+            SomePartialKnowledge learned ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
 
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
@@ -1043,71 +1079,84 @@ instance LearningVth 'VZ where
 
 class MergePartialKnowledge (ds1 :: DepStateList ks) (ds2 :: DepStateList ks) where
     type MergedPartialKnowledge ds1 ds2 :: DepStateList ks
-    -- TODO: I bet using the same xs throughout will bite me.
-    mergePartialKnowledge :: forall xs. ExplicitPartialKnowledge ks xs ds1 -> ExplicitPartialKnowledge ks xs ds2 -> ExplicitPartialKnowledge ks xs (MergedPartialKnowledge ds1 ds2)
+    mergePartialKnowledge :: SomePartialKnowledge ks ds1 -> SomePartialKnowledge ks ds2 -> SomePartialKnowledge ks (MergedPartialKnowledge ds1 ds2)
 instance MergePartialKnowledge 'DZ 'DZ where
     type MergedPartialKnowledge 'DZ 'DZ = 'DZ
-    mergePartialKnowledge ExplicitPartialKnowledgeNil ExplicitPartialKnowledgeNil = ExplicitPartialKnowledgeNil
+    mergePartialKnowledge (SomePartialKnowledge ExplicitPartialKnowledgeNil) (SomePartialKnowledge ExplicitPartialKnowledgeNil) = SomePartialKnowledge ExplicitPartialKnowledgeNil
 instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Unknown ds1) ('DS 'Unknown ds2) where
     type MergedPartialKnowledge ('DS 'Unknown ds1) ('DS 'Unknown ds2) = 'DS 'Unknown (MergedPartialKnowledge ds1 ds2)
-    mergePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1) (ExplicitPartialKnowledgeCons KnowledgeU ks2) =
-        ExplicitPartialKnowledgeCons KnowledgeU (mergePartialKnowledge ks1 ks2)
+    mergePartialKnowledge (SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1)) (SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks2)) =
+        case mergePartialKnowledge (SomePartialKnowledge ks1) (SomePartialKnowledge ks2) of
+            SomePartialKnowledge merged -> SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU merged)
 instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Known ds1) ('DS 'Unknown ds2) where
     type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Unknown ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
-    mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) ks1) (ExplicitPartialKnowledgeCons KnowledgeU ks2) =
-        ExplicitPartialKnowledgeCons (KnowledgeK s) (mergePartialKnowledge ks1 ks2)
+    mergePartialKnowledge (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) ks1)) (SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks2)) =
+        case mergePartialKnowledge (SomePartialKnowledge ks1) (SomePartialKnowledge ks2) of
+            SomePartialKnowledge merged -> SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) merged)
 instance MergePartialKnowledge ds1 ds2 => MergePartialKnowledge ('DS 'Unknown ds1) ('DS 'Known ds2) where
     type MergedPartialKnowledge ('DS 'Unknown ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
-    mergePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s) ks2) =
-        ExplicitPartialKnowledgeCons (KnowledgeK s) (mergePartialKnowledge ks1 ks2)
+    mergePartialKnowledge (SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU ks1)) (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) ks2)) =
+        case mergePartialKnowledge (SomePartialKnowledge ks1) (SomePartialKnowledge ks2) of
+            SomePartialKnowledge merged -> SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) merged)
 instance (SDecide k, MergePartialKnowledge ds1 ds2) => MergePartialKnowledge ('DS 'Known ds1 :: DepStateList (k -> ks)) ('DS 'Known ds2) where
     type MergedPartialKnowledge ('DS 'Known ds1) ('DS 'Known ds2) = 'DS 'Known (MergedPartialKnowledge ds1 ds2)
-    mergePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) ks1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ks2) =
+    mergePartialKnowledge (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) ks1)) (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s2) ks2)) =
         case s1 %~ s2 of
-            Proved Refl -> ExplicitPartialKnowledgeCons (KnowledgeK s1) (mergePartialKnowledge ks1 ks2)
+            Proved Refl ->
+                case mergePartialKnowledge (SomePartialKnowledge ks1) (SomePartialKnowledge ks2) of
+                    SomePartialKnowledge merged -> SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s1) merged)
             Disproved r -> error "Learned something contradictory"  -- Or: error ("((Sing) Refuted: " ++ show (withSingI (sing @(Interpret (Var VZ) vars)) $ demote @(Interpret (Var VZ) vars)) ++ " %~ " ++ show (withSingI s $ demote @size1) ++ ")")
+
+--data PartialKnowledge (ks :: Type) (ds :: DepStateList ks) where
+--    PartialKnowledgeNil  :: PartialKnowledge Type 'DZ
+--    PartialKnowledgeCons :: Knowledge d (x :: a) -> PartialKnowledge ks ds -> PartialKnowledge (a -> ks) ('DS d ds)
+--data PartiallyKnown (ks :: Type) (f :: ks) (ds :: DepStateList ks) where
+--    PartiallyKnownNil  :: f -> PartiallyKnown Type f 'DZ
+--    PartiallyKnownCons :: Knowledge d (x :: a) -> PartiallyKnown ks (f x) ds -> PartiallyKnown (a -> ks) f ('DS d ds)
+
+
+mergePartiallyKnowns :: MergePartialKnowledge ds1 ds2 => PartiallyKnownK ks f ds1 -> PartiallyKnownK ks g ds2 -> PartiallyKnownK ks (f :*: g) (MergedPartialKnowledge ds1 ds2)
+mergePartiallyKnowns (PartiallyKnownK ds1 a) (PartiallyKnownK ds2 b) =
+    case mergePartialKnowledge (SomePartialKnowledge ds1) (SomePartialKnowledge ds2) of
+        SomePartialKnowledge merged -> PartiallyKnownK merged (unsafeCoerce a :*: unsafeCoerce b)  -- hmmm...
 
 class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) :: DepStateList ks
-    -- TODO: Could xs go into PartiallyKnownK too? Making it ExplicitPartiallyKnown. Existentializing maybe necessary in output type...?
-    depKDeserializeK :: MergePartialKnowledge ds (TaughtByK f) => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (MergedPartialKnowledge ds (TaughtByK f)), [Word8])
+    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f), [Word8])
 
 -- TODO: Get rid of (v ~ 'VS 'VZ), of course!
 instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) = 'DS 'Unknown ('DS 'Known 'DZ)
-    depKDeserializeK ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds) bs =
+    depKDeserializeK _{-ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds)-} bs =
         case deserialize bs of
             (FromSing (s :: Sing (s :: k)), bs') ->
-                case ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) of
-                    (newKnowledge :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))) ->
-                    --merged = mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge
-                        case unsafeCoerce (Refl @xs) :: xs :~: (w ':&&: (s ':&&: 'LoT0)) of
-                            Refl ->
---                (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field s), bs')
-                                (PartiallyKnownK
-                                    (mergePartialKnowledge @(x -> k -> Type) @ds @('DS 'Unknown ('DS 'Known 'DZ)) ds newKnowledge)
-                                    (Field s), bs')
-
-
+                --case ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) of
+                --    (newKnowledge :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))) ->
+                case learnVth @_ @_ @v s of
+                    SomePartialKnowledge newKnowledge ->
+                        (PartiallyKnownK newKnowledge (Field (unsafeCoerce s)), bs')  -- hmmm...
 trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
 trySingK =
     case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
         (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
             show (p, bs)
 
-{-
-instance Serialize t => DepKDeserializeK (GenericKWrapper (Vector t)) where
-    type TaughtByK (GenericKWrapper (Vector t)) '[ 'Known] = '[ 'Known]
-    depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) bs =
-        case deserialize @(Vector t x) bs of
+-- TODO: Expected incoming knowledge is not expressed on the type level??
+instance (Serialize t, v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) where
+    type TaughtByK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) = 'DS 'Unknown ('DS 'Unknown 'DZ)
+    depKDeserializeK ds@(ExplicitPartialKnowledgeCons _ (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) bs =
+        case deserialize @(Vector t n) bs of
             (a, bs') ->
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing x)) ExplicitPartialKnowledgeNil) (GenericKWrapper a), bs')
+                --case fillUnkowns of
+                --    SomePartialKnowledge filled ->
+                --        (PartiallyKnownK filled (Field a), bs')
+                (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field a), bs')
 tryVectorK :: String
 tryVectorK =
-    case depKDeserializeK @(Nat -> Type) @(GenericKWrapper (Vector Word8)) (ExplicitPartialKnowledgeCons (KnowledgeK (SNat @2)) ExplicitPartialKnowledgeNil) [2,3,4] of
-        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) (GenericKWrapper p), bs) ->
+    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon (Vector Word8) :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat @2)) ExplicitPartialKnowledgeNil)) [2,3,4] of
+        (PartiallyKnownK _ (Field p), bs) ->
             show (p, bs)
-
+{-
 instance (DepKDeserializeK l, DepKDeserializeK r) => DepKDeserializeK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
     type TaughtByK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = TaughtByK r (TaughtByK l ds)
 
