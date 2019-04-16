@@ -1124,19 +1124,21 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) :: DepStateList ks
     depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f), [Word8])
 
--- TODO: Get rid of (v ~ 'VS 'VZ), of course!
-instance (SingKind k, Serialize (Demote k), v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) where
-    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var (v :: TyVar (x -> k -> Type) k))) = 'DS 'Unknown ('DS 'Known 'DZ)
-    depKDeserializeK _{-ds@(ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons _ ExplicitPartialKnowledgeNil) :: ExplicitPartialKnowledge (x -> k -> Type) xs ds)-} bs =
+instance (SingKind k, Serialize (Demote k), LearningVth v) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) = LearnVth v
+    depKDeserializeK _ bs =
         case deserialize bs of
             (FromSing (s :: Sing (s :: k)), bs') ->
-                --case ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil) of
-                --    (newKnowledge :: ExplicitPartialKnowledge (x -> k -> Type) (w ':&&: (s ':&&: 'LoT0)) ('DS 'Unknown ('DS 'Known 'DZ))) ->
                 case learnVth @_ @_ @v s of
                     SomePartialKnowledge newKnowledge ->
                         (PartiallyKnownK newKnowledge (Field (unsafeCoerce s)), bs')  -- hmmm...
-trySingK :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
-trySingK =
+trySingK1 :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
+trySingK1 =
+    case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var 'VZ)) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+        (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s) (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field p), bs) ->
+            show (p, bs)
+trySingK2 :: String  -- Why is annotation neccessary? Why are you doing this, type families!!?!??
+trySingK2 =
     case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon Sing :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
         (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK s) ExplicitPartialKnowledgeNil)) (Field p), bs) ->
             show (p, bs)
