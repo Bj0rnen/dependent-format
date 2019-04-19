@@ -1058,6 +1058,17 @@ instance LearningVth v => LearningVth ('VS v) where
             SomePartialKnowledge learned ->
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
 
+type family
+    GetVthDepState (v :: TyVar ks k) (ds :: DepStateList ks) :: DepState where
+    GetVthDepState 'VZ ('DS d _) = d
+    GetVthDepState ('VS v) ('DS _ ds) = GetVthDepState v ds
+class GettingVth (v :: TyVar ks k) where
+    getVth :: forall ds. GetVthDepState v ds ~ 'Known => SomePartialKnowledge ks ds -> SomeSing k
+instance GettingVth 'VZ where
+    getVth (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) _)) = SomeSing s
+instance GettingVth v => GettingVth ('VS v) where
+    getVth (SomePartialKnowledge (ExplicitPartialKnowledgeCons _ ks)) = getVth @_ @_ @v (SomePartialKnowledge ks)
+
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
 --    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f ds), [Word8])
@@ -1121,10 +1132,12 @@ mergePartiallyKnowns (PartiallyKnownK ds1 a) (PartiallyKnownK ds2 b) =
         SomePartialKnowledge merged -> PartiallyKnownK merged (unsafeCoerce a :*: unsafeCoerce b)  -- hmmm...
 
 class DepKDeserializeK (f :: K.LoT ks -> Type) where
+    type DepStateRequirements (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: Constraint
     type TaughtByK (f :: K.LoT ks -> Type) :: DepStateList ks
-    depKDeserializeK :: ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f), [Word8])
+    depKDeserializeK :: DepStateRequirements f ds => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f), [Word8])
 
 instance (SingKind k, Serialize (Demote k), LearningVth v) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+    type DepStateRequirements (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = ()
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) = LearnVth v
     depKDeserializeK _ bs =
         case deserialize bs of
@@ -1144,15 +1157,19 @@ trySingK2 =
             show (p, bs)
 
 -- TODO: Expected incoming knowledge is not expressed on the type level??
-instance (Serialize t, v ~ 'VS 'VZ) => DepKDeserializeK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) where
+instance (Serialize t, v ~ 'VS 'VZ{-, GettingVth v ds-}) => DepKDeserializeK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) where
+    type DepStateRequirements (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) ds = GetVthDepState v ds ~ 'Known
     type TaughtByK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar (x -> Nat -> Type) Nat))) = 'DS 'Unknown ('DS 'Unknown 'DZ)
-    depKDeserializeK ds@(ExplicitPartialKnowledgeCons _ (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) bs =
-        case deserialize @(Vector t n) bs of
-            (a, bs') ->
-                --case fillUnkowns of
-                --    SomePartialKnowledge filled ->
-                --        (PartiallyKnownK filled (Field a), bs')
-                (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field a), bs')
+    --depKDeserializeK ds@(ExplicitPartialKnowledgeCons _ (ExplicitPartialKnowledgeCons (KnowledgeK (SNat :: Sing n)) ExplicitPartialKnowledgeNil)) bs =
+    depKDeserializeK ds bs =
+        case getVth @_ @_ @v (SomePartialKnowledge ds) of
+            SomeSing (SNat :: Sing n) ->
+                case deserialize @(Vector t n) bs of
+                    (a, bs') ->
+                        --case fillUnkowns of
+                        --    SomePartialKnowledge filled ->
+                        --        (PartiallyKnownK filled (Field a), bs')
+                        (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (Field a), bs')
 tryVectorK :: String
 tryVectorK =
     case depKDeserializeK @(Nat -> Nat -> Type) @(Field (Kon (Vector Word8) :@: Var ('VS 'VZ))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons (KnowledgeK (SNat @2)) ExplicitPartialKnowledgeNil)) [2,3,4] of
