@@ -1193,9 +1193,13 @@ shouldFailAgain =
     case depKDeserializeK @(Nat -> Nat -> Type) @((Field (Kon Sing :@: Var ('VS 'VZ))) :*: (Field (Kon Sing :@: Var ('VS 'VZ)))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
         (PartiallyKnownK _ (Field sng1 K.:*: Field sng2), bs) ->
             show (sng1, sng2, bs)
-
-
-
+tryThis :: String
+tryThis =  -- TODO: I think this shouldn't be a problem
+    case depKDeserializeK @(Nat -> Nat -> Type) @(( (Field (Kon Sing           :@: Var VZ) :*: Field (Kon Sing           :@: Var (VS VZ)))
+                                                   :*:
+                                                    (Field (Kon (Vector Word8) :@: Var VZ) :*: Field (Kon (Vector Word8) :@: Var (VS VZ)))))
+            (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
+        (PartiallyKnownK _ ((Field s1 :*: Field s2) :*: (Field v1 :*: v2)), bs) -> undefined
 
 
 
