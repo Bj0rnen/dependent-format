@@ -1174,15 +1174,21 @@ tryVectorK =
             show (p, bs)
 
 instance (DepKDeserializeK l, DepKDeserializeK r, MergePartialKnowledge (TaughtByK l) (TaughtByK r)) => DepKDeserializeK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
-    type DepStateRequirements ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds = (DepStateRequirements l ds, DepStateRequirements r (TaughtByK l))  -- maybe...
+    type DepStateRequirements ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds =
+        ( MergePartialKnowledge ds (TaughtByK l)
+        , DepStateRequirements l ds
+        , DepStateRequirements r (ds `MergedPartialKnowledge` TaughtByK l)
+        )
     type TaughtByK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) = TaughtByK l `MergedPartialKnowledge` TaughtByK r
 
     depKDeserializeK (ks :: ExplicitPartialKnowledge ks xs ds) bs =
         case depKDeserializeK @ks @l ks bs of
             (pk1@(PartiallyKnownK (ks' :: ExplicitPartialKnowledge ks xs' (TaughtByK l)) l), bs') ->
-                case depKDeserializeK @ks @r ks' bs' of
-                    (pk2@(PartiallyKnownK (ks'' :: ExplicitPartialKnowledge ks xs'' (TaughtByK r)) r), bs'') ->
-                        (mergePartiallyKnowns pk1 pk2, bs'')
+                case SomePartialKnowledge ks `mergePartialKnowledge` SomePartialKnowledge ks' of
+                    SomePartialKnowledge merged ->
+                        case depKDeserializeK @ks @r merged bs' of
+                            (pk2@(PartiallyKnownK (ks'' :: ExplicitPartialKnowledge ks xs'' (TaughtByK r)) r), bs'') ->
+                                (mergePartiallyKnowns pk1 pk2, bs'')
 tryItAgain :: String
 tryItAgain =
     case depKDeserializeK @(Nat -> Nat -> Type) @((Field (Kon Sing :@: Var ('VS 'VZ))) :*: (Field (Kon (Vector Word8) :@: Var ('VS 'VZ)))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
@@ -1198,8 +1204,8 @@ tryThis =  -- TODO: I think this shouldn't be a problem
     case depKDeserializeK @(Nat -> Nat -> Type) @(( (Field (Kon Sing           :@: Var VZ) :*: Field (Kon Sing           :@: Var (VS VZ)))
                                                    :*:
                                                     (Field (Kon (Vector Word8) :@: Var VZ) :*: Field (Kon (Vector Word8) :@: Var (VS VZ)))))
-            (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
-        (PartiallyKnownK _ ((Field s1 :*: Field s2) :*: (Field v1 :*: v2)), bs) -> undefined
+            (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [1,2,3,4,5,6] of
+        (PartiallyKnownK _ ((Field s1 :*: Field s2) :*: (Field v1 :*: Field v2)), bs) -> show ((s1, s2, v1, v2), bs)
 
 
 
