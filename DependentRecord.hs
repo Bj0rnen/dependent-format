@@ -1173,13 +1173,13 @@ tryVectorK =
         (PartiallyKnownK _ (Field p), bs) ->
             show (p, bs)
 
-instance (DepKDeserializeK l, DepKDeserializeK r, MergePartialKnowledge (TaughtByK l) (TaughtByK r)) => DepKDeserializeK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) where
-    type DepStateRequirements ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) ds =
+instance (DepKDeserializeK l, DepKDeserializeK r, MergePartialKnowledge (TaughtByK l) (TaughtByK r)) => DepKDeserializeK ((l :: LoT ks -> Type) :*: (r :: LoT ks -> Type)) where
+    type DepStateRequirements ((l :: LoT ks -> Type) :*: (r :: LoT ks -> Type)) ds =
         ( MergePartialKnowledge ds (TaughtByK l)
         , DepStateRequirements l ds
         , DepStateRequirements r (ds `MergedPartialKnowledge` TaughtByK l)
         )
-    type TaughtByK ((l :: K.LoT ks -> Type) K.:*: (r :: K.LoT ks -> Type)) = TaughtByK l `MergedPartialKnowledge` TaughtByK r
+    type TaughtByK ((l :: LoT ks -> Type) :*: (r :: LoT ks -> Type)) = TaughtByK l `MergedPartialKnowledge` TaughtByK r
 
     depKDeserializeK (ks :: ExplicitPartialKnowledge ks xs ds) bs =
         case depKDeserializeK @ks @l ks bs of
@@ -1192,12 +1192,12 @@ instance (DepKDeserializeK l, DepKDeserializeK r, MergePartialKnowledge (TaughtB
 tryItAgain :: String
 tryItAgain =
     case depKDeserializeK @(Nat -> Nat -> Type) @((Field (Kon Sing :@: Var ('VS 'VZ))) :*: (Field (Kon (Vector Word8) :@: Var ('VS 'VZ)))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
-        (PartiallyKnownK _ (Field sng K.:*: Field vec), bs) ->
+        (PartiallyKnownK _ (Field sng :*: Field vec), bs) ->
             show (sng, vec, bs)
 shouldFailAgain :: String
 shouldFailAgain =
     case depKDeserializeK @(Nat -> Nat -> Type) @((Field (Kon Sing :@: Var ('VS 'VZ))) :*: (Field (Kon Sing :@: Var ('VS 'VZ)))) (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [2,3,4] of
-        (PartiallyKnownK _ (Field sng1 K.:*: Field sng2), bs) ->
+        (PartiallyKnownK _ (Field sng1 :*: Field sng2), bs) ->
             show (sng1, sng2, bs)
 tryThis :: String
 tryThis =  -- TODO: I think this shouldn't be a problem
@@ -1207,10 +1207,34 @@ tryThis =  -- TODO: I think this shouldn't be a problem
             (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [1,2,3,4,5,6] of
         (PartiallyKnownK _ ((Field s1 :*: Field s2) :*: (Field v1 :*: Field v2)), bs) -> show ((s1, s2, v1, v2), bs)
 
-
-
-
-
+data NewL1L2R1R2 size1 size2 = NewL1L2R1R2
+    { size1 :: Sing size1
+    , size2 :: Sing size2
+    , arr1  :: Vector Word8 size1
+    , arr2  :: Vector Word8 size2
+    } deriving (GHC.Generic, Show)
+      --deriving DepKDeserializeK via ??? NewL1L2R1R2
+instance GenericK NewL1L2R1R2 (size1 :&&: size2 :&&: LoT0) where
+    type RepK NewL1L2R1R2 =
+            (   Field (Sing :$: Var0)
+            :*:
+                Field (Sing :$: Var1)
+            )
+        :*:
+            (   Field (Vector Word8 :$: Var0)
+            :*:
+                Field (Vector Word8 :$: Var1)
+            )
+testDeserializeSomeDep2NewL1L2R1R2 :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK NewL1L2R1R2) ('DS 'Known ('DS 'Known 'DZ)), [Word8])
+testDeserializeSomeDep2NewL1L2R1R2 =
+    case fillUnkowns of
+        SomePartialKnowledge filled ->
+            depKDeserializeK filled [1,2,3,4,5,6]
+showTestDeserializeSomeDep2NewL1L2R1R2 :: String
+showTestDeserializeSomeDep2NewL1L2R1R2 =
+    case testDeserializeSomeDep2NewL1L2R1R2 of
+        (PartiallyKnownK ds f, bs) -> show (f, bs)
+-- TODO: Show instance for ExplicitPartiallyKnowledge.
 
 
 
