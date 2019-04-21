@@ -44,6 +44,7 @@ import Generics.SOP.Classes (Same)
 import GHC.TypeLits (TypeError(..), ErrorMessage(..))
 import           Generics.Kind hiding (Nat, (:~:))
 import qualified Generics.Kind as K
+import Generics.Kind.TH
 
 import Data.Proxy
 import Data.Constraint
@@ -1207,35 +1208,13 @@ tryThis =  -- TODO: I think this shouldn't be a problem
             (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) [1,2,3,4,5,6] of
         (PartiallyKnownK _ ((Field s1 :*: Field s2) :*: (Field v1 :*: Field v2)), bs) -> show ((s1, s2, v1, v2), bs)
 
-data NewL1L2R1R2 size1 size2 = NewL1L2R1R2
-    { size1 :: Sing size1
-    , size2 :: Sing size2
-    , arr1  :: Vector Word8 size1
-    , arr2  :: Vector Word8 size2
-    } deriving (GHC.Generic, Show)
-      --deriving DepKDeserializeK via ??? NewL1L2R1R2
-instance GenericK NewL1L2R1R2 (size1 :&&: size2 :&&: LoT0) where
-    type RepK NewL1L2R1R2 =
-            (   Field (Sing :$: Var0)
-            :*:
-                Field (Sing :$: Var1)
-            )
-        :*:
-            (   Field (Vector Word8 :$: Var0)
-            :*:
-                Field (Vector Word8 :$: Var1)
-            )
-testDeserializeSomeDep2NewL1L2R1R2 :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK NewL1L2R1R2) ('DS 'Known ('DS 'Known 'DZ)), [Word8])
-testDeserializeSomeDep2NewL1L2R1R2 =
-    case fillUnkowns of
-        SomePartialKnowledge filled ->
-            depKDeserializeK filled [1,2,3,4,5,6]
-showTestDeserializeSomeDep2NewL1L2R1R2 :: String
-showTestDeserializeSomeDep2NewL1L2R1R2 =
-    case testDeserializeSomeDep2NewL1L2R1R2 of
-        (PartiallyKnownK ds f, bs) -> show (f, bs)
--- TODO: Show instance for ExplicitPartiallyKnowledge.
-
+instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
+    type DepStateRequirements (M1 i c f) ds = DepStateRequirements f ds
+    type TaughtByK (M1 i c f) = TaughtByK f
+    depKDeserializeK ks bs =
+        case depKDeserializeK ks bs of
+            (PartiallyKnownK ks' a, bs') ->
+                (PartiallyKnownK ks' (M1 a), bs')
 
 
 
@@ -2324,5 +2303,35 @@ lookupNP SNat (I a :* as) =
 updateNP :: forall i ts a. Sing i -> a -> NP I ts -> NP I (Update i a ts)
 updateNP SNat a (I x :* xs) =
     ifZeroElse @i (I a :* xs) (\(Proxy :: Proxy i1) -> unsafeCoerce $ I x :* updateNP (sing @i1) a xs)
+
+
+
+
+
+
+
+
+data NewL1L2R1R2 size1 size2 = NewL1L2R1R2
+    { size1 :: Sing size1
+    , size2 :: Sing size2
+    , arr1  :: Vector Word8 size1
+    , arr2  :: Vector Word8 size2
+    } deriving (GHC.Generic, Show)
+      --deriving DepKDeserializeK via ??? NewL1L2R1R2
+$(deriveGenericK 'NewL1L2R1R2)
+
+testDeserializeSomeDep2NewL1L2R1R2 :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK NewL1L2R1R2) ('DS 'Known ('DS 'Known 'DZ)), [Word8])
+testDeserializeSomeDep2NewL1L2R1R2 =
+    case fillUnkowns of
+        SomePartialKnowledge filled ->
+            depKDeserializeK filled [1,2,3,4,5,6]
+showTestDeserializeSomeDep2NewL1L2R1R2 :: String
+showTestDeserializeSomeDep2NewL1L2R1R2 =
+    case testDeserializeSomeDep2NewL1L2R1R2 of
+        (PartiallyKnownK ds f, bs) -> show (f, bs)
+-- TODO: Show instance for ExplicitPartiallyKnowledge.
+
+
+
 
 --}--}--}--}--}--}
