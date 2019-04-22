@@ -2332,6 +2332,18 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 -- TODO: Show instance for ExplicitPartiallyKnowledge.
 
 
+--newtype GenericKWrapper f a = GenericKWrapper { unwrapGenericK :: f K.:@@: a }
+--instance DepKDeserializeK (GenericKWrapper f :: LoT ks -> Type) where
+--    type DepStateRequirements (GenericKWrapper f :: LoT ks -> Type) ds = TypeError (Text "DepStateRequirements not implemented")
+--    type TaughtByK (GenericKWrapper f :: LoT ks -> Type) = TypeError (Text "TaughtByK not implemented")
+
+newtype Generic0Wrapper f = Generic1KWrapper { unwrapGeneric0 :: f }
+--newtype Generic1Wrapper f a = Generic1Wrapper { unwrapGeneric1 :: f a }
+newtype Generic2Wrapper f a b = Generic2Wrapper { unwrapGeneric2 :: f a b }
+newtype Generic3Wrapper f a b c = Generic3Wrapper { unwrapGeneric3 :: f a b c }
+
+instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
+
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
     { size1 :: Sing size1
     , size2 :: Sing size2
@@ -2353,21 +2365,24 @@ data R1R2 (size1 :: Nat) (size2 :: Nat) = R1R2
     { size1 :: Vector Word8 size1
     , size2 :: Vector Word8 size2
     } deriving (GHC.Generic, Show)
+--      deriving DepKDeserialize via GenericKWrapper R1R2
+deriving via Generic2Wrapper R1R2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type)
+--deriving via GenericKWrapper R1R2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type)
 $(deriveGenericK 'R1R2)
--- TODO: Ditto; this should be boilerplate.
-instance (GettingVth v1, GettingVth v2, FillingUnknowns ks) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
-    type DepStateRequirements (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) ds =
-        (GetVthDepState v1 ds ~ 'Known, GetVthDepState v2 ds ~ 'Known)
-    type TaughtByK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = FillUnkowns ks
-    depKDeserializeK ks bs =
-        case (getVth @_ @_ @v1 (SomePartialKnowledge ks), getVth @_ @_ @v2 (SomePartialKnowledge ks)) of
-            (SomeSing s1, SomeSing s2) ->
-                case depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK s1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ExplicitPartialKnowledgeNil)) bs
-                        :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK R1R2) ('DS 'Unknown ('DS 'Unknown 'DZ)), [Word8]) of
-                    (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (M1 (M1 (M1 (Field a) :*: M1 (Field b)))), bs') ->
-                        case fillUnkowns of
-                            SomePartialKnowledge filled ->
-                                (PartiallyKnownK filled (Field (unsafeCoerce (R1R2 a b))), bs')  -- hmmm...
+---- TODO: Ditto; this should be boilerplate.
+--instance (GettingVth v1, GettingVth v2, FillingUnknowns ks) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
+--    type DepStateRequirements (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) ds =
+--        (GetVthDepState v1 ds ~ 'Known, GetVthDepState v2 ds ~ 'Known)
+--    type TaughtByK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = FillUnkowns ks
+--    depKDeserializeK ks bs =
+--        case (getVth @_ @_ @v1 (SomePartialKnowledge ks), getVth @_ @_ @v2 (SomePartialKnowledge ks)) of
+--            (SomeSing s1, SomeSing s2) ->
+--                case depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK s1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ExplicitPartialKnowledgeNil)) bs
+--                        :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK R1R2) ('DS 'Unknown ('DS 'Unknown 'DZ)), [Word8]) of
+--                    (PartiallyKnownK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) (M1 (M1 (M1 (Field a) :*: M1 (Field b)))), bs') ->
+--                        case fillUnkowns of
+--                            SomePartialKnowledge filled ->
+--                                (PartiallyKnownK filled (Field (unsafeCoerce (R1R2 a b))), bs')  -- hmmm...
 
 data ComposedL1L2R1R2 size1 size2 = ComposedL1L2R1R2
     { l1l2 :: L1L2 size1 size2
@@ -2384,6 +2399,8 @@ showTestDeserializeSomeDep2ComposedL1L2R1R2 :: String
 showTestDeserializeSomeDep2ComposedL1L2R1R2 =
     case testDeserializeSomeDep2ComposedL1L2R1R2 of
         (PartiallyKnownK ds f, bs) -> show (f, bs)
+
+
 
 
 --}--}--}--}--}--}
