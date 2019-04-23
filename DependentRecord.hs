@@ -2347,7 +2347,7 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Field (Kon f :@: Var v1 :@: Var v2) xs }
 instance DepKDeserializeK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) where
     -- TODO: I guess we kind of need to rewire variables from (RepK f)...
-    type DepStateRequirements (Generic2KWrapper f v1 v2 :: LoT ks -> Type) ds = ()
+    type DepStateRequirements (Generic2KWrapper f v1 v2 :: LoT ks -> Type) ds = DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
     type TaughtByK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) = FillUnkowns ks
 
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
