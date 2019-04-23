@@ -2337,37 +2337,43 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 --    type DepStateRequirements (GenericKWrapper f :: LoT ks -> Type) ds = TypeError (Text "DepStateRequirements not implemented")
 --    type TaughtByK (GenericKWrapper f :: LoT ks -> Type) = TypeError (Text "TaughtByK not implemented")
 
-newtype Generic0Wrapper f = Generic1KWrapper { unwrapGeneric0 :: f }
---newtype Generic1Wrapper f a = Generic1Wrapper { unwrapGeneric1 :: f a }
-newtype Generic2Wrapper f a b = Generic2Wrapper { unwrapGeneric2 :: f a b }
-newtype Generic3Wrapper f a b c = Generic3Wrapper { unwrapGeneric3 :: f a b c }
+--newtype Generic0Wrapper f = Generic1KWrapper { unwrapGeneric0 :: f }
+----newtype Generic1Wrapper f a = Generic1Wrapper { unwrapGeneric1 :: f a }
+--newtype Generic2Wrapper f a b = Generic2Wrapper { unwrapGeneric2 :: f a b }
+--newtype Generic3Wrapper f a b c = Generic3Wrapper { unwrapGeneric3 :: f a b c }
+--
+--instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
 
-instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
+newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Field (Kon f :@: Var v1 :@: Var v2) xs }
+instance DepKDeserializeK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) where
+    -- TODO: I guess we kind of need to rewire variables from (RepK f)...
+    type DepStateRequirements (Generic2KWrapper f v1 v2 :: LoT ks -> Type) ds = ()
+    type TaughtByK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) = FillUnkowns ks
 
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
     { size1 :: Sing size1
     , size2 :: Sing size2
     } deriving (GHC.Generic, Show)
 $(deriveGenericK 'L1L2)
--- TODO: This whole instance should be boilerplate that you don't have to write. Thinking (hoping) DervingVia.
-instance (LearningVth v1, LearningVth v2, MergePartialKnowledge (LearnVth v1) (LearnVth v2)) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
-    type DepStateRequirements (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) ds = ()
-    type TaughtByK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = LearnVth v1 `MergedPartialKnowledge` LearnVth v2
-    depKDeserializeK _ bs =
-        case depKDeserializeK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) bs
-                :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK L1L2) ('DS 'Known ('DS 'Known 'DZ)), [Word8]) of
-            (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ExplicitPartialKnowledgeNil)) (M1 (M1 (M1 (Field a) :*: M1 (Field b)))), bs') ->
-                case (learnVth @_ @_ @v1 s1 `mergePartialKnowledge` learnVth @_ @_ @v2 s2) of
-                    SomePartialKnowledge learned ->
-                        (PartiallyKnownK learned (Field (unsafeCoerce (L1L2 a b))), bs')  -- hmmm...
+deriving via Generic2KWrapper L1L2 v1 v2 instance DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2))
+---- TODO: This whole instance should be boilerplate that you don't have to write. Thinking (hoping) DervingVia.
+--instance (LearningVth v1, LearningVth v2, MergePartialKnowledge (LearnVth v1) (LearnVth v2)) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
+--    type DepStateRequirements (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) ds = ()
+--    type TaughtByK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = LearnVth v1 `MergedPartialKnowledge` LearnVth v2
+--    depKDeserializeK _ bs =
+--        case depKDeserializeK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) bs
+--                :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK L1L2) ('DS 'Known ('DS 'Known 'DZ)), [Word8]) of
+--            (PartiallyKnownK (ExplicitPartialKnowledgeCons (KnowledgeK s1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ExplicitPartialKnowledgeNil)) (M1 (M1 (M1 (Field a) :*: M1 (Field b)))), bs') ->
+--                case (learnVth @_ @_ @v1 s1 `mergePartialKnowledge` learnVth @_ @_ @v2 s2) of
+--                    SomePartialKnowledge learned ->
+--                        (PartiallyKnownK learned (Field (unsafeCoerce (L1L2 a b))), bs')  -- hmmm...
 
 data R1R2 (size1 :: Nat) (size2 :: Nat) = R1R2
     { size1 :: Vector Word8 size1
     , size2 :: Vector Word8 size2
     } deriving (GHC.Generic, Show)
 --      deriving DepKDeserialize via GenericKWrapper R1R2
-deriving via Generic2Wrapper R1R2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type)
---deriving via GenericKWrapper R1R2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type)
+deriving via Generic2KWrapper R1R2 v1 v2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2))
 $(deriveGenericK 'R1R2)
 ---- TODO: Ditto; this should be boilerplate.
 --instance (GettingVth v1, GettingVth v2, FillingUnknowns ks) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
