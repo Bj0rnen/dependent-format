@@ -1043,6 +1043,11 @@ instance FillingUnknowns ks => FillingUnknowns (k -> ks) where
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU filled)
 
 type family
+    AddVth (d :: DepState) (v :: TyVar ks k) :: DepStateList ks where
+    AddVth 'Unknown (_ :: TyVar ks k) = FillUnkowns ks
+    AddVth 'Known ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
+    AddVth 'Known ('VS v) = 'DS 'Unknown (AddVth 'Known v)
+type family
     LearnVth (v :: TyVar ks k) :: DepStateList ks where
     LearnVth ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
     LearnVth ('VS v) = 'DS 'Unknown (LearnVth v)
@@ -2345,10 +2350,13 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 --instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
 
 newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Field (Kon f :@: Var v1 :@: Var v2) xs }
+type family
+    Learn2Vars (ds :: DepStateList (a1 -> a2 -> Type)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: DepStateList ks where
+    Learn2Vars ('DS d1 ('DS d2 'DZ)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) = AddVth d1 v1 `MergedPartialKnowledge` AddVth d2 v2
 instance DepKDeserializeK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) where
     -- TODO: I guess we kind of need to rewire variables from (RepK f)...
     type DepStateRequirements (Generic2KWrapper f v1 v2 :: LoT ks -> Type) ds = DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
-    type TaughtByK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) = FillUnkowns ks
+    type TaughtByK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) = Learn2Vars (TaughtByK (RepK f)) v1 v2
 
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
     { size1 :: Sing size1
