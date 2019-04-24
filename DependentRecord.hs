@@ -2408,8 +2408,8 @@ deriving via Generic2KWrapper L1L2 v1 v2 instance (GettingVth v1, GettingVth v2,
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2))
 
 data R1R2 (size1 :: Nat) (size2 :: Nat) = R1R2
-    { size1 :: Vector Word8 size1
-    , size2 :: Vector Word8 size2
+    { arr1 :: Vector Word8 size1
+    , arr2 :: Vector Word8 size2
     } deriving (GHC.Generic, Show)
 $(deriveGenericK 'R1R2)
 deriving via Generic2KWrapper R1R2 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
@@ -2423,18 +2423,53 @@ data ComposedL1L2R1R2 size1 size2 = ComposedL1L2R1R2
     , r1r2 :: R1R2 size1 size2
     } deriving (GHC.Generic, Show)
 $(deriveGenericK 'ComposedL1L2R1R2)
+deriving via Generic2KWrapper ComposedL1L2R1R2 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon ComposedL1L2R1R2 :@: Var v1 :@: Var v2))
 
-testDeserializeSomeDep2ComposedL1L2R1R2 :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK ComposedL1L2R1R2) ('DS 'Known ('DS 'Known 'DZ)), [Word8])
-testDeserializeSomeDep2ComposedL1L2R1R2 =
-    case fillUnkowns of
-        SomePartialKnowledge filled ->
-            depKDeserializeK filled [1,2,3,4,5,6]
 showTestDeserializeSomeDep2ComposedL1L2R1R2 :: String
 showTestDeserializeSomeDep2ComposedL1L2R1R2 =
-    case testDeserializeSomeDep2ComposedL1L2R1R2 of
-        (PartiallyKnownK ds f, bs) -> show (f, bs)
+    case fillUnkowns of
+        SomePartialKnowledge filled ->
+            case depKDeserializeK @_ @(RepK ComposedL1L2R1R2) filled [1,2,3,4,5,6] of
+                (PartiallyKnownK ds f, bs) ->
+                    show (f, bs)
 
 
+data L1R2 (size1 :: Nat) (size2 :: Nat) = L1R2
+    { size1 :: Sing size1
+    , arr2  :: Vector Word8 size2
+    } deriving (GHC.Generic, Show)
+$(deriveGenericK 'L1R2)
+deriving via Generic2KWrapper L1R2 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon L1R2 :@: Var v1 :@: Var v2))
+
+data ReuseVar0 (size1 :: Nat) (size2 :: Nat) = ReuseVar0
+    { l1r2 :: L1R2 size1 size1
+    } deriving (GHC.Generic, Show)
+$(deriveGenericK 'ReuseVar0)
+deriving via Generic2KWrapper ReuseVar0 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon ReuseVar0 :@: Var v1 :@: Var v2))
+
+-- TODO: Ideally, this should actually work, because in L1R2, size1 comes before arr2 and if they are the same tyvar, what's required has been learnt.
+-- TODO: Most likely, this is a problem with DepStateRequirements not quite composing properly.
+showTestDeserializeSomeDep2ReuseVar0 :: String
+showTestDeserializeSomeDep2ReuseVar0 =
+    -- NOTE: This alternative compiles.
+    --case learnVth @_ @_ @'VZ (SNat @1) of
+    case fillUnkowns of
+        SomePartialKnowledge filled ->
+            case depKDeserializeK @_ @(RepK ReuseVar0) filled [1,2,3,4,5,6] of
+                (PartiallyKnownK ds f, bs) ->
+                    show (f, bs)
 
 
 --}--}--}--}--}--}
