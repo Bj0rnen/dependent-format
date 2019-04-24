@@ -1044,26 +1044,16 @@ instance FillingUnknowns ks => FillingUnknowns (k -> ks) where
 
 type family
     AddVth (d :: DepState) (v :: TyVar ks k) :: DepStateList ks where
-    AddVth 'Unknown (_ :: TyVar ks k) = FillUnkowns ks
-    AddVth 'Known ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
-    AddVth 'Known ('VS v) = 'DS 'Unknown (AddVth 'Known v)
-type family
-    LearnVth (v :: TyVar ks k) :: DepStateList ks where
-    LearnVth ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
-    LearnVth ('VS v) = 'DS 'Unknown (LearnVth v)
+    AddVth d ('VZ :: TyVar (k -> ks) k) = 'DS d (FillUnkowns ks)
+    AddVth d ('VS v) = 'DS 'Unknown (AddVth d v)
 class AddingVth (v :: TyVar ks k) where
     addVth :: forall d. Knwlg d k -> SomePartialKnowledge ks (AddVth d v)
-    learnVth :: forall (a :: k). Sing a -> SomePartialKnowledge ks (LearnVth v)
 instance FillingUnknowns ks => AddingVth ('VZ :: TyVar (k -> ks) k) where
     addVth KnwlgU =
         case fillUnkowns of
             SomePartialKnowledge filled ->
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU filled)
     addVth (KnwlgK s) =
-        case fillUnkowns of
-            SomePartialKnowledge filled ->
-                SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) filled)
-    learnVth s =
         case fillUnkowns of
             SomePartialKnowledge filled ->
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) filled)
@@ -1076,10 +1066,9 @@ instance AddingVth v => AddingVth ('VS v) where
         case addVth @_ @_ @v (KnwlgK s) of
             SomePartialKnowledge learned ->
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
-    learnVth s =
-        case learnVth @_ @_ @v s of
-            SomePartialKnowledge learned ->
-                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
+
+learnVth :: forall ks k (v :: TyVar ks k). AddingVth v => forall (a :: k). Sing a -> SomePartialKnowledge ks (AddVth 'Known v)
+learnVth s = addVth @_ @_ @v (KnwlgK s)
 
 type family
     GetVthDepState (v :: TyVar ks k) (ds :: DepStateList ks) :: DepState where
@@ -1164,7 +1153,7 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
 
 instance (SingKind k, Serialize (Demote k), AddingVth v) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
     type DepStateRequirements (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = ()
-    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) = LearnVth v
+    type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) = AddVth 'Known v
     depKDeserializeK _ bs =
         case deserialize bs of
             (FromSing (s :: Sing (s :: k)), bs') ->
