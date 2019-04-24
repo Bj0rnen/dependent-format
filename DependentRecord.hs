@@ -1018,11 +1018,11 @@ getKnownExampleVec = partiallyKnownToSomeSing @_ @_ @('VS 'VZ) examplePartiallyK
 --    LearnVth (v :: TyVar ks k) (as :: DepStateList ks) :: DepStateList ks where
 --    LearnVth 'VZ ('DS _ as) = 'DS 'Known as
 --    LearnVth ('VS v) ('DS a as) = 'DS a (LearnVth v as)
---class LearningVth (v :: TyVar ks k) where
+--class AddingVth (v :: TyVar ks k) where
 --    learnVth :: forall (a :: k) (xs :: LoT ks) (ds :: DepStateList ks). Sing a -> SomePartialKnowledge ks ds -> SomePartialKnowledge ks (LearnVth v ds)
---instance LearningVth 'VZ where
+--instance AddingVth 'VZ where
 --    learnVth s (SomePartialKnowledge (ExplicitPartialKnowledgeCons k epks)) = SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) epks)
---instance LearningVth v => LearningVth ('VS v) where
+--instance AddingVth v => AddingVth ('VS v) where
 --    learnVth s (SomePartialKnowledge (ExplicitPartialKnowledgeCons k epks)) =
 --        case learnVth @_ @_ @v s (SomePartialKnowledge epks) of
 --            SomePartialKnowledge learned ->
@@ -1051,14 +1051,31 @@ type family
     LearnVth (v :: TyVar ks k) :: DepStateList ks where
     LearnVth ('VZ :: TyVar (k -> ks) k) = 'DS 'Known (FillUnkowns ks)
     LearnVth ('VS v) = 'DS 'Unknown (LearnVth v)
-class LearningVth (v :: TyVar ks k) where
+class AddingVth (v :: TyVar ks k) where
+    addVth :: forall d. Knwlg d k -> SomePartialKnowledge ks (AddVth d v)
     learnVth :: forall (a :: k). Sing a -> SomePartialKnowledge ks (LearnVth v)
-instance FillingUnknowns ks => LearningVth ('VZ :: TyVar (k -> ks) k) where
+instance FillingUnknowns ks => AddingVth ('VZ :: TyVar (k -> ks) k) where
+    addVth KnwlgU =
+        case fillUnkowns of
+            SomePartialKnowledge filled ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU filled)
+    addVth (KnwlgK s) =
+        case fillUnkowns of
+            SomePartialKnowledge filled ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) filled)
     learnVth s =
         case fillUnkowns of
             SomePartialKnowledge filled ->
                 SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) filled)
-instance LearningVth v => LearningVth ('VS v) where
+instance AddingVth v => AddingVth ('VS v) where
+    addVth KnwlgU =
+        case addVth @_ @_ @v KnwlgU of
+            SomePartialKnowledge learned ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
+    addVth (KnwlgK s) =
+        case addVth @_ @_ @v (KnwlgK s) of
+            SomePartialKnowledge learned ->
+                SomePartialKnowledge (ExplicitPartialKnowledgeCons KnowledgeU learned)
     learnVth s =
         case learnVth @_ @_ @v s of
             SomePartialKnowledge learned ->
@@ -1145,7 +1162,7 @@ class DepKDeserializeK (f :: K.LoT ks -> Type) where
     type TaughtByK (f :: K.LoT ks -> Type) :: DepStateList ks
     depKDeserializeK :: DepStateRequirements f ds => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnownK ks f (TaughtByK f), [Word8])
 
-instance (SingKind k, Serialize (Demote k), LearningVth v) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
+instance (SingKind k, Serialize (Demote k), AddingVth v) => DepKDeserializeK (Field (Kon (Sing :: k -> Type) :@: Var v)) where
     type DepStateRequirements (Field (Kon (Sing :: k -> Type) :@: Var v)) ds = ()
     type TaughtByK (Field (Kon (Sing :: k -> Type) :@: Var v)) = LearnVth v
     depKDeserializeK _ bs =
@@ -2356,26 +2373,27 @@ newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Fiel
 type family
     Learn2Vars (ds :: DepStateList (a1 -> a2 -> Type)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: DepStateList ks where
     Learn2Vars ('DS d1 ('DS d2 'DZ)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) = AddVth d1 v1 `MergedPartialKnowledge` AddVth d2 v2
-instance DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
+instance (DepKDeserializeK (RepK f), GettingVth v1, GettingVth v2) => DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
     -- TODO: I guess we kind of need to rewire variables from (RepK f)...
     type DepStateRequirements (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) ds =
         DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
     type TaughtByK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) = Learn2Vars (TaughtByK (RepK f)) v1 v2
     depKDeserializeK ds bs =
-        case depKDeserializeK (ExplicitPartialKnowledgeCons undefined (ExplicitPartialKnowledgeCons undefined ExplicitPartialKnowledgeNil)) bs
-                :: (PartiallyKnownK (a1 -> a2 -> Type) (RepK f) ('DS k1 ('DS k2 'DZ)), [Word8]) of
-            _ -> undefined
---            (PartiallyKnownK ds' a, bs') -> undefined
---                (PartiallyKnownK ds (Generic2KWrapper a), bs')
+        case (getVth @_ @_ @v1 (SomePartialKnowledge ds), getVth @_ @_ @v2 (SomePartialKnowledge ds)) of
+            (KnwlgU, KnwlgU) ->
+                case depKDeserializeK (ExplicitPartialKnowledgeCons KnowledgeU (ExplicitPartialKnowledgeCons KnowledgeU ExplicitPartialKnowledgeNil)) bs
+                        :: (PartiallyKnownK (a1 -> a2 -> Type) (RepK f) (TaughtByK (RepK f)), [Word8]) of
+                    (PartiallyKnownK (ExplicitPartialKnowledgeCons k1 (ExplicitPartialKnowledgeCons k2 ExplicitPartialKnowledgeNil)) a, bs') ->
+                        undefined--(PartiallyKnownK (addVth @_ @_ @v1 k1 `mergePartialKnowledge` addVth @_ @_ @v2 k2) (Generic2KWrapper a), bs')
 
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
     { size1 :: Sing size1
     , size2 :: Sing size2
     } deriving (GHC.Generic, Show)
 $(deriveGenericK 'L1L2)
-deriving via Generic2KWrapper L1L2 v1 v2 instance DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2))
+deriving via Generic2KWrapper L1L2 v1 v2 instance (GettingVth v1, GettingVth v2) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2))
 ---- TODO: This whole instance should be boilerplate that you don't have to write. Thinking (hoping) DervingVia.
---instance (LearningVth v1, LearningVth v2, MergePartialKnowledge (LearnVth v1) (LearnVth v2)) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
+--instance (AddingVth v1, AddingVth v2, MergePartialKnowledge (LearnVth v1) (LearnVth v2)) => DepKDeserializeK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
 --    type DepStateRequirements (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) ds = ()
 --    type TaughtByK (Field (Kon L1L2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = LearnVth v1 `MergedPartialKnowledge` LearnVth v2
 --    depKDeserializeK _ bs =
@@ -2391,7 +2409,7 @@ data R1R2 (size1 :: Nat) (size2 :: Nat) = R1R2
     , size2 :: Vector Word8 size2
     } deriving (GHC.Generic, Show)
 --      deriving DepKDeserialize via GenericKWrapper R1R2
-deriving via Generic2KWrapper R1R2 v1 v2 instance DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2))
+deriving via Generic2KWrapper R1R2 v1 v2 instance (GettingVth v1, GettingVth v2) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2))
 $(deriveGenericK 'R1R2)
 ---- TODO: Ditto; this should be boilerplate.
 --instance (GettingVth v1, GettingVth v2, FillingUnknowns ks) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
