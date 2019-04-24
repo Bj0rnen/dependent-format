@@ -2383,7 +2383,6 @@ instance
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) =>
         DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
-    -- TODO: I guess we kind of need to rewire variables from (RepK f)...
     type DepStateRequirements (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) ds =
         DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
     type TaughtByK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) = Learn2Vars v1 v2 (TaughtByK (RepK f))
@@ -2412,7 +2411,6 @@ data R1R2 (size1 :: Nat) (size2 :: Nat) = R1R2
     { size1 :: Vector Word8 size1
     , size2 :: Vector Word8 size2
     } deriving (GHC.Generic, Show)
---      deriving DepKDeserialize via GenericKWrapper R1R2
 $(deriveGenericK 'R1R2)
 deriving via Generic2KWrapper R1R2 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
     , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
