@@ -2353,10 +2353,17 @@ newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Fiel
 type family
     Learn2Vars (ds :: DepStateList (a1 -> a2 -> Type)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: DepStateList ks where
     Learn2Vars ('DS d1 ('DS d2 'DZ)) (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) = AddVth d1 v1 `MergedPartialKnowledge` AddVth d2 v2
-instance DepKDeserializeK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) where
+instance DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
     -- TODO: I guess we kind of need to rewire variables from (RepK f)...
-    type DepStateRequirements (Generic2KWrapper f v1 v2 :: LoT ks -> Type) ds = DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
-    type TaughtByK (Generic2KWrapper f v1 v2 :: LoT ks -> Type) = Learn2Vars (TaughtByK (RepK f)) v1 v2
+    type DepStateRequirements (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) ds =
+        DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
+    type TaughtByK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) = Learn2Vars (TaughtByK (RepK f)) v1 v2
+    depKDeserializeK ds bs =
+        case depKDeserializeK (ExplicitPartialKnowledgeCons undefined (ExplicitPartialKnowledgeCons undefined ExplicitPartialKnowledgeNil)) bs
+                :: (PartiallyKnownK (a1 -> a2 -> Type) (RepK f) ('DS k1 ('DS k2 'DZ)), [Word8]) of
+            _ -> undefined
+--            (PartiallyKnownK ds' a, bs') -> undefined
+--                (PartiallyKnownK ds (Generic2KWrapper a), bs')
 
 data L1L2 (size1 :: Nat) (size2 :: Nat) = L1L2
     { size1 :: Sing size1
