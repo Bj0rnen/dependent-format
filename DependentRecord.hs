@@ -300,7 +300,7 @@ type family
     ApplyDepLevel 'Requiring 'Known = 'Known
     ApplyDepLevel 'NonDep a = a
     ApplyDepLevel 'Learning _ = 'Known
-data Knowledge :: DepState -> a -> Type where
+data Knowledge :: DepState -> a -> Type where  -- TODO: Verify if this is ever needed, or if Knwlg is good enough for everything.
     KnowledgeU :: Knowledge 'Unknown a
     KnowledgeK :: Sing a -> Knowledge 'Known a
 data Knwlg :: DepState -> Type -> Type where
@@ -1069,11 +1069,14 @@ type family
     GetVthDepState 'VZ ('DS d _) = d
     GetVthDepState ('VS v) ('DS _ ds) = GetVthDepState v ds
 class GettingVth (v :: TyVar ks k) where
-    getVth :: forall ds. GetVthDepState v ds ~ 'Known => SomePartialKnowledge ks ds -> SomeSing k
+    getVth :: forall ds. SomePartialKnowledge ks ds -> Knwlg (GetVthDepState v ds) k
 instance GettingVth 'VZ where
-    getVth (SomePartialKnowledge (ExplicitPartialKnowledgeCons (KnowledgeK s) _)) = SomeSing s
+    getVth (SomePartialKnowledge (ExplicitPartialKnowledgeCons k _)) = knowledgeToKnwlg k
 instance GettingVth v => GettingVth ('VS v) where
     getVth (SomePartialKnowledge (ExplicitPartialKnowledgeCons _ ks)) = getVth @_ @_ @v (SomePartialKnowledge ks)
+
+knowVth :: forall ks k (v :: TyVar ks k) (ds :: DepStateList ks). GettingVth v => forall ds. GetVthDepState v ds ~ 'Known => SomePartialKnowledge ks ds -> SomeSing k
+knowVth pk = case getVth @_ @_ @v pk of KnwlgK s -> SomeSing s
 
 --class DepKDeserializeK (f :: K.LoT ks -> Type) where
 --    type TaughtByK (f :: K.LoT ks -> Type) (ds :: DepStateList ks) :: DepStateList ks
@@ -1166,7 +1169,7 @@ instance (Serialize t, GettingVth v, FillingUnknowns ks) => DepKDeserializeK (Fi
     type DepStateRequirements (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar ks Nat))) ds = GetVthDepState v ds ~ 'Known
     type TaughtByK (Field (Kon (Vector t :: Nat -> Type) :@: Var (v :: TyVar ks Nat))) = FillUnkowns ks
     depKDeserializeK ks bs =
-        case getVth @_ @_ @v (SomePartialKnowledge ks) of
+        case knowVth @_ @_ @v (SomePartialKnowledge ks) of
             SomeSing (SNat :: Sing n) ->
                 case deserialize @(Vector t n) bs of
                     (a, bs') ->
@@ -2396,7 +2399,7 @@ $(deriveGenericK 'R1R2)
 --        (GetVthDepState v1 ds ~ 'Known, GetVthDepState v2 ds ~ 'Known)
 --    type TaughtByK (Field (Kon R1R2 :@: Var v1 :@: Var v2) :: LoT ks -> Type) = FillUnkowns ks
 --    depKDeserializeK ks bs =
---        case (getVth @_ @_ @v1 (SomePartialKnowledge ks), getVth @_ @_ @v2 (SomePartialKnowledge ks)) of
+--        case (knowVth @_ @_ @v1 (SomePartialKnowledge ks), knowVth @_ @_ @v2 (SomePartialKnowledge ks)) of
 --            (SomeSing s1, SomeSing s2) ->
 --                case depKDeserializeK (ExplicitPartialKnowledgeCons (KnowledgeK s1) (ExplicitPartialKnowledgeCons (KnowledgeK s2) ExplicitPartialKnowledgeNil)) bs
 --                        :: (PartiallyKnownK (Nat -> Nat -> Type) (RepK R1R2) ('DS 'Unknown ('DS 'Unknown 'DZ)), [Word8]) of
