@@ -2458,7 +2458,7 @@ deriving via Generic2KWrapper ReuseVar0 v1 v2 instance (GettingVth v1, GettingVt
     , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon ReuseVar0 :@: Var v1 :@: Var v2))
-
+{-}
 -- TODO: Ideally, this should actually work, because in L1R2, size1 comes before arr2 and if they are the same tyvar, what's required has been learnt.
 -- TODO: Most likely, this is a problem with DepStateRequirements not quite composing properly.
 showTestDeserializeSomeDep2ReuseVar0 :: String
@@ -2471,5 +2471,34 @@ showTestDeserializeSomeDep2ReuseVar0 =
                 (PartiallyKnownK ds f, bs) ->
                     show (f, bs)
 
+-- Sooo...
+--
+-- > :kind! DepStateRequirements (Generic2KWrapper L1R2 'VZ 'VZ) ('DS 'Unknown ('DS 'Unknown 'DZ))
+-- DepStateRequirements (Generic2KWrapper L1R2 'VZ 'VZ) ('DS 'Unknown ('DS 'Unknown 'DZ)) :: Constraint
+-- = (MergePartialKnowledge
+--      ('DS 'Unknown ('DS 'Unknown 'DZ)) ('DS 'Known ('DS 'Unknown 'DZ)),
+--    () :: Constraint, 'Unknown ~ 'Known)
+--
+-- > :kind! DepStateRequirements (RepK L1R2) ('DS 'Unknown ('DS 'Unknown 'DZ))
+-- DepStateRequirements (RepK L1R2) ('DS 'Unknown ('DS 'Unknown 'DZ)) :: Constraint
+-- = (MergePartialKnowledge
+--      ('DS 'Unknown ('DS 'Unknown 'DZ)) ('DS 'Known ('DS 'Unknown 'DZ)),
+--    () :: Constraint, 'Unknown ~ 'Known)
+--
+-- This latter one I actually agree that it's supposed to fail, which it does. But the former one, that one I would want to not go bad.
+-- The former reduces to the latter via:
+--
+-- DepStateRequirements (Generic2KWrapper f v1 v2) ds =
+--     DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
+--
+-- That is, Var0's DepState ('Unknown) gets copied into both places of the LoT that (RepK L1R2) gets. And upon doing that,
+-- it "forgets" that these DepStates correspond to the same variable.
+--
+-- For reference, (RepK L1R2) is roughly:
+-- Field ('Kon Sing ':@: Var0) :*: Field ('Kon (Vector Word8) ':@: Var1)
+--
+-- At that point, the DepState at Var1 is of course not going to update when deserializing the Sing.
+--
+-- Is there something we can do about this? How hard would it be to fix? Does it make sense to do?
 
 --}--}--}--}--}--}
