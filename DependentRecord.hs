@@ -2352,6 +2352,40 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 --
 --instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
 
+newtype Generic1KWrapper f v1 xs = Generic1KWrapper { unwrapGeneric1K :: Field (Kon f :@: Var v1) xs }
+type family
+    Learn1Vars (v1 :: TyVar ks a1) (ds :: DepStateList (a1 -> Type)) :: DepStateList ks where
+    Learn1Vars (v1 :: TyVar ks a1) ('DS d1 'DZ) = AddVth d1 v1
+learn1Vars
+    :: forall (v1 :: TyVar ks a1) d1.
+    (AddingVth v1
+    -- TODO: Combinatory explosion.
+    )
+    => SomePartialKnowledge (a1 -> Type) ('DS d1 'DZ) -> SomePartialKnowledge ks (Learn1Vars v1 ('DS d1 'DZ))
+learn1Vars (SomePartialKnowledge (ExplicitPartialKnowledgeCons (k1 :: Knowledge d1 x1) ExplicitPartialKnowledgeNil)) =
+    case k1 of
+        -- TODO: Combinatory explosion.
+        (KnowledgeU) ->       addVth @_ @_ @v1 KnwlgU
+        (KnowledgeK s1) ->    addVth @_ @_ @v1 (KnwlgK s1)
+instance
+    ( DepKDeserializeK (RepK f)
+    , forall x1. GenericK f (x1 :&&: LoT0)
+    , GettingVth v1
+    , AddingVth v1
+    )
+    => DepKDeserializeK (Generic1KWrapper f (v1 :: TyVar ks a1) :: LoT ks -> Type) where
+    type DepStateRequirements (Generic1KWrapper f (v1 :: TyVar ks a1) :: LoT ks -> Type) ds =
+        DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) 'DZ)
+    type TaughtByK (Generic1KWrapper f (v1 :: TyVar ks a1) :: LoT ks -> Type) = Learn1Vars v1 (TaughtByK (RepK f))
+    depKDeserializeK ds bs =
+        withKnwlg (getVth @_ @_ @v1 (SomePartialKnowledge ds)) $ \k1 ->
+            case depKDeserializeK (ExplicitPartialKnowledgeCons k1 ExplicitPartialKnowledgeNil) bs
+                    :: (PartiallyKnownK (a1 -> Type) (RepK f) (TaughtByK (RepK f)), [Word8]) of
+                (PartiallyKnownK pk@(ExplicitPartialKnowledgeCons (k3 :: Knowledge d1 x1) ExplicitPartialKnowledgeNil) a, bs') ->
+                    case learn1Vars @ks @a1 @v1 @d1 (SomePartialKnowledge pk) of
+                        SomePartialKnowledge learned ->
+                            (PartiallyKnownK learned (Generic1KWrapper (Field (unsafeCoerce (toK @_ @f a)))), bs')
+
 newtype Generic2KWrapper f v1 v2 xs = Generic2KWrapper { unwrapGeneric2K :: Field (Kon f :@: Var v1 :@: Var v2) xs }
 type family
     Learn2Vars (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) (ds :: DepStateList (a1 -> a2 -> Type)) :: DepStateList ks where
@@ -2381,8 +2415,9 @@ instance
     , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
     , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
-    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) =>
-        DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
+    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)
+    )
+    => DepKDeserializeK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) where
     type DepStateRequirements (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) ds =
         DepStateRequirements (RepK f) ('DS (GetVthDepState v1 ds) ('DS (GetVthDepState v2 ds) 'DZ))
     type TaughtByK (Generic2KWrapper f (v1 :: TyVar ks a1) (v2 :: TyVar ks a2) :: LoT ks -> Type) = Learn2Vars v1 v2 (TaughtByK (RepK f))
@@ -2449,15 +2484,11 @@ deriving via Generic2KWrapper L1R2 v1 v2 instance (GettingVth v1, GettingVth v2,
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
     , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon L1R2 :@: Var v1 :@: Var v2))
 
-data ReuseVar0 (size1 :: Nat) (size2 :: Nat) = ReuseVar0
+data ReuseVar0 (size1 :: Nat) = ReuseVar0
     { l1r2 :: L1R2 size1 size1
     } deriving (GHC.Generic, Show)
 $(deriveGenericK 'ReuseVar0)
-deriving via Generic2KWrapper ReuseVar0 v1 v2 instance (GettingVth v1, GettingVth v2, AddingVth v1, AddingVth v2
-    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Unknown v2)
-    , MergePartialKnowledge (AddVth 'Unknown v1) (AddVth 'Known   v2)
-    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Unknown v2)
-    , MergePartialKnowledge (AddVth 'Known   v1) (AddVth 'Known   v2)) => DepKDeserializeK (Field (Kon ReuseVar0 :@: Var v1 :@: Var v2))
+deriving via Generic1KWrapper ReuseVar0 v1 instance (GettingVth v1, AddingVth v1) => DepKDeserializeK (Field (Kon ReuseVar0 :@: Var v1))
 {-}
 -- TODO: Ideally, this should actually work, because in L1R2, size1 comes before arr2 and if they are the same tyvar, what's required has been learnt.
 -- TODO: Most likely, this is a problem with DepStateRequirements not quite composing properly.
