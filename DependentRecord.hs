@@ -2352,6 +2352,17 @@ showTestDeserializeSomeDep2NewL1L2R1R2 =
 --
 --instance DepKDeserializeK (Field (Kon (Generic2Wrapper f) :@: Var v1 :@: Var v2) :: LoT ks -> Type) where
 
+newtype Generic0KWrapper f xs = Generic0KWrapper { unwrapGeneric0K :: Field (Kon f) xs }
+instance (DepKDeserializeK (RepK f), GenericK f LoT0, FillingUnknowns ks) => DepKDeserializeK (Generic0KWrapper f :: LoT ks -> Type) where
+    type DepStateRequirements (Generic0KWrapper f :: LoT ks -> Type) ds = DepStateRequirements (RepK f) 'DZ
+    type TaughtByK (Generic0KWrapper f :: LoT ks -> Type) = FillUnkowns ks
+    depKDeserializeK ds bs =
+        case depKDeserializeK ExplicitPartialKnowledgeNil bs :: (PartiallyKnownK Type (RepK f) (TaughtByK (RepK f)), [Word8]) of
+            (PartiallyKnownK ExplicitPartialKnowledgeNil a, bs') ->
+                case fillUnkowns @ks of
+                    SomePartialKnowledge learned ->
+                        (PartiallyKnownK learned (Generic0KWrapper (Field (unsafeCoerce (toK @_ @f a)))), bs')
+
 newtype Generic1KWrapper f v1 xs = Generic1KWrapper { unwrapGeneric1K :: Field (Kon f :@: Var v1) xs }
 type family
     Learn1Vars (v1 :: TyVar ks a1) (ds :: DepStateList (a1 -> Type)) :: DepStateList ks where
