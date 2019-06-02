@@ -183,7 +183,7 @@ data ReuseVar0 (size1 :: Nat) = ReuseVar0
 $(deriveGenericK 'ReuseVar0)
 deriving via Generic1KWrapper ReuseVar0 v1 instance (GettingVth v1, AddingVth v1) => DepKDeserializeK (Field (Kon ReuseVar0 :@: Var v1))
 
-{-}
+{-
 -- TODO: Ideally, this should actually work, because in L1R2, size1 comes before arr2 and if they are the same tyvar, what's required has been learnt.
 -- TODO: Most likely, this is a problem with DepStateRequirements not quite composing properly.
 showTestDeserializeSomeDep2ReuseVar0 :: String
@@ -225,5 +225,23 @@ showTestDeserializeSomeDep2ReuseVar0 =
 -- At that point, the DepState at Var1 is of course not going to update when deserializing the Sing.
 --
 -- Is there something we can do about this? How hard would it be to fix? Does it make sense to do?
+-}
+
+
+data ExplicitSecondParam (size1 :: Nat) = ExplicitSecondParam
+    { r1r2 :: R1R2 size1 1337
+    } deriving (GHC.Generic, Show)
+$(deriveGenericK 'ExplicitSecondParam)
+-- TODO: This doesn't derive because of the Explicit 1337 which isn't a `Var` but a `Kon`. We have no instance for that.
+--deriving via Generic1KWrapper ExplicitSecondParam v1 instance (GettingVth v1, AddingVth v1) => DepKDeserializeK (Field (Kon ExplicitSecondParam :@: Var v1))
+--
+-- How would we derive this instance?
+--instance (GettingVth v1, AddingVth v1) => DepKDeserializeK (Field (Kon R1R2 :@: Var v1 :@: 'Kon x))
+--
+-- There's a general problem here with how few actual "fields" that we match. We only specifically look for things like.
+-- (Field (Kon f :@: Var v1 :@: Var v2 ...))
+-- Or, well, we don't pattern match those recursively. We have Generic1KWrapper, Generic2KWrapper, etc. for each number of vars.
+-- And that just won't scale well if you now have to add in various configurations with `Kon`s in different places.
+
 
 --}--}--}--}--}--}
