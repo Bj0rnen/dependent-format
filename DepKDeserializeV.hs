@@ -35,6 +35,7 @@ import Serialize
 import Vector
 import DepState
 import Knowledge
+import DepLevel
 
 import Data.Singletons
 import Data.Singletons.TH
@@ -77,9 +78,13 @@ class DepKDeserializeV (f :: ks) where
 -}
 
 
-data DepStateList ds where
+data DepStateList :: Type -> Type where
     DZ :: DepStateList Type
     DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
+
+data DepLevelList :: Type -> Type where
+    DLZ :: DepLevelList Type
+    DLS :: DepLevel -> DepLevelList xs -> DepLevelList (x -> xs)
 
 data ExplicitPartialKnowledge (xs :: LoT ks) (ds :: DepStateList ks) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge LoT0 'DZ
@@ -91,13 +96,35 @@ data SomePartialKnowledge (ds :: DepStateList ks) where
 --data PartiallyKnown (f :: LoT ks -> Type) (ds :: DepStateList ks) where
 --    PartiallyKnown :: ExplicitPartialKnowledge xs ds -> f xs -> PartiallyKnown f ds
 
-class DepKDeserializeV (f :: ks) (a :: Atom ls ks) where
-    type DepStateReqs (f :: ks) (a :: Atom ls ks) (ds :: DepStateList ls) :: Constraint
-    type TaughtBy (f :: ks) (a :: Atom ls ks) :: DepStateList ls
-    idunnolol :: forall (x :: ks -> Type) (xs :: LoT ls). Field (Kon x :@: a) xs
-    --depKDeserializeV :: [Word8] -> (f xs, SomePartialKnowledge ?, [Word8])
-
-instance DepKDeserializeV (Sing :: Nat -> Type) (Var3 :: Atom (k0 -> k1 -> k2 -> (Nat -> Type) -> Type) (Nat -> Type))
+--class DepKDeserializeV (f :: ks) (a :: Atom ls ks) where
+--    type DepStateReqs (f :: ks) (a :: Atom ls ks) (ds :: DepStateList ls) :: Constraint
+--    type TaughtBy (f :: ks) (a :: Atom ls ks) :: DepStateList ls
+--    idunnolol :: forall (x :: ks -> Type) (xs :: LoT ls). Field (Kon x :@: a) xs
+--    --depKDeserializeV :: [Word8] -> (f xs, SomePartialKnowledge ?, [Word8])
+--
+--instance DepKDeserializeV (Sing :: Nat -> Type) (Var3 :: Atom (k0 -> k1 -> k2 -> (Nat -> Type) -> Type) (Nat -> Type))
 
 --_foo :: forall (f :: ks) (a :: Atom ks Type). Int
 --_foo = undefined
+
+--class DepKDeserializeA (a :: Atom d ks)
+--instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :: Atom d (Nat -> Type))
+
+--class DepKDeserializeA (a :: Atom ks Type)
+----instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: a0)
+--instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: Kon k0 :: Atom ks Type)
+--instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: Var v0 :: Atom ks Type)
+
+--data Foo (a :: Atom d ks) (ds :: DepStateList d) where
+--    FooNil :: Foo (Kon f) ds
+--    FooCons ::
+
+--data Args (ks :: Type) where
+--    ArgsNil :: Args Type
+--    ArgsCons :: Atom k Type -> Args ks -> Args (k -> ks)
+
+class DepKDeserialize (f :: ks) where
+    type DepLevels (f :: ks) :: DepLevelList ks
+    depKDeserialize :: SomePartialKnowledge (ds :: DepStateList d) -> [Word8] -> (Void, [Word8])
+instance DepKDeserialize (Sing :: Nat -> Type) where
+    type DepLevels (Sing :: Nat -> Type) = DLS Learning DLZ
