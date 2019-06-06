@@ -35,6 +35,7 @@ import Data.Singletons
 import Generics.Kind
 import Data.Kind
 
+-- TODO: There's now an SLoT type in kind-apply that we can probably replace this with.
 data instance Sing :: LoT xs -> Type where
     SLoT0 :: Sing LoT0
     (:&&&:) :: Sing x -> Sing xs -> Sing (x :&&: xs)

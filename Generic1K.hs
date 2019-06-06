@@ -47,7 +47,7 @@ import Generics.SOP hiding (Sing, Nil, SingI, sing)
 import qualified Generics.SOP as SOP
 import Generics.SOP.Classes (Same)
 import GHC.TypeLits (TypeError(..), ErrorMessage(..))
-import           Generics.Kind hiding (Nat, (:~:))
+import           Generics.Kind hiding (Nat, (:~:), SLoT(..))
 import qualified Generics.Kind as K
 import Generics.Kind.TH
 
