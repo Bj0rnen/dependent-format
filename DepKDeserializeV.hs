@@ -28,6 +28,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE LambdaCase #-}
 
 module DepKDeserializeV where
 
@@ -67,6 +68,8 @@ import Data.Singletons.Fin
 
 import Data.Reflection
 
+import Control.Monad.State
+
 {-
 data PartiallyKnown (f :: ks) (ds :: DepStateList ks) where
     PartiallyKnown :: ExplicitPartialKnowledge ks xs ds -> f :@@: xs -> PartiallyKnown f ds
@@ -78,14 +81,7 @@ class DepKDeserializeV (f :: ks) where
 -}
 
 
-data DepStateList :: Type -> Type where
-    DZ :: DepStateList Type
-    DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
-
-data DepLevelList :: Type -> Type where
-    DLZ :: DepLevelList Type
-    DLS :: DepLevel -> DepLevelList xs -> DepLevelList (x -> xs)
-
+{-
 data ExplicitPartialKnowledge (xs :: LoT ks) (ds :: DepStateList ks) where
     ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge LoT0 'DZ
     ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge xs ds -> ExplicitPartialKnowledge (x :&&: xs) ('DS d ds)
@@ -128,3 +124,31 @@ class DepKDeserialize (f :: ks) where
     depKDeserialize :: SomePartialKnowledge (ds :: DepStateList d) -> [Word8] -> (Void, [Word8])
 instance DepKDeserialize (Sing :: Nat -> Type) where
     type DepLevels (Sing :: Nat -> Type) = DLS Learning DLZ
+-}
+
+data DepStateList :: Type -> Type where
+    DZ :: DepStateList Type
+    DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
+
+data DepLevelList :: Type -> Type where
+    DLZ :: DepLevelList Type
+    DLS :: DepLevel -> DepLevelList xs -> DepLevelList (x -> xs)
+
+data AtomList :: Type -> Type -> Type where
+    AtomNil  :: AtomList d Type
+    AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
+
+class DepKDeserialize (f :: ks) where
+    type Learn (f :: ks) (xs :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
+    -- TODO: Not actually dealing with knowledge.
+    depKDeserialize :: State [Word8] (f :@@: (xs :: LoT ks))  -- Probably not good to use (:@@:), as it's a type family
+instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
+    type Learn (Sing :: k -> Type) ('AtomCons ('Kon a)       'AtomNil)        ds  = ds
+    type Learn (Sing :: k -> Type) ('AtomCons ('Var  'VZ)    'AtomNil) ('DS _ ds) = ('DS 'Known ds)
+    type Learn (Sing :: k -> Type) ('AtomCons ('Var ('VS v)) 'AtomNil) ('DS d ds) =
+        'DS d (Learn (Sing :: k -> Type) ('AtomCons ('Var v) 'AtomNil) ds)
+    depKDeserialize = do
+        d <- state deserialize
+        case d of
+            FromSing (s :: Sing (s :: k)) ->
+                return (unsafeCoerce s)  -- TODO: This lacks the check that verifies the s is what we expected, if we had any expectation.
