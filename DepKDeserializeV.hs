@@ -143,7 +143,7 @@ class DepKDeserialize (f :: ks) where
     -- TODO: Not actually dealing with knowledge.
     depKDeserialize :: State [Word8] (f :@@: (xs :: LoT ks))  -- Probably not good to use (:@@:), as it's a type family
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
-    type Learn (Sing :: k -> Type) ('AtomCons ('Kon a)       'AtomNil)        ds  = ds
+    type Learn (Sing :: k -> Type) ('AtomCons ('Kon _)       'AtomNil)        ds  = ds
     type Learn (Sing :: k -> Type) ('AtomCons ('Var  'VZ)    'AtomNil) ('DS _ ds) = ('DS 'Known ds)
     type Learn (Sing :: k -> Type) ('AtomCons ('Var ('VS v)) 'AtomNil) ('DS d ds) =
         'DS d (Learn (Sing :: k -> Type) ('AtomCons ('Var v) 'AtomNil) ds)
@@ -152,3 +152,10 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         case d of
             FromSing (s :: Sing (s :: k)) ->
                 return (unsafeCoerce s)  -- TODO: This lacks the check that verifies the s is what we expected, if we had any expectation.
+instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
+    type Learn (Vector a :: Nat -> Type) _ ds  = ds
+    depKDeserialize =
+        case undefined of  -- TODO: Here we need access to the knowledge.
+            SomeSing (SNat :: Sing n) -> do
+                (a :: Vector a :@@: (n :&&: LoT0)) <- state deserialize
+                return (unsafeCoerce a)
