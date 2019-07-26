@@ -139,9 +139,16 @@ data AtomList :: Type -> Type -> Type where
     AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
 
 class DepKDeserialize (f :: ks) where
-    type Learn (f :: ks) (xs :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
-    -- TODO: Not actually dealing with knowledge.
-    depKDeserialize :: State [Word8] (f :@@: (xs :: LoT ks))  -- Probably not good to use (:@@:), as it's a type family
+    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
+    depKDeserialize ::
+        forall d (ds :: DepStateList d) (as :: AtomList d ks).
+        KnowledgeList ds -> State [Word8] (SomeK ks f, KnowledgeList (Learn f as ds))
+        -- TODO: Not sure how SomeK should look. Should maybe be like (SomeK ds as f) instead.
+        -- TODO: Indexed by the same things as Learn in that case, making it seem like it could
+        -- TODO: contain the whole updated KnowledgeList (or at least the means to build it) all
+        -- TODO: on its own. I don't think that's something to strive for. Would be the new
+        -- TODO: PartiallyKnownK.
+        -- TODO: Either way, "as" showing up only in the return type can't be right...
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
     type Learn (Sing :: k -> Type) ('AtomCons ('Kon _)       'AtomNil)        ds  = ds
     type Learn (Sing :: k -> Type) ('AtomCons ('Var  'VZ)    'AtomNil) ('DS _ ds) = ('DS 'Known ds)
