@@ -138,11 +138,19 @@ data AtomList :: Type -> Type -> Type where
     AtomNil  :: AtomList d Type
     AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
 
+
+type family
+    GetDepState (v :: TyVar d k) (ds :: DepStateList d) :: DepState where
+    GetDepState  'VZ    ('DS d _ ) = d
+    GetDepState ('VS v) ('DS _ ds) = GetDepState v ds
+
+
 class DepKDeserialize (f :: ks) where
+    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
-    depKDeserialize ::
-        forall d (ds :: DepStateList d) (as :: AtomList d ks).
-        KnowledgeList ds -> State [Word8] (SomeK ks f, KnowledgeList (Learn f as ds))
+    --depKDeserialize ::
+    --    forall d (ds :: DepStateList d) (as :: AtomList d ks).
+    --    KnowledgeList ds -> State [Word8] (SomeK ks f, KnowledgeList (Learn f as ds))
         -- TODO: Not sure how SomeK should look. Should maybe be like (SomeK ds as f) instead.
         -- TODO: Indexed by the same things as Learn in that case, making it seem like it could
         -- TODO: contain the whole updated KnowledgeList (or at least the means to build it) all
@@ -150,19 +158,23 @@ class DepKDeserialize (f :: ks) where
         -- TODO: PartiallyKnownK.
         -- TODO: Either way, "as" showing up only in the return type can't be right...
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
+    type Require (Sing :: k -> Type) _ _ = ()
+
     type Learn (Sing :: k -> Type) ('AtomCons ('Kon _)       'AtomNil)        ds  = ds
     type Learn (Sing :: k -> Type) ('AtomCons ('Var  'VZ)    'AtomNil) ('DS _ ds) = ('DS 'Known ds)
     type Learn (Sing :: k -> Type) ('AtomCons ('Var ('VS v)) 'AtomNil) ('DS d ds) =
         'DS d (Learn (Sing :: k -> Type) ('AtomCons ('Var v) 'AtomNil) ds)
-    depKDeserialize = do
-        d <- state deserialize
-        case d of
-            FromSing (s :: Sing (s :: k)) ->
-                return (unsafeCoerce s)  -- TODO: This lacks the check that verifies the s is what we expected, if we had any expectation.
+    --depKDeserialize = do
+    --    d <- state deserialize
+    --    case d of
+    --        FromSing (s :: Sing (s :: k)) ->
+    --            return (unsafeCoerce s)  -- TODO: This lacks the check that verifies the s is what we expected, if we had any expectation.
 instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
+    type Require (Vector a :: Nat -> Type) ('AtomCons ('Kon _) 'AtomNil) ds = ()
+    type Require (Vector a :: Nat -> Type) ('AtomCons ('Var v) 'AtomNil) ds = GetDepState v ds ~ 'Known
     type Learn (Vector a :: Nat -> Type) _ ds  = ds
-    depKDeserialize =
-        case undefined of  -- TODO: Here we need access to the knowledge.
-            SomeSing (SNat :: Sing n) -> do
-                (a :: Vector a :@@: (n :&&: LoT0)) <- state deserialize
-                return (unsafeCoerce a)
+    --depKDeserialize =
+    --    case undefined of  -- TODO: Here we need access to the knowledge.
+    --        SomeSing (SNat :: Sing n) -> do
+    --            (a :: Vector a :@@: (n :&&: LoT0)) <- state deserialize
+    --            return (unsafeCoerce a)
