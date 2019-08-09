@@ -139,6 +139,22 @@ data AtomList :: Type -> Type -> Type where
     AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
 
 
+data family KnowledgeList :: DepStateList d -> Type
+data instance KnowledgeList 'DZ where
+    KnowledgeNil :: KnowledgeList 'DZ
+data instance KnowledgeList ('DS d ds) where
+    KnowledgeCons
+        :: Knowledge d (x :: k)
+        -> KnowledgeList (ds :: DepStateList ks)
+        -> KnowledgeList ('DS d ds :: DepStateList (k -> ks))
+
+data family AnyK (f :: ks)
+data instance AnyK (f :: Type) where
+    AnyZ :: f -> AnyK f
+data instance AnyK (f :: k -> ks) where
+    AnyS :: AnyK (f x) -> AnyK f
+
+
 type family
     GetDepState (v :: TyVar d k) (ds :: DepStateList d) :: DepState where
     GetDepState  'VZ    ('DS d _ ) = d
@@ -148,15 +164,10 @@ type family
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
-    --depKDeserialize ::
-    --    forall d (ds :: DepStateList d) (as :: AtomList d ks).
-    --    KnowledgeList ds -> State [Word8] (SomeK ks f, KnowledgeList (Learn f as ds))
-        -- TODO: Not sure how SomeK should look. Should maybe be like (SomeK ds as f) instead.
-        -- TODO: Indexed by the same things as Learn in that case, making it seem like it could
-        -- TODO: contain the whole updated KnowledgeList (or at least the means to build it) all
-        -- TODO: on its own. I don't think that's something to strive for. Would be the new
-        -- TODO: PartiallyKnownK.
-        -- TODO: Either way, "as" showing up only in the return type can't be right...
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        .  Require f as ds
+        => KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
     type Require (Sing :: k -> Type) _ _ = ()
 
