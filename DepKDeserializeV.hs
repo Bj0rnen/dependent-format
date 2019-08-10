@@ -160,6 +160,38 @@ type family
     GetDepState  'VZ    ('DS d _ ) = d
     GetDepState ('VS v) ('DS _ ds) = GetDepState v ds
 
+type family
+    RequireAtom (a :: Atom d k) (ds :: DepStateList d) :: Constraint where
+    RequireAtom ('Kon _) _ = ()
+    RequireAtom ('Var v) ds = GetDepState v ds ~ 'Known
+
+
+type family
+    LearnAtom (a :: Atom d k) (ds :: DepStateList d) :: DepStateList d where
+    LearnAtom ('Kon _) ds = ds
+    LearnAtom ('Var  'VZ   ) ('DS _ ds) = 'DS 'Known ds
+    LearnAtom ('Var ('VS v)) ('DS d ds) = 'DS d (LearnAtom ('Var v) ds)
+class LearnableAtom (a :: Atom d k) (ds :: DepStateList d) where  -- TODO: Bad name.
+    -- TODO: `Maybe` to cover "contradiction". is an `Either` or something a better fit?
+    learnAtom :: SomeSing k -> KnowledgeList ds -> Maybe (KnowledgeList (LearnAtom a ds))
+instance (SingI a, SDecide k) => LearnableAtom ('Kon (a :: k)) ds where
+    learnAtom (SomeSing s) kl =
+        case s %~ sing @a of
+            Proved Refl -> Just kl
+            Disproved r -> Nothing
+instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) where
+    learnAtom (SomeSing s) (KnowledgeCons KnowledgeU kl) = Just (KnowledgeCons (KnowledgeK s) kl)
+    learnAtom (SomeSing s) curr@(KnowledgeCons (KnowledgeK s') kl) =
+        case s %~ s' of
+            Proved Refl -> Just curr
+            Disproved r -> Nothing
+instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
+    learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) ss kl
+
+type family  -- TODO: This is just a workaround for now. Probably.
+    Atom0 (as :: AtomList d (k -> ks)) :: Atom d k where
+    Atom0 (AtomCons a _) = a
+
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
@@ -167,22 +199,27 @@ class DepKDeserialize (f :: ks) where
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  Require f as ds
-        => KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
-instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
-    type Require (Sing :: k -> Type) _ _ = ()
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
 
-    type Learn (Sing :: k -> Type) ('AtomCons ('Kon _)       'AtomNil)        ds  = ds
-    type Learn (Sing :: k -> Type) ('AtomCons ('Var  'VZ)    'AtomNil) ('DS _ ds) = ('DS 'Known ds)
-    type Learn (Sing :: k -> Type) ('AtomCons ('Var ('VS v)) 'AtomNil) ('DS d ds) =
-        'DS d (Learn (Sing :: k -> Type) ('AtomCons ('Var v) 'AtomNil) ds)
-    --depKDeserialize = do
-    --    d <- state deserialize
-    --    case d of
-    --        FromSing (s :: Sing (s :: k)) ->
-    --            return (unsafeCoerce s)  -- TODO: This lacks the check that verifies the s is what we expected, if we had any expectation.
+instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
+    type Require (Sing :: k -> Type) as ds = LearnableAtom (Atom0 as) ds
+    type Learn (Sing :: k -> Type) as ds = LearnAtom (Atom0 as) ds
+
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
+        .  LearnableAtom (Atom0 as) ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
+    depKDeserialize _ kl = do
+        d <- state deserialize
+        case d of
+            FromSing (s :: Sing (s :: k)) ->
+                case learnAtom @d @k @(Atom0 as) (SomeSing s) kl of
+                    Nothing -> error "Learned something contradictory"
+                    Just kl' ->
+                        return (AnyS (AnyZ s), kl')
+
 instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
-    type Require (Vector a :: Nat -> Type) ('AtomCons ('Kon _) 'AtomNil) ds = ()
-    type Require (Vector a :: Nat -> Type) ('AtomCons ('Var v) 'AtomNil) ds = GetDepState v ds ~ 'Known
+    type Require (Vector a :: Nat -> Type) ('AtomCons at 'AtomNil) ds = RequireAtom at ds
     type Learn (Vector a :: Nat -> Type) _ ds  = ds
     --depKDeserialize =
     --    case undefined of  -- TODO: Here we need access to the knowledge.
