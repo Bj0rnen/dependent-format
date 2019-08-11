@@ -186,15 +186,11 @@ instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) wh
 instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) @ds ss kl
 
--- TODO: These are just a workaround for now. Probably.
--- TODO: Surely, we can write a recursive version?
+-- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
 type family
-    Atom0 (as :: AtomList d (k -> ks)) :: Atom d k where
-    Atom0 (AtomCons a _) = a
-type family
-    Atom1 (as :: AtomList d (k0 -> k1 -> ks)) :: Atom d k1 where
-    Atom1 (AtomCons _ (AtomCons a _)) = a
-
+    AtomAt (n :: TyVar ks k) (as :: AtomList d ks) :: Atom d k where
+    AtomAt 'VZ (AtomCons a _) = a
+    AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
@@ -205,32 +201,32 @@ class DepKDeserialize (f :: ks) where
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
-    type Require (Sing :: k -> Type) as ds = LearnableAtom (Atom0 as) ds
-    type Learn (Sing :: k -> Type) as ds = LearnAtom (Atom0 as) ds
+    type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
+    type Learn (Sing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
-        .  LearnableAtom (Atom0 as) ds
+        .  LearnableAtom (AtomAt 'VZ as) ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
     depKDeserialize _ kl = do
         d <- state deserialize
         case d of
             FromSing (s :: Sing (s :: k)) ->
-                case learnAtom @d @k @(Atom0 as) (SomeSing s) kl of
+                case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
                     Nothing -> error "Learned something contradictory"
                     Just kl' ->
                         return (AnyS (AnyZ s), kl')
 
 instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
-    type Require (Vector a :: Nat -> Type) as ds = RequireAtom (Atom0 as) ds
+    type Require (Vector a :: Nat -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (Vector a :: Nat -> Type) _ ds = ds
 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
-        .  RequireAtom (Atom0 as) ds
+        .  RequireAtom (AtomAt 'VZ as) ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a :: Nat -> Type), KnowledgeList (Learn (Vector a :: Nat -> Type) as ds))
     depKDeserialize _ kl =
-        case getAtom @d @Nat @(Atom0 as) @ds kl of
+        case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
             SomeSing (SNat :: Sing n) -> do
                 (a :: Vector a n) <- state deserialize
                 return (AnyS (AnyZ a), kl)
@@ -243,13 +239,13 @@ data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
 
 instance DepKDeserialize (L0R1 :: Nat -> Nat -> Type) where
     type Require (L0R1 :: Nat -> Nat -> Type) as ds =
-        ( LearnableAtom (Atom0 as) ds
-        , RequireAtom (Atom1 as) (LearnAtom (Atom0 as) ds)
+        ( LearnableAtom (AtomAt 'VZ as) ds
+        , RequireAtom (AtomAt ('VS 'VZ) as) (LearnAtom (AtomAt 'VZ as) ds)
         )
-    type Learn (L0R1 :: Nat -> Nat -> Type) as ds = LearnAtom (Atom0 as) ds
+    type Learn (L0R1 :: Nat -> Nat -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
     depKDeserialize (Proxy :: Proxy as) kl = do
-        (AnyS (AnyZ size0), kl') <- depKDeserialize @(Nat -> Type) @Sing (Proxy @(AtomCons (Atom0 as) AtomNil)) kl
-        (AnyS (AnyZ arr1), kl'') <- depKDeserialize @(Nat -> Type) @(Vector Word8) (Proxy @(AtomCons (Atom1 as) AtomNil)) kl'
+        (AnyS (AnyZ size0), kl') <- depKDeserialize @(Nat -> Type) @Sing (Proxy @(AtomCons (AtomAt 'VZ as) AtomNil)) kl
+        (AnyS (AnyZ arr1), kl'') <- depKDeserialize @(Nat -> Type) @(Vector Word8) (Proxy @(AtomCons (AtomAt ('VS 'VZ) as) AtomNil)) kl'
         return (AnyS (AnyS (AnyZ (L0R1 size0 arr1))), kl'')
 
 testL0R1SameVar :: String
