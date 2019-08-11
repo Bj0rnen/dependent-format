@@ -155,16 +155,14 @@ data instance AnyK (f :: k -> ks) where
     AnyS :: AnyK (f x) -> AnyK f
 
 
-type family
-    GetDepState (v :: TyVar d k) (ds :: DepStateList d) :: DepState where
-    GetDepState  'VZ    ('DS d _ ) = d
-    GetDepState ('VS v) ('DS _ ds) = GetDepState v ds
-
-type family
-    RequireAtom (a :: Atom d k) (ds :: DepStateList d) :: Constraint where
-    RequireAtom ('Kon _) _ = ()
-    RequireAtom ('Var v) ds = GetDepState v ds ~ 'Known
-
+class RequireAtom (a :: Atom d k) (ds :: DepStateList d) where
+    getAtom :: KnowledgeList ds -> SomeSing k
+instance SingI a => RequireAtom ('Kon (a :: k)) ds where
+    getAtom _ = SomeSing (sing @a)
+instance d ~ 'Known => RequireAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) where
+    getAtom (KnowledgeCons (KnowledgeK s) _) = SomeSing s
+instance RequireAtom ('Var v) ds => RequireAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
+    getAtom (KnowledgeCons _ kl) = getAtom @ks @k @('Var v) @ds kl
 
 type family
     LearnAtom (a :: Atom d k) (ds :: DepStateList d) :: DepStateList d where
@@ -186,7 +184,7 @@ instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) wh
             Proved Refl -> Just curr
             Disproved r -> Nothing
 instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
-    learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) ss kl
+    learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) @ds ss kl
 
 type family  -- TODO: This is just a workaround for now. Probably.
     Atom0 (as :: AtomList d (k -> ks)) :: Atom d k where
@@ -219,10 +217,15 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
                         return (AnyS (AnyZ s), kl')
 
 instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
-    type Require (Vector a :: Nat -> Type) ('AtomCons at 'AtomNil) ds = RequireAtom at ds
-    type Learn (Vector a :: Nat -> Type) _ ds  = ds
-    --depKDeserialize =
-    --    case undefined of  -- TODO: Here we need access to the knowledge.
-    --        SomeSing (SNat :: Sing n) -> do
-    --            (a :: Vector a :@@: (n :&&: LoT0)) <- state deserialize
-    --            return (unsafeCoerce a)
+    type Require (Vector a :: Nat -> Type) as ds = RequireAtom (Atom0 as) ds
+    type Learn (Vector a :: Nat -> Type) _ ds = ds
+
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
+        .  RequireAtom (Atom0 as) ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a :: Nat -> Type), KnowledgeList (Learn (Vector a :: Nat -> Type) as ds))
+    depKDeserialize _ kl =
+        case getAtom @d @Nat @(Atom0 as) @ds kl of
+            SomeSing (SNat :: Sing n) -> do
+                (a :: Vector a n) <- state deserialize
+                return (AnyS (AnyZ a), kl)
