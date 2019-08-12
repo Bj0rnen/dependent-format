@@ -232,6 +232,44 @@ instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
                 return (AnyS (AnyZ a), kl)
 
 
+data AnyKK :: (LoT ks -> Type) -> Type where
+    AnyKK :: f xs -> AnyKK f
+
+class DepKDeserializeK (f :: LoT d -> Type) where
+    type RequireK (f :: LoT d -> Type) (ds :: DepStateList d) :: Constraint
+    type LearnK (f :: LoT d -> Type) (ds :: DepStateList d) :: DepStateList d
+    depKDeserializeK
+        :: forall (ds :: DepStateList d)
+        .  RequireK f ds
+        => KnowledgeList ds -> State [Word8] (AnyKK f, KnowledgeList (LearnK f ds))
+
+-- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
+type family
+    AtomKonKind (t :: Atom d k) :: Type where
+    AtomKonKind ('Kon (f :: k)) = k
+    AtomKonKind (t :@: _) = AtomKonKind t
+
+type family
+    AtomKonConstructor (t :: Atom d k) :: AtomKonKind t where
+    AtomKonConstructor ('Kon (f :: k)) = f
+    AtomKonConstructor (t :@: _) = AtomKonConstructor t
+
+type family
+    AtomKonAtomListStep (t :: Atom d k) (as :: AtomList d ks) :: AtomList d (AtomKonKind t) where
+    AtomKonAtomListStep ('Kon (f :: k)) as = as
+    AtomKonAtomListStep (t :@: a) as = AtomKonAtomListStep t ('AtomCons a as)
+type family
+    AtomKonAtomList (t :: Atom d k) :: AtomList d (AtomKonKind t) where
+    AtomKonAtomList t = AtomKonAtomListStep t 'AtomNil
+
+instance DepKDeserialize (AtomKonConstructor t) => DepKDeserializeK (Field t :: LoT d -> Type) where
+    type RequireK (Field t :: LoT d -> Type) (ds :: DepStateList d) = Require (AtomKonConstructor t) (AtomKonAtomList t) ds
+    type LearnK (Field t :: LoT d -> Type) (ds :: DepStateList d) = Learn (AtomKonConstructor t) (AtomKonAtomList t) ds
+    depKDeserializeK kl = do
+        (anykf, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(AtomKonAtomList t)) kl
+        return (undefined, kl')  -- TODO: Fix that.
+
+
 data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
     { size0 :: Sing size0
     , arr1  :: Vector Word8 size1
