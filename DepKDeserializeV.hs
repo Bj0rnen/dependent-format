@@ -126,6 +126,10 @@ instance DepKDeserialize (Sing :: Nat -> Type) where
     type DepLevels (Sing :: Nat -> Type) = DLS Learning DLZ
 -}
 
+-- TODO: An idea worth considering: Add a `Phantom` state. Could maybe get rid of unsafeCoerces.
+--  But this could be nonsense.
+--data DepState = Unknown | Known | Phantom
+
 data DepStateList :: Type -> Type where
     DZ :: DepStateList Type
     DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
@@ -268,6 +272,17 @@ instance DepKDeserialize (AtomKonConstructor t) => DepKDeserializeK (Field t :: 
     depKDeserializeK kl = do
         (anykf, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(AtomKonAtomList t)) kl
         return (undefined, kl')  -- TODO: Fix that.
+
+instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT d -> Type) where
+    type RequireK (f :*: g :: LoT d -> Type) ds =
+        ( RequireK f ds
+        , RequireK g (LearnK f ds)
+        )
+    type LearnK (f :*: g :: LoT d -> Type) ds = LearnK g (LearnK f ds)
+    depKDeserializeK kl = do
+        (AnyKK a, kl') <- depKDeserializeK @d @f kl
+        (AnyKK a', kl'') <- depKDeserializeK @d @g kl'
+        return (AnyKK (a :*: unsafeCoerce a'), kl'')  -- TODO: Would be excellent to get rid of unsafeCoerce!
 
 
 data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
