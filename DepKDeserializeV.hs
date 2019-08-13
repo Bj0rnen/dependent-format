@@ -186,9 +186,14 @@ instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) wh
 instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) @ds ss kl
 
-type family  -- TODO: This is just a workaround for now. Probably.
+-- TODO: These are just a workaround for now. Probably.
+-- TODO: Surely, we can write a recursive version?
+type family
     Atom0 (as :: AtomList d (k -> ks)) :: Atom d k where
     Atom0 (AtomCons a _) = a
+type family
+    Atom1 (as :: AtomList d (k0 -> k1 -> ks)) :: Atom d k1 where
+    Atom1 (AtomCons _ (AtomCons a _)) = a
 
 
 class DepKDeserialize (f :: ks) where
@@ -229,3 +234,63 @@ instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
             SomeSing (SNat :: Sing n) -> do
                 (a :: Vector a n) <- state deserialize
                 return (AnyS (AnyZ a), kl)
+
+
+data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
+    { size0 :: Sing size0
+    , arr1  :: Vector Word8 size1
+    } deriving (Show)
+
+instance DepKDeserialize (L0R1 :: Nat -> Nat -> Type) where
+    type Require (L0R1 :: Nat -> Nat -> Type) as ds =
+        ( LearnableAtom (Atom0 as) ds
+        , RequireAtom (Atom1 as) (LearnAtom (Atom0 as) ds)
+        )
+    type Learn (L0R1 :: Nat -> Nat -> Type) as ds = LearnAtom (Atom0 as) ds
+    depKDeserialize (Proxy :: Proxy as) kl = do
+        (AnyS (AnyZ size0), kl') <- depKDeserialize @(Nat -> Type) @Sing (Proxy @(AtomCons (Atom0 as) AtomNil)) kl
+        (AnyS (AnyZ arr1), kl'') <- depKDeserialize @(Nat -> Type) @(Vector Word8) (Proxy @(AtomCons (Atom1 as) AtomNil)) kl'
+        return (AnyS (AnyS (AnyZ (L0R1 size0 arr1))), kl'')
+
+testL0R1SameVar :: String
+testL0R1SameVar =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
+
+testL0R1DifferentVars :: String
+testL0R1DifferentVars =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (KnowledgeCons KnowledgeU (KnowledgeCons (KnowledgeK (sing @5)) KnowledgeNil)))
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
+
+testL0R1Kons :: String
+testL0R1Kons =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 2) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
+
+testL0R1KonsContradictory :: String
+testL0R1KonsContradictory =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 1) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
+
+testL0R1AlreadyKnown :: String
+testL0R1AlreadyKnown =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @2)) KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
+
+
+testL0R1AlreadyKnownContradictory :: String
+testL0R1AlreadyKnownContradictory =
+    case evalState
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @1)) KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyS (AnyS (AnyZ a)), _) -> show a
