@@ -152,10 +152,8 @@ data instance KnowledgeList ('DS d ds) where
         -> KnowledgeList (ds :: DepStateList ks)
         -> KnowledgeList ('DS d ds :: DepStateList (k -> ks))
 
-data family AnyK (f :: ks)
-data instance AnyK (f :: Type) where
+data AnyK (f :: ks) where
     AnyZ :: f -> AnyK f
-data instance AnyK (f :: k -> ks) where
     AnyS :: AnyK (f x) -> AnyK f
 
 
@@ -276,17 +274,7 @@ type family
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
--- TODO: Yuck!
-class AnyKToAnyKKField a where
-    anyKToAnyKKField :: AnyK (AtomKonConstructor a) -> AnyKK (Field a)
-instance AnyKToAnyKKField (Kon f) where
-    anyKToAnyKKField (AnyZ a) = AnyKK (Field a)
-instance AnyKToAnyKKField (Kon f :@: a0) where
-    anyKToAnyKKField (AnyS (AnyZ a)) = AnyKK (Field (unsafeCoerce a))
-instance AnyKToAnyKKField (Kon f :@: a0 :@: a1) where
-    anyKToAnyKKField (AnyS (AnyS (AnyZ a))) = AnyKK (Field (unsafeCoerce a))
-
-instance (DepKDeserialize (AtomKonConstructor t), AnyKToAnyKKField t) => DepKDeserializeK (Field t :: LoT ks -> Type) where
+instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t :: LoT ks -> Type) where
     type RequireK (Field t :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
     type LearnK (Field t :: LoT ks -> Type) (as :: AtomList d ks)  (ds :: DepStateList d) =
@@ -298,7 +286,16 @@ instance (DepKDeserialize (AtomKonConstructor t), AnyKToAnyKKField t) => DepKDes
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t :: LoT ks -> Type), KnowledgeList (LearnK (Field t :: LoT ks -> Type) as ds))
     depKDeserializeK _ kl = do
         (anykf, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
-        return (anyKToAnyKKField @t anykf, kl')  -- TODO: GHC just hangs...
+        -- TODO: This is just a horrible hack that covers far from everything!
+        case anykf of
+            AnyZ a ->
+                return (AnyKK (Field (unsafeCoerce a)), kl')
+            AnyS (AnyZ a) ->
+                return (AnyKK (Field (unsafeCoerce a)), kl')
+            AnyS (AnyS (AnyZ a)) ->
+                return (AnyKK (Field (unsafeCoerce a)), kl')
+            AnyS (AnyS (AnyS (AnyZ a))) ->
+                return (AnyKK (Field (unsafeCoerce a)), kl')
 
 instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT ks -> Type) where
     type RequireK (f :*: g :: LoT ks -> Type) as ds =
@@ -336,12 +333,14 @@ instance DepKDeserializeK f => DepKDeserializeK (M1 i c f :: LoT ks -> Type) whe
 --    --    return (undefined, kl')
 newtype GenericKWrapper2 f x0 x1 = GenericKWrapper2 (f x0 x1)
     deriving (Show)
-instance DepKDeserializeK (RepK f) => DepKDeserialize (GenericKWrapper2 f :: k0 -> k1 -> Type) where
+instance (forall size0 size1. GenericK f (size0 :&&: size1 :&&: 'LoT0), DepKDeserializeK (RepK f)) => DepKDeserialize (GenericKWrapper2 f :: k0 -> k1 -> Type) where
     type Require (GenericKWrapper2 f) as ds = RequireK (RepK f) as ds
     type Learn (GenericKWrapper2 f) as ds = LearnK (RepK f) as ds
     depKDeserialize p kl = do
-        (_, kl') <- depKDeserializeK @(k0 -> k1 -> Type) @(RepK f) p kl
-        return (undefined, kl')
+        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @(k0 -> k1 -> Type) @(RepK f) p kl
+        -- TODO: What is this even?
+        case unsafeCoerce (Refl :: xs :~: xs) :: xs :~: (size0 :&&: size1 :&&: 'LoT0) of
+            Refl -> return (AnyS (AnyS (AnyZ (GenericKWrapper2 (unsafeCoerce (toK @_ @f r))))), kl')
 
 
 data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
