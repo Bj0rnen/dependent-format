@@ -276,7 +276,17 @@ type family
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
-instance DepKDeserialize (AtomKonConstructor t) => DepKDeserializeK (Field t :: LoT ks -> Type) where
+-- TODO: Yuck!
+class AnyKToAnyKKField a where
+    anyKToAnyKKField :: AnyK (AtomKonConstructor a) -> AnyKK (Field a)
+instance AnyKToAnyKKField (Kon f) where
+    anyKToAnyKKField (AnyZ a) = AnyKK (Field a)
+instance AnyKToAnyKKField (Kon f :@: a0) where
+    anyKToAnyKKField (AnyS (AnyZ a)) = AnyKK (Field (unsafeCoerce a))
+instance AnyKToAnyKKField (Kon f :@: a0 :@: a1) where
+    anyKToAnyKKField (AnyS (AnyS (AnyZ a))) = AnyKK (Field (unsafeCoerce a))
+
+instance (DepKDeserialize (AtomKonConstructor t), AnyKToAnyKKField t) => DepKDeserializeK (Field t :: LoT ks -> Type) where
     type RequireK (Field t :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
     type LearnK (Field t :: LoT ks -> Type) (as :: AtomList d ks)  (ds :: DepStateList d) =
@@ -288,7 +298,7 @@ instance DepKDeserialize (AtomKonConstructor t) => DepKDeserializeK (Field t :: 
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t :: LoT ks -> Type), KnowledgeList (LearnK (Field t :: LoT ks -> Type) as ds))
     depKDeserializeK _ kl = do
         (anykf, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
-        return (undefined, kl')  -- TODO: Fix that.
+        return (anyKToAnyKKField @t anykf, kl')  -- TODO: GHC just hangs...
 
 instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT ks -> Type) where
     type RequireK (f :*: g :: LoT ks -> Type) as ds =
