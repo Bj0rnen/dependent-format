@@ -274,6 +274,9 @@ type family
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
+unsafeExtractAnyK :: forall ks (f :: ks) (xs :: LoT ks). AnyK f -> f :@@: xs
+unsafeExtractAnyK = undefined
+
 instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t :: LoT ks -> Type) where
     type RequireK (Field t :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
@@ -286,16 +289,7 @@ instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t :
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t :: LoT ks -> Type), KnowledgeList (LearnK (Field t :: LoT ks -> Type) as ds))
     depKDeserializeK _ kl = do
         (anykf, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
-        -- TODO: This is just a horrible hack that covers far from everything!
-        case anykf of
-            AnyZ a ->
-                return (AnyKK (Field (unsafeCoerce a)), kl')
-            AnyS (AnyZ a) ->
-                return (AnyKK (Field (unsafeCoerce a)), kl')
-            AnyS (AnyS (AnyZ a)) ->
-                return (AnyKK (Field (unsafeCoerce a)), kl')
-            AnyS (AnyS (AnyS (AnyZ a))) ->
-                return (AnyKK (Field (unsafeCoerce a)), kl')
+        return (AnyKK (Field (unsafeCoerce (unsafeExtractAnyK @(AtomKonKind t) @(AtomKonConstructor t) anykf))), kl')
 
 instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT ks -> Type) where
     type RequireK (f :*: g :: LoT ks -> Type) as ds =
