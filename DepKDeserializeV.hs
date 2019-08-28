@@ -206,12 +206,12 @@ type family
     InterpretVars (xs :: LoT ks) :: LoT ks where
     InterpretVars (xs :: LoT Type) = 'LoT0
     InterpretVars (xs :: LoT (k -> ks)) = InterpretVar 'VZ xs :&&: InterpretVars (Tail xs)
-interpretVarsIsJustVars :: forall (xs :: LoT ks). Dict (InterpretVars xs ~ xs)
+interpretVarsIsJustVars :: forall xs. Dict (InterpretVars xs ~ xs)
 interpretVarsIsJustVars = unsafeCoerce (Dict @(xs ~ xs))
 class GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
 instance GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
 genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
-genericKInstance = Sub (withDict (interpretVarsIsJustVars @_ @xs) Dict)
+genericKInstance = Sub (withDict (interpretVarsIsJustVars @xs) Dict)
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
@@ -471,14 +471,18 @@ data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
     { size0 :: Sing size0
     , arr1  :: Vector Word8 size1
     } deriving (Show, GHC.Generic)
-$(deriveGenericK 'L0R1)  -- BUG: Usage of this with e.g. GenericKWrapper2 causes GHC to hang!
+-- $(deriveGenericK 'L0R1)  -- BUG: Usage of this with e.g. GenericKWrapper2 causes GHC to hang!
+instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
+    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
+instance GenericK (L0R1 size0) (size1 :&&: 'LoT0) where
+    type RepK (L0R1 size0) = Field ('Kon (Sing size0)) :*: Field (Vector Word8 :$: Var0)
+instance GenericK (L0R1 size0 size1) 'LoT0 where
+    type RepK (L0R1 size0 size1) = Field ('Kon (Sing size0)) :*: Field ('Kon (Vector Word8 size1))
+
 --deriving via GenericKWrapper2 L0R1 instance DepKDeserialize L0R1
 deriving instance DepKDeserialize L0R1
 deriving instance SingI size0 => DepKDeserialize (L0R1 size0)
 deriving instance (SingI size0, SingI size1) => DepKDeserialize (L0R1 size0 size1)
-
---instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
---    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
 
 
 testL0R1SameVarK :: String
@@ -511,7 +515,19 @@ testL0R1Of2And3 =
 
 data SameVarL0R1 size = SameVarL0R1
     { l0r1 :: L0R1 size size
-    } deriving (Show)
-$(deriveGenericK 'SameVarL0R1)  -- BUG: OK, no GenericKWrapper2 this time. These 3 lines also makee it hang.
+    } deriving (Show, GHC.Generic)
+-- $(deriveGenericK 'SameVarL0R1)  -- BUG: OK, no GenericKWrapper2 this time. These 3 lines also make it hang.
+instance GenericK SameVarL0R1 (size :&&: 'LoT0) where
+    type RepK SameVarL0R1 = Field (L0R1 :$: Var0 :@: Var0)
+instance GenericK (SameVarL0R1 size) 'LoT0 where
+    type RepK (SameVarL0R1 size) = Field ('Kon (L0R1 size size))
+
 deriving instance DepKDeserialize SameVarL0R1
 deriving instance SingI size => DepKDeserialize (SameVarL0R1 size)
+
+testSameVarL0R1Unkown :: String
+testSameVarL0R1Unkown =
+    case evalState
+            (depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
