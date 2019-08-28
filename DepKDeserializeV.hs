@@ -29,6 +29,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RoleAnnotations #-}
 
 module DepKDeserializeV where
 
@@ -152,6 +153,10 @@ data instance KnowledgeList ('DS d ds) where
         -> KnowledgeList (ds :: DepStateList ks)
         -> KnowledgeList ('DS d ds :: DepStateList (k -> ks))
 
+--type role AnyK representational
+--data AnyK (f :: ks) where
+--    AnyZ :: a -> AnyK a
+--    AnyS :: Proxy x -> f x -> AnyK f
 data AnyK (f :: ks) where
     AnyK :: Proxy xs -> f :@@: xs -> AnyK f
 
@@ -200,6 +205,32 @@ class DepKDeserialize (f :: ks) where
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  Require f as ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+
+    -- TODO: I was going for a deriving-via design rather than default signatures, but that had problems.
+    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
+    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
+    default depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+    depKDeserialize p kl = do
+        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
+        return (AnyK (Proxy @xs) (toK @_ @f r \\ genericKInstance @f @xs), kl')
+
+-- TODO: This is pretty weird... I'm surprised that this workaround works. If indeed it really always does...
+type family
+    Tail (xs :: LoT (k -> ks)) :: LoT ks where
+    Tail (x :&&: xs) = xs
+type family
+    InterpretVars (xs :: LoT ks) :: LoT ks where
+    InterpretVars (xs :: LoT Type) = 'LoT0
+    InterpretVars (xs :: LoT (k -> ks)) = InterpretVar 'VZ xs :&&: InterpretVars (Tail xs)
+interpretVarsIsJustVars :: forall (xs :: LoT ks). Dict (InterpretVars xs ~ xs)
+interpretVarsIsJustVars = unsafeCoerce (Dict @(xs ~ xs))
+class GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
+instance GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
+genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
+genericKInstance = Sub (withDict (interpretVarsIsJustVars @_ @xs) Dict)
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
     type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
@@ -411,6 +442,8 @@ data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
     } deriving (Show, GHC.Generic)
 -- $(deriveGenericK 'L0R1)  -- BUG: DON'T USE THIS!!!! I don't know why, but usage of this with e.g. GenericKWrapper2 causes GHC to hang!
 --deriving via GenericKWrapper2 L0R1 instance DepKDeserialize L0R1
+deriving instance DepKDeserialize L0R1
+--deriving instance DepKDeserialize (L0R1 size0)
 
 instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
     type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
@@ -426,6 +459,6 @@ testL0R1SameVarK =
 testL0R1SameVar :: String
 testL0R1SameVar =
     case evalState
-            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
+            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply2Vars @_ @_ @L0R1 @xs) $ show a
