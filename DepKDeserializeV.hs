@@ -198,25 +198,6 @@ type family
     AtomAt 'VZ (AtomCons a _) = a
     AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
 
-class DepKDeserialize (f :: ks) where
-    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
-    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
-    depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
-        .  Require f as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
-
-    -- TODO: I was going for a deriving-via design rather than default signatures, but that had problems.
-    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
-    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
-    default depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
-        .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
-    depKDeserialize p kl = do
-        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
-        return (AnyK (Proxy @xs) (toK @_ @f r \\ genericKInstance @f @xs), kl')
-
 -- TODO: This is pretty weird... I'm surprised that this workaround works. If indeed it really always does...
 type family
     Tail (xs :: LoT (k -> ks)) :: LoT ks where
@@ -232,13 +213,32 @@ instance GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
 genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
 genericKInstance = Sub (withDict (interpretVarsIsJustVars @_ @xs) Dict)
 
+class DepKDeserialize (f :: ks) where
+    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
+    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        .  Require f as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+
+    -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
+    type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
+    type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
+    default depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+    depKDeserialize p kl = do
+        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
+        return (AnyK (Proxy @xs) (toK @_ @f r \\ genericKInstance @f @xs), kl')
+
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
     type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
     type Learn (Sing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
-        .  LearnableAtom (AtomAt 'VZ as) ds
+        .  Require (Sing :: k -> Type) as ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
     depKDeserialize _ kl = do
         d <- state deserialize
@@ -249,19 +249,50 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
                     Just kl' ->
                         return (AnyK (Proxy @(s :&&: 'LoT0)) s, kl')
 
+instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeserialize (Sing (a :: k)) where
+    type Require (Sing (a :: k)) as ds = ()
+    type Learn (Sing (a :: k)) _ ds = ds
+
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
+        .  Require (Sing (a :: k)) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing (a :: k)), KnowledgeList (Learn (Sing (a :: k)) as ds))
+    depKDeserialize _ kl = do
+        d <- state deserialize
+        case d of
+            FromSing (s :: Sing (s :: k)) ->
+                case s %~ (sing @a) of
+                    Disproved f ->
+                        -- TODO: Can we show the expected and actual values?
+                        --  A Show instance would be intrusive though. Maybe just show the bytes?
+                        error "Deserialized a specified Sing and got another value than specified"
+                    Proved Refl -> return (AnyK (Proxy @'LoT0) s, kl)
+
 instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
     type Require (Vector a :: Nat -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (Vector a :: Nat -> Type) _ ds = ds
 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
-        .  RequireAtom (AtomAt 'VZ as) ds
+        .  Require (Vector a :: Nat -> Type) as ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a :: Nat -> Type), KnowledgeList (Learn (Vector a :: Nat -> Type) as ds))
     depKDeserialize _ kl =
         case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
             SomeSing (SNat :: Sing n) -> do
                 (a :: Vector a n) <- state deserialize
                 return (AnyK (Proxy @(n :&&: 'LoT0)) a, kl)
+
+instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
+    type Require (Vector a n) as ds = ()
+    type Learn (Vector a n) _ ds = ds
+
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
+        .  Require (Vector a n) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a n), KnowledgeList (Learn (Vector a n) as ds))
+    depKDeserialize _ kl = do
+        (a :: Vector a n) <- state deserialize
+        return (AnyK (Proxy @'LoT0) a, kl)
 
 
 data AnyKK :: (LoT ks -> Type) -> Type where
@@ -440,13 +471,14 @@ data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
     { size0 :: Sing size0
     , arr1  :: Vector Word8 size1
     } deriving (Show, GHC.Generic)
--- $(deriveGenericK 'L0R1)  -- BUG: DON'T USE THIS!!!! I don't know why, but usage of this with e.g. GenericKWrapper2 causes GHC to hang!
+$(deriveGenericK 'L0R1)  -- BUG: Usage of this with e.g. GenericKWrapper2 causes GHC to hang!
 --deriving via GenericKWrapper2 L0R1 instance DepKDeserialize L0R1
 deriving instance DepKDeserialize L0R1
---deriving instance DepKDeserialize (L0R1 size0)
+deriving instance SingI size0 => DepKDeserialize (L0R1 size0)
+deriving instance (SingI size0, SingI size1) => DepKDeserialize (L0R1 size0 size1)
 
-instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
-    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
+--instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
+--    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
 
 
 testL0R1SameVarK :: String
@@ -462,3 +494,17 @@ testL0R1SameVar =
             (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply2Vars @_ @_ @L0R1 @xs) $ show a
+
+testL0R1Of2AndKnown3 :: String
+testL0R1Of2AndKnown3 =
+    case evalState
+            (depKDeserialize @_ @(L0R1 2) (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons (KnowledgeK (sing @3)) KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply1Vars @_ @L0R1 @xs) show a
+
+testL0R1Of2And3 :: String
+testL0R1Of2And3 =
+    case evalState
+            (depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil) KnowledgeNil)
+            [2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply0Vars @L0R1 @xs) show a
