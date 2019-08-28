@@ -508,3 +508,10 @@ testL0R1Of2And3 =
             (depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil) KnowledgeNil)
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply0Vars @L0R1 @xs) show a
+
+data SameVarL0R1 size = SameVarL0R1
+    { l0r1 :: L0R1 size size
+    } deriving (Show)
+$(deriveGenericK 'SameVarL0R1)  -- BUG: OK, no GenericKWrapper2 this time. These 3 lines also makee it hang.
+deriving instance DepKDeserialize SameVarL0R1
+deriving instance SingI size => DepKDeserialize (SameVarL0R1 size)
