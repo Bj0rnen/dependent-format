@@ -531,3 +531,54 @@ testSameVarL0R1Unkown =
             (depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+
+data SameExistentialVarL0R1 =
+    forall size. SameExistentialVarL0R1
+    { l0r1 :: L0R1 size size
+    }
+deriving instance Show SameExistentialVarL0R1
+instance GenericK SameExistentialVarL0R1 'LoT0 where
+    type RepK SameExistentialVarL0R1 = Exists Nat (Field (L0R1 :$: Var0 :@: Var0))
+    fromK (SameExistentialVarL0R1 a) = Exists (Field a)
+    toK (Exists (Field a)) = SameExistentialVarL0R1 a
+
+deriving instance DepKDeserialize SameExistentialVarL0R1
+
+type family
+    IncrVar k (t :: Atom d a) :: Atom (k -> d) a where
+    IncrVar _ ('Kon a) = 'Kon a
+    IncrVar _ ('Var v) = 'Var ('VS v)
+type family
+    IncrVars k ks (as :: AtomList d ks) :: AtomList (k -> d) ks where
+    IncrVars k Type 'AtomNil = 'AtomNil
+    IncrVars k (k' -> ks) ('AtomCons t as) = 'AtomCons (IncrVar k t) (IncrVars k ks as)
+type family
+    IntroduceTyVar k ks (as :: AtomList d ks) :: AtomList (k -> d) (k -> ks) where
+    IntroduceTyVar k ks as = 'AtomCons Var0 (IncrVars k ks as)
+type family
+    DiscardTyVar (ds :: DepStateList (k -> d)) :: DepStateList d where
+    DiscardTyVar ('DS _ ds) = ds
+instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) -> Type)) where
+    type RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = RequireK f (IntroduceTyVar k ks as) ('DS 'Unknown ds)
+    type LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = DiscardTyVar (LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
+    depKDeserializeK
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        .  RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)), KnowledgeList (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds))
+    depKDeserializeK Proxy kl = do
+        (AnyKK a, kl') <- depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)) (KnowledgeCons KnowledgeU kl)
+        case
+            unsafeCoerce  -- TODO: If this is sound and there's no other way, at least factor this out into something general and safe.
+                (Refl :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
+                      :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: 'DS something ds of
+            Refl ->
+                case kl' of
+                    KnowledgeCons _ kl'' ->
+                        return (AnyKK (Exists (unsafeCoerce a)), kl'')
+
+testSameExistentialVarL0R1 :: String
+testSameExistentialVarL0R1 =
+    case evalState
+            (depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil) KnowledgeNil)
+            [2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
