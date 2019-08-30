@@ -582,3 +582,65 @@ testSameExistentialVarL0R1 =
             (depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil) KnowledgeNil)
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+
+{-
+-- Example of the flow of atoms between depKDeserialize and depKDeserializeK.
+
+depKDeserialize @(Nat -> Type) @Foo
+    (Proxy @(AtomCons Var3 AtomNil))
+    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
+==>
+depKDeserializeK @(Nat -> Type) @(Field (Kon L0R1 :@: Var0 :@: Var0))
+    (Proxy @(AtomCons Var3 AtomNil))
+    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
+==>
+depKDeserialize @(Nat -> Nat -> Type) @L0R1
+    (Proxy @(AtomCons Var3 (AtomCons Var3 AtomNil)))
+    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
+
+
+DereferenceAtomList (AtomCons Var3 AtomNil) (AtomCons Var0 (AtomCons Var0 AtomNil))
+~
+AtomCons Var3 (AtomCons Var3 AtomNil)
+-}
+
+type family Promote (a :: Type) = (b :: Type) | b -> a
+
+-- TODO: Could be more sane to put newtype wrappers around these
+--  (maybe make Promote a data family instead?), because this mapping
+--  in the Demote direction is arbitrary-looking. Like, why is
+--  Demote (Fin 256) = Word8, of all things? Maybe there's some general
+--  Demote (Fin n) thing that we could have? There's Natural for Nat,
+--  so perhaps a Finite type?
+type instance Promote Word8 = Fin 256
+type instance Promote Word16 = Fin 65536
+type instance Promote Word32 = Fin 4294967296
+type instance Promote Word64 = Fin 18446744073709551616
+
+instance SingKind (Fin 256) where
+    type Demote (Fin 256) = Word8
+    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+    toSing n = case someFinVal $ fromIntegral n of
+        Nothing -> error $ show n ++ " out of bounds for Fin 256. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+
+instance SingKind (Fin 65536) where
+    type Demote (Fin 65536) = Word16
+    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+    toSing n = case someFinVal $ fromIntegral n of
+        Nothing -> error $ show n ++ " out of bounds for Fin 65536. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+
+instance SingKind (Fin 4294967296) where
+    type Demote (Fin 4294967296) = Word32
+    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+    toSing n = case someFinVal $ fromIntegral n of
+        Nothing -> error $ show n ++ " out of bounds for Fin 4294967296. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+
+instance SingKind (Fin 18446744073709551616) where
+    type Demote (Fin 18446744073709551616) = Word64
+    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+    toSing n = case someFinVal $ fromIntegral n of
+        Nothing -> error $ show n ++ " out of bounds for Fin 18446744073709551616. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
