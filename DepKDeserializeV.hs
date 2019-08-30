@@ -183,8 +183,9 @@ instance (SingI a, SDecide k) => LearnableAtom ('Kon (a :: k)) ds where
         case s %~ sing @a of
             Proved Refl -> Just kl
             Disproved r -> Nothing
-instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) where
+instance LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Unknown ds) where
     learnAtom (SomeSing s) (KnowledgeCons KnowledgeU kl) = Just (KnowledgeCons (KnowledgeK s) kl)
+instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Known ds) where
     learnAtom (SomeSing s) curr@(KnowledgeCons (KnowledgeK s') kl) =
         case s %~ s' of
             Proved Refl -> Just curr
@@ -644,3 +645,20 @@ instance SingKind (Fin 18446744073709551616) where
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Fin 18446744073709551616. This should not be possible."
         Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+
+
+data L0Word8 (size :: Fin 256) = L0Word8
+    { size :: Sing size
+    } deriving (Show, GHC.Generic)
+instance GenericK L0Word8 (size :&&: 'LoT0) where
+    type RepK L0Word8 = Field (Sing :$: Var0)
+instance GenericK (L0Word8 size) 'LoT0 where
+    type RepK (L0Word8 size) = Field ('Kon (Sing size))
+deriving instance DepKDeserialize L0Word8
+
+testL0Word8 :: String
+testL0Word8 =
+    case evalState
+            (depKDeserialize @_ @L0Word8 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            [2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
