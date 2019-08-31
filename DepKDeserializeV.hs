@@ -584,6 +584,14 @@ testSameExistentialVarL0R1 =
             [2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
+dep0Deserialize :: forall a. (DepKDeserialize a, Require a 'AtomNil 'DZ) => State [Word8] a
+dep0Deserialize = do
+    (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
+    return (withDict (interpretVarsIsJustVars @xs) a)
+
+testSameExistentialVarL0R1Simple :: SameExistentialVarL0R1
+testSameExistentialVarL0R1Simple = evalState (dep0Deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
+
 {-
 -- Example of the flow of atoms between depKDeserialize and depKDeserializeK.
 
