@@ -605,49 +605,86 @@ DereferenceAtomList (AtomCons Var3 AtomNil) (AtomCons Var0 (AtomCons Var0 AtomNi
 AtomCons Var3 (AtomCons Var3 AtomNil)
 -}
 
-type family Promote (a :: Type) = (b :: Type) | b -> a
+-- NOTE: I don't love the repetitiveness of the type family approach below.
+--  I tried a data family like in this comment, but apparently data family instance
+--  constructors simply never promote to the kind level... GHC's user guide says it
+--  would require full dependent types. I'm not sure why.
+--data family Promote (a :: Type)
+--
+--newtype instance Promote Word8 = PWord8 (Fin 256)
+--newtype instance Promote Word16 = PWord16 (Fin 65536)
+--newtype instance Promote Word32 = PWord32 (Fin 4294967296)
+--newtype instance Promote Word64 = PWord64 (Fin 18446744073709551616)
 
--- TODO: Could be more sane to put newtype wrappers around these
---  (maybe make Promote a data family instead?), because this mapping
---  in the Demote direction is arbitrary-looking. Like, why is
---  Demote (Fin 256) = Word8, of all things? Maybe there's some general
---  Demote (Fin n) thing that we could have? There's Natural for Nat,
---  so perhaps a Finite type?
-type instance Promote Word8 = Fin 256
-type instance Promote Word16 = Fin 65536
-type instance Promote Word32 = Fin 4294967296
-type instance Promote Word64 = Fin 18446744073709551616
+newtype PWord8 = PWord8 (Fin 256)
+newtype PWord16 = PWord16 (Fin 65536)
+newtype PWord32 = PWord32 (Fin 4294967296)
+newtype PWord64 = PWord64 (Fin 18446744073709551616)
 
-instance SingKind (Fin 256) where
-    type Demote (Fin 256) = Word8
-    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+-- NOTE: Also, it turns out that there are no uses for this type family either.
+--  Basically it seems I have to use concrete stand-alone types like PWord8 directly.
+--  I could use types like Fin 256 directly too and say Demote (Fin 256) = Word8,
+--  but I find that a somewhat arbitrary mapping, hence these newtype wrappers.
+--type family Promote (a :: Type) = (b :: Type) | b -> a
+--
+--type instance Promote Word8 = PWord8
+--type instance Promote Word16 = PWord16
+--type instance Promote Word32 = PWord32
+--type instance Promote Word64 = PWord64
+--
+-- TODO: Potentially, we can explore other approaches than the `Sing (a :: Promote Word8)`
+--  that I had imagined, by not trying to make something that can be wrapped in a sing.
+--  For example, what if instead of `Sing (a :: Promote Word8)`, we try to make
+--  something like `PromotedSing (a :: Word8)` work?
+
+data instance Sing :: PWord8 -> Type where
+    SWord8 :: forall (a :: Fin 256). Sing a -> Sing ('PWord8 a)
+data instance Sing :: PWord16 -> Type where
+    SWord16 :: forall (a :: Fin 65536). Sing a -> Sing ('PWord16 a)
+data instance Sing :: PWord32 -> Type where
+    SWord32 :: forall (a :: Fin 4294967296). Sing a -> Sing ('PWord32 a)
+data instance Sing :: PWord64 -> Type where
+    SWord64 :: forall (a :: Fin 18446744073709551616). Sing a -> Sing ('PWord64 a)
+
+instance Show (Sing (a :: PWord8)) where
+    show (SWord8 a) = "SWord8 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
+instance Show (Sing (a :: PWord16)) where
+    show (SWord16 a) = "SWord16 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
+instance Show (Sing (a :: PWord32)) where
+    show (SWord32 a) = "SWord32 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
+instance Show (Sing (a :: PWord64)) where
+    show (SWord64 a) = "SWord64 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
+
+instance SingKind (PWord8) where
+    type Demote (PWord8) = Word8
+    fromSing (SWord8 (SFin :: Sing a)) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin 256. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+        Nothing -> error $ show n ++ " out of bounds for PWord8. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord8 (SFin :: Sing a))
 
-instance SingKind (Fin 65536) where
-    type Demote (Fin 65536) = Word16
-    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+instance SingKind (PWord16) where
+    type Demote (PWord16) = Word16
+    fromSing (SWord16 (SFin :: Sing a)) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin 65536. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+        Nothing -> error $ show n ++ " out of bounds for PWord16. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord16 (SFin :: Sing a))
 
-instance SingKind (Fin 4294967296) where
-    type Demote (Fin 4294967296) = Word32
-    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+instance SingKind (PWord32) where
+    type Demote (PWord32) = Word32
+    fromSing (SWord32 (SFin :: Sing a)) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin 4294967296. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+        Nothing -> error $ show n ++ " out of bounds for Fin SWord32. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord32 (SFin :: Sing a))
 
-instance SingKind (Fin 18446744073709551616) where
-    type Demote (Fin 18446744073709551616) = Word64
-    fromSing (SFin :: Sing a) = fromIntegral $ finVal @a
+instance SingKind (PWord64) where
+    type Demote (PWord64) = Word64
+    fromSing (SWord64 (SFin :: Sing a)) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin 18446744073709551616. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
+        Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
 
 
-data L0Word8 (size :: Fin 256) = L0Word8
+data L0Word8 (size :: PWord8) = L0Word8
     { size :: Sing size
     } deriving (Show, GHC.Generic)
 instance GenericK L0Word8 (size :&&: 'LoT0) where
