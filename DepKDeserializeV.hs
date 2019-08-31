@@ -684,18 +684,18 @@ instance SingKind (PWord64) where
         Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
 
 
-data L0Word8 (size :: PWord8) = L0Word8
+data L0Word64 (size :: PWord64) = L0Word64
     { size :: Sing size
     } deriving (Show, GHC.Generic)
-instance GenericK L0Word8 (size :&&: 'LoT0) where
-    type RepK L0Word8 = Field (Sing :$: Var0)
-instance GenericK (L0Word8 size) 'LoT0 where
-    type RepK (L0Word8 size) = Field ('Kon (Sing size))
-deriving instance DepKDeserialize L0Word8
+instance GenericK L0Word64 (size :&&: 'LoT0) where
+    type RepK L0Word64 = Field (Sing :$: Var0)
+instance GenericK (L0Word64 size) 'LoT0 where
+    type RepK (L0Word64 size) = Field ('Kon (Sing size))
+deriving instance DepKDeserialize L0Word64
 
-testL0Word8 :: String
-testL0Word8 =
+testL0Word64 :: String
+testL0Word64 =
     case evalState
-            (depKDeserialize @_ @L0Word8 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
+            (depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            [0,1,2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a

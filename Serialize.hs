@@ -56,10 +56,59 @@ instance Serialize Word8 where
     deserialize (b : bs) = (b, bs)
 
 instance Serialize Word16 where
-    serialize a = [fromIntegral (a .&. 0xFF00) `shiftR` 8, fromIntegral (a .&. 0xFF)]
+    serialize a =
+        [ fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
     deserialize bs =
         case deserialize bs of
-            (a :> b :> Nil :: Vector Word8 2, bs') -> ((fromIntegral a) `shiftL` 8 .|. fromIntegral b, bs')
+            (a :> b :> Nil :: Vector Word8 2, bs') ->
+                (       (fromIntegral a) `shiftL` 8
+                    .|. fromIntegral b
+                , bs'
+                )
+
+instance Serialize Word32 where
+    serialize a =
+        [ fromIntegral ((a `shiftR` 24) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 16) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
+    deserialize bs =
+        case deserialize bs of
+            (a :> b :> c :> d :> Nil :: Vector Word8 4, bs') ->
+                (       (fromIntegral a) `shiftL` 24
+                    .|. (fromIntegral b) `shiftL` 16
+                    .|. (fromIntegral c) `shiftL` 8
+                    .|. fromIntegral d
+                , bs'
+                )
+
+instance Serialize Word64 where
+    serialize a =
+        [ fromIntegral ((a `shiftR` 56) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 48) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 40) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 32) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 24) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 16) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
+    deserialize bs =
+        case deserialize bs of
+            (a :> b :> c :> d :> e :> f :> g :> h :> Nil :: Vector Word8 8, bs') ->
+                (       (fromIntegral a) `shiftL` 56
+                    .|. (fromIntegral b) `shiftL` 48
+                    .|. (fromIntegral c) `shiftL` 40
+                    .|. (fromIntegral d) `shiftL` 32
+                    .|. (fromIntegral e) `shiftL` 24
+                    .|. (fromIntegral f) `shiftL` 16
+                    .|. (fromIntegral g) `shiftL` 8
+                    .|. fromIntegral h
+                , bs'
+                )
 
 instance Serialize Natural where  -- 8-bit
     serialize n = [fromIntegral n]
