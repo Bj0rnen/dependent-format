@@ -216,20 +216,3 @@ testSameExistentialVarL0R1 =
 
 testSameExistentialVarL0R1Simple :: SameExistentialVarL0R1
 testSameExistentialVarL0R1Simple = evalState (dep0Deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
-
-
-data L0Word64 (size :: PWord64) = L0Word64
-    { size :: Sing size
-    } deriving (Show, GHC.Generic)
-instance GenericK L0Word64 (size :&&: 'LoT0) where
-    type RepK L0Word64 = Field (Sing :$: Var0)
-instance GenericK (L0Word64 size) 'LoT0 where
-    type RepK (L0Word64 size) = Field ('Kon (Sing size))
-deriving instance DepKDeserialize L0Word64
-
-testL0Word64 :: String
-testL0Word64 =
-    case evalState
-            (depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [0,1,2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a

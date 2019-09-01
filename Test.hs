@@ -7,6 +7,7 @@ import Product1Serialize ()
 import Dep2DeserializeTest ()
 import Conditional ()
 import DepKDeserializeTest ()
+import DepKDeserializeWordTest ()
 
 
 import Data.Singletons
