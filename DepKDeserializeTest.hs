@@ -31,9 +31,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RoleAnnotations #-}
 
-module DepKDeserializeVTest where
+module DepKDeserializeTest where
 
-import DepKDeserializeV
+import DepKDeserialize
 import Serialize
 import Vector
 import DepState

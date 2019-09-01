@@ -6,7 +6,7 @@ import Generic1KTest ()
 import Product1Serialize ()
 import Dep2DeserializeTest ()
 import Conditional ()
-import DepKDeserializeVTest ()
+import DepKDeserializeTest ()
 
 
 import Data.Singletons

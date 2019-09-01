@@ -31,7 +31,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RoleAnnotations #-}
 
-module DepKDeserializeV where
+module DepKDeserialize where
 
 import Serialize
 import Vector
