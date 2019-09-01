@@ -96,8 +96,15 @@ class RequireAtom (a :: Atom d k) (ds :: DepStateList d) where
     getAtom :: KnowledgeList ds -> SomeSing k
 instance SingI a => RequireAtom ('Kon (a :: k)) ds where
     getAtom _ = SomeSing (sing @a)
-instance d ~ 'Known => RequireAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS d ds) where
+instance RequireAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Known ds) where
     getAtom (KnowledgeCons (KnowledgeK s) _) = SomeSing s
+instance
+    -- TODO: Any hope of showing the name of the type variable?
+    --  With nested records, it might've gone by multiple names, I suppose...
+    --  Still, if type variable names are accessible, we could in theory show some kind of stack trace.
+    TypeError (Text "A type variable of kind '" :<>: ShowType k :<>: Text "' is required before it is known.") =>
+    RequireAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Unknown ds) where
+    getAtom = error "unreachable"
 instance RequireAtom ('Var v) ds => RequireAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     getAtom (KnowledgeCons _ kl) = getAtom @ks @k @('Var v) @ds kl
 
