@@ -71,65 +71,6 @@ import Data.Reflection
 
 import Control.Monad.State
 
-{-
-data PartiallyKnown (f :: ks) (ds :: DepStateList ks) where
-    PartiallyKnown :: ExplicitPartialKnowledge ks xs ds -> f :@@: xs -> PartiallyKnown f ds
-
-class DepKDeserializeV (f :: ks) where
-    type DepStateReqs (f :: ks) (ds :: DepStateList ks) :: Constraint
-    type TaughtBy (f :: ks) :: DepStateList ks
-    depKDeserializeV :: DepStateReqs f ds => ExplicitPartialKnowledge ks xs ds -> [Word8] -> (PartiallyKnown f (TaughtBy f), [Word8])
--}
-
-
-{-
-data ExplicitPartialKnowledge (xs :: LoT ks) (ds :: DepStateList ks) where
-    ExplicitPartialKnowledgeNil  :: ExplicitPartialKnowledge LoT0 'DZ
-    ExplicitPartialKnowledgeCons :: Knowledge d (x :: a) -> ExplicitPartialKnowledge xs ds -> ExplicitPartialKnowledge (x :&&: xs) ('DS d ds)
-
-data SomePartialKnowledge (ds :: DepStateList ks) where
-    SomePartialKnowledge :: ExplicitPartialKnowledge xs ds -> SomePartialKnowledge ds
-
---data PartiallyKnown (f :: LoT ks -> Type) (ds :: DepStateList ks) where
---    PartiallyKnown :: ExplicitPartialKnowledge xs ds -> f xs -> PartiallyKnown f ds
-
---class DepKDeserializeV (f :: ks) (a :: Atom ls ks) where
---    type DepStateReqs (f :: ks) (a :: Atom ls ks) (ds :: DepStateList ls) :: Constraint
---    type TaughtBy (f :: ks) (a :: Atom ls ks) :: DepStateList ls
---    idunnolol :: forall (x :: ks -> Type) (xs :: LoT ls). Field (Kon x :@: a) xs
---    --depKDeserializeV :: [Word8] -> (f xs, SomePartialKnowledge ?, [Word8])
---
---instance DepKDeserializeV (Sing :: Nat -> Type) (Var3 :: Atom (k0 -> k1 -> k2 -> (Nat -> Type) -> Type) (Nat -> Type))
-
---_foo :: forall (f :: ks) (a :: Atom ks Type). Int
---_foo = undefined
-
---class DepKDeserializeA (a :: Atom d ks)
---instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :: Atom d (Nat -> Type))
-
---class DepKDeserializeA (a :: Atom ks Type)
-----instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: a0)
---instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: Kon k0 :: Atom ks Type)
---instance DepKDeserializeA (Kon (Sing :: Nat -> Type) :@: Var v0 :: Atom ks Type)
-
---data Foo (a :: Atom d ks) (ds :: DepStateList d) where
---    FooNil :: Foo (Kon f) ds
---    FooCons ::
-
---data Args (ks :: Type) where
---    ArgsNil :: Args Type
---    ArgsCons :: Atom k Type -> Args ks -> Args (k -> ks)
-
-class DepKDeserialize (f :: ks) where
-    type DepLevels (f :: ks) :: DepLevelList ks
-    depKDeserialize :: SomePartialKnowledge (ds :: DepStateList d) -> [Word8] -> (Void, [Word8])
-instance DepKDeserialize (Sing :: Nat -> Type) where
-    type DepLevels (Sing :: Nat -> Type) = DLS Learning DLZ
--}
-
--- TODO: An idea worth considering: Add a `Phantom` state. Could maybe get rid of unsafeCoerces.
---  But this could be nonsense.
---data DepState = Unknown | Known | Phantom
 
 data DepStateList :: Type -> Type where
     DZ :: DepStateList Type
@@ -143,22 +84,12 @@ data AtomList :: Type -> Type -> Type where
     AtomNil  :: AtomList d Type
     AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
 
-
-data family KnowledgeList :: DepStateList d -> Type
-data instance KnowledgeList 'DZ where
+data KnowledgeList (ds :: DepStateList d) where
     KnowledgeNil :: KnowledgeList 'DZ
-data instance KnowledgeList ('DS d ds) where
     KnowledgeCons
         :: Knowledge d (x :: k)
         -> KnowledgeList (ds :: DepStateList ks)
         -> KnowledgeList ('DS d ds :: DepStateList (k -> ks))
-
---type role AnyK representational
---data AnyK (f :: ks) where
---    AnyZ :: a -> AnyK a
---    AnyS :: Proxy x -> f x -> AnyK f
-data AnyK (f :: ks) where
-    AnyK :: Proxy xs -> f :@@: xs -> AnyK f
 
 
 class RequireAtom (a :: Atom d k) (ds :: DepStateList d) where
@@ -193,12 +124,6 @@ instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Known d
 instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) @ds ss kl
 
--- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
-type family
-    AtomAt (n :: TyVar ks k) (as :: AtomList d ks) :: Atom d k where
-    AtomAt 'VZ (AtomCons a _) = a
-    AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
-
 -- TODO: This is pretty weird... I'm surprised that this workaround works. If indeed it really always does...
 type family
     Tail (xs :: LoT (k -> ks)) :: LoT ks where
@@ -213,6 +138,10 @@ class GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
 instance GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
 genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
 genericKInstance = Sub (withDict (interpretVarsIsJustVars @xs) Dict)
+
+
+data AnyK (f :: ks) where
+    AnyK :: Proxy xs -> f :@@: xs -> AnyK f
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
@@ -269,14 +198,20 @@ instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeseriali
                         error "Deserialized a specified Sing and got another value than specified"
                     Proved Refl -> return (AnyK (Proxy @'LoT0) s, kl)
 
-instance Serialize a => DepKDeserialize (Vector a :: Nat -> Type) where
-    type Require (Vector a :: Nat -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
-    type Learn (Vector a :: Nat -> Type) _ ds = ds
+-- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
+type family
+    AtomAt (n :: TyVar ks k) (as :: AtomList d ks) :: Atom d k where
+    AtomAt 'VZ (AtomCons a _) = a
+    AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
+
+instance Serialize a => DepKDeserialize (Vector a) where
+    type Require (Vector a) as ds = RequireAtom (AtomAt 'VZ as) ds
+    type Learn (Vector a) _ ds = ds
 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
-        .  Require (Vector a :: Nat -> Type) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a :: Nat -> Type), KnowledgeList (Learn (Vector a :: Nat -> Type) as ds))
+        .  Require (Vector a) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a), KnowledgeList (Learn (Vector a) as ds))
     depKDeserialize _ kl =
         case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
             SomeSing (SNat :: Sing n) -> do
@@ -336,214 +271,38 @@ type family
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
-instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t :: LoT ks -> Type) where
-    type RequireK (Field t :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) =
+instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) where
+    type RequireK (Field t) as (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
-    type LearnK (Field t :: LoT ks -> Type) (as :: AtomList d ks)  (ds :: DepStateList d) =
+    type LearnK (Field t) as (ds :: DepStateList d) =
         Learn (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
 
     depKDeserializeK
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
-        .  RequireK (Field t :: LoT ks -> Type) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t :: LoT ks -> Type), KnowledgeList (LearnK (Field t :: LoT ks -> Type) as ds))
+        :: forall d (ds :: DepStateList d) as
+        .  RequireK (Field t) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t), KnowledgeList (LearnK (Field t) as ds))
     depKDeserializeK _ kl = do
         (AnyK Proxy a, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
         return (AnyKK (Field (unsafeCoerce a)), kl')
 
-instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT ks -> Type) where
-    type RequireK (f :*: g :: LoT ks -> Type) as ds =
+instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g) where
+    type RequireK (f :*: g) as ds =
         ( RequireK f as ds
         , RequireK g as (LearnK f as ds)
         )
-    type LearnK (f :*: g :: LoT ks -> Type) as ds = LearnK g as (LearnK f as ds)
+    type LearnK (f :*: g) as ds = LearnK g as (LearnK f as ds)
     depKDeserializeK p kl = do
-        (AnyKK a, kl') <- depKDeserializeK @ks @f p kl
-        (AnyKK a', kl'') <- depKDeserializeK @ks @g p kl'
+        (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
+        (AnyKK a', kl'') <- depKDeserializeK @_ @g p kl'
         return (AnyKK (unsafeCoerce a :*: a'), kl'')  -- TODO: Would be excellent to get rid of unsafeCoerce!
 
-instance DepKDeserializeK f => DepKDeserializeK (M1 i c f :: LoT ks -> Type) where
+instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
     type RequireK (M1 i c f) as ds = RequireK f as ds
     type LearnK (M1 i c f) as ds = LearnK f as ds
     depKDeserializeK p kl = do
-        (AnyKK a, kl') <- depKDeserializeK @ks @f p kl
+        (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
         return (AnyKK (M1 a), kl')
 
-
----- TODO: Should be some recursive way to do this too, right? A data family perhaps?
---newtype GenericKWrapper0 f = GenericKWrapper0 f
---instance DepKDeserializeK (RepK f) => DepKDeserialize (GenericKWrapper0 f) where
---    type Require (GenericKWrapper0 f) 'AtomNil ds = RequireK (Field ('Kon f)) ds
---    type Learn (GenericKWrapper0 f) 'AtomNil ds = LearnK (Field ('Kon f)) ds
---    --depKDeserialize _ kl = do
---    --    (_, kl') <- depKDeserializeK @Type @(Field ('Kon f)) kl
---    --    return (undefined, kl')
---newtype GenericKWrapper1 f x0 = GenericKWrapper1 (f x0)
---instance DepKDeserializeK (RepK f) => DepKDeserialize (GenericKWrapper1 f) where
---    type Require (GenericKWrapper1 f) ('AtomCons a0 'AtomNil) ds = RequireK (Field ('Kon f :@: a0)) ds
---    type Learn (GenericKWrapper1 f) ('AtomCons a0 'AtomNil) ds = LearnK (Field ('Kon f :@: a0)) ds
---    --depKDeserialize _ kl = do
---    --    (_, kl') <- depKDeserializeK @Type @(Field ('Kon f)) kl
---    --    return (undefined, kl')
-
-
---newtype GenericKWrapper2 f x0 x1 = GenericKWrapper2 (f x0 x1)
---    deriving (Show)
---instance (forall size0 size1. GenericK f (size0 :&&: size1 :&&: 'LoT0), DepKDeserializeK (RepK f)) => DepKDeserialize (GenericKWrapper2 f :: k0 -> k1 -> Type) where
---    type Require (GenericKWrapper2 f) as ds = RequireK (RepK f) as ds
---    type Learn (GenericKWrapper2 f) as ds = LearnK (RepK f) as ds
---    depKDeserialize p kl = do
---        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @(k0 -> k1 -> Type) @(RepK f) p kl
---        -- TODO: What is this even?
---        case unsafeCoerce (Refl :: xs :~: xs) :: xs :~: (size0 :&&: size1 :&&: 'LoT0) of
---            Refl -> return (AnyK Proxy (unsafeCoerce (GenericKWrapper2 (unsafeCoerce (toK @_ @f r)))), kl')  -- TODO: Ugghhh...
-
---instance DepKDeserialize L0R1 where
---    type Require L0R1 as ds = RequireK (RepK L0R1) as ds
---    type Learn L0R1 as ds = LearnK (RepK L0R1) as ds
---    depKDeserialize p kl = do
---        (AnyKK (r :: RepK L0R1 xs), kl') <- depKDeserializeK @(Nat -> Nat -> Type) @(RepK L0R1) p kl
---        return (AnyK (Proxy @xs) (withDict (simply2Vars @_ @_ @L0R1 @xs) (toK @_ @L0R1 r)), kl')
-
-simply0Vars :: forall f (xs :: LoT Type). Dict (xs ~ 'LoT0)
-simply0Vars = unsafeCoerce (Dict @(xs ~ xs))  -- TODO: Not sure if correct. And just a hack anyway.
-
-simply1Vars :: forall f (xs :: LoT (k0 -> Type)). Dict (xs ~ (Interpret (Var 'VZ) xs :&&: 'LoT0))
-simply1Vars = unsafeCoerce (Dict @(xs ~ xs))  -- TODO: Not sure if correct. And just a hack anyway.
-
-simply2Vars :: forall f (xs :: LoT (k0 -> k1 -> Type)). Dict (xs ~ (Interpret (Var 'VZ) xs :&&: Interpret (Var ('VS 'VZ)) xs :&&: 'LoT0))
-simply2Vars = unsafeCoerce (Dict @(xs ~ xs))  -- TODO: Not sure if correct. And just a hack anyway.
-
----- TODO: I've rewritten these in terms of (GenericKWrapper2 L0R1) instead of L0R1.
-----  Shouldn't really have to do that. I can write the (DepKDeserialize (L0R1)) instance by hand,
-----  but I want a way to derive it, and I haven't quite gottn there yet.
---testL0R1SameVar :: String
---testL0R1SameVar =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
---            [2,3,4,5,6,7] of
---        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply2Vars @_ @_ @(GenericKWrapper2 L0R1) @xs) $ show a
---
---testL0R1DifferentVars :: String
---testL0R1DifferentVars =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (KnowledgeCons KnowledgeU (KnowledgeCons (KnowledgeK (sing @5)) KnowledgeNil)))
---            [2,3,4,5,6,7] of
---        (AnyK Proxy a, _) -> show a
---
---testL0R1Kons :: String
---testL0R1Kons =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons ('Kon 2) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
---            [2,3,4,5,6,7] of
---        (AnyK Proxy a, _) -> show a
---
---testL0R1KonsContradictory :: String
---testL0R1KonsContradictory =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons ('Kon 1) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
---            [2,3,4,5,6,7] of
---        (AnyK Proxy a, _) -> show a
---
---testL0R1AlreadyKnown :: String
---testL0R1AlreadyKnown =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @2)) KnowledgeNil))
---            [2,3,4,5,6,7] of
---        (AnyK Proxy a, _) -> show a
---
---
---testL0R1AlreadyKnownContradictory :: String
---testL0R1AlreadyKnownContradictory =
---    case evalState
---            (depKDeserialize @_ @(GenericKWrapper2 L0R1) (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @1)) KnowledgeNil))
---            [2,3,4,5,6,7] of
---        (AnyK Proxy a, _) -> show a
-
-newtype GenericKWrapper2 f x0 x1 = GenericKWrapper2 (f x0 x1)
-    deriving (Show)
-instance ((forall x0 x1. GenericK f (x0 :&&: x1 :&&: 'LoT0)), DepKDeserializeK (RepK f)) => DepKDeserialize (GenericKWrapper2 f :: k0 -> k1 -> Type) where
-    type Require (GenericKWrapper2 f) as ds = RequireK (RepK f) as ds
-    type Learn (GenericKWrapper2 f) as ds = LearnK (RepK f) as ds
-    depKDeserialize p kl = do
-        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @(k0 -> k1 -> Type) @(RepK f) p kl
-        return (AnyK (Proxy @xs) (withDict (simply2Vars @_ @_ @f @xs) (GenericKWrapper2 (toK @_ @f r))), kl')
-
-data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
-    { size0 :: Sing size0
-    , arr1  :: Vector Word8 size1
-    } deriving (Show, GHC.Generic)
--- $(deriveGenericK 'L0R1)  -- BUG: Usage of this with e.g. GenericKWrapper2 causes GHC to hang!
-instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
-    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
-instance GenericK (L0R1 size0) (size1 :&&: 'LoT0) where
-    type RepK (L0R1 size0) = Field ('Kon (Sing size0)) :*: Field (Vector Word8 :$: Var0)
-instance GenericK (L0R1 size0 size1) 'LoT0 where
-    type RepK (L0R1 size0 size1) = Field ('Kon (Sing size0)) :*: Field ('Kon (Vector Word8 size1))
-
---deriving via GenericKWrapper2 L0R1 instance DepKDeserialize L0R1
-deriving instance DepKDeserialize L0R1
-deriving instance SingI size0 => DepKDeserialize (L0R1 size0)
-deriving instance (SingI size0, SingI size1) => DepKDeserialize (L0R1 size0 size1)
-
-
-testL0R1SameVarK :: String
-testL0R1SameVarK =
-    case evalState
-            (depKDeserializeK @_ @(Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
-        (AnyKK a, _) -> show a
-
-testL0R1SameVar :: String
-testL0R1SameVar =
-    case evalState
-            (depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply2Vars @_ @_ @L0R1 @xs) $ show a
-
-testL0R1Of2AndKnown3 :: String
-testL0R1Of2AndKnown3 =
-    case evalState
-            (depKDeserialize @_ @(L0R1 2) (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons (KnowledgeK (sing @3)) KnowledgeNil))
-            [2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply1Vars @_ @L0R1 @xs) show a
-
-testL0R1Of2And3 :: String
-testL0R1Of2And3 =
-    case evalState
-            (depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil) KnowledgeNil)
-            [2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (simply0Vars @L0R1 @xs) show a
-
-data SameVarL0R1 size = SameVarL0R1
-    { l0r1 :: L0R1 size size
-    } deriving (Show, GHC.Generic)
--- $(deriveGenericK 'SameVarL0R1)  -- BUG: OK, no GenericKWrapper2 this time. These 3 lines also make it hang.
-instance GenericK SameVarL0R1 (size :&&: 'LoT0) where
-    type RepK SameVarL0R1 = Field (L0R1 :$: Var0 :@: Var0)
-instance GenericK (SameVarL0R1 size) 'LoT0 where
-    type RepK (SameVarL0R1 size) = Field ('Kon (L0R1 size size))
-
-deriving instance DepKDeserialize SameVarL0R1
-deriving instance SingI size => DepKDeserialize (SameVarL0R1 size)
-
-testSameVarL0R1Unkown :: String
-testSameVarL0R1Unkown =
-    case evalState
-            (depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
-
-data SameExistentialVarL0R1 =
-    forall size. SameExistentialVarL0R1
-    { l0r1 :: L0R1 size size
-    }
-deriving instance Show SameExistentialVarL0R1
-instance GenericK SameExistentialVarL0R1 'LoT0 where
-    type RepK SameExistentialVarL0R1 = Exists Nat (Field (L0R1 :$: Var0 :@: Var0))
-    fromK (SameExistentialVarL0R1 a) = Exists (Field a)
-    toK (Exists (Field a)) = SameExistentialVarL0R1 a
-
-deriving instance DepKDeserialize SameExistentialVarL0R1
 
 type family
     IncrVar k (t :: Atom d a) :: Atom (k -> d) a where
@@ -577,41 +336,12 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
                     KnowledgeCons _ kl'' ->
                         return (AnyKK (Exists (unsafeCoerce a)), kl'')
 
-testSameExistentialVarL0R1 :: String
-testSameExistentialVarL0R1 =
-    case evalState
-            (depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil) KnowledgeNil)
-            [2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 dep0Deserialize :: forall a. (DepKDeserialize a, Require a 'AtomNil 'DZ) => State [Word8] a
 dep0Deserialize = do
     (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
     return (withDict (interpretVarsIsJustVars @xs) a)
 
-testSameExistentialVarL0R1Simple :: SameExistentialVarL0R1
-testSameExistentialVarL0R1Simple = evalState (dep0Deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
-
-{-
--- Example of the flow of atoms between depKDeserialize and depKDeserializeK.
-
-depKDeserialize @(Nat -> Type) @Foo
-    (Proxy @(AtomCons Var3 AtomNil))
-    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
-==>
-depKDeserializeK @(Nat -> Type) @(Field (Kon L0R1 :@: Var0 :@: Var0))
-    (Proxy @(AtomCons Var3 AtomNil))
-    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
-==>
-depKDeserialize @(Nat -> Nat -> Type) @L0R1
-    (Proxy @(AtomCons Var3 (AtomCons Var3 AtomNil)))
-    (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil))))
-
-
-DereferenceAtomList (AtomCons Var3 AtomNil) (AtomCons Var0 (AtomCons Var0 AtomNil))
-~
-AtomCons Var3 (AtomCons Var3 AtomNil)
--}
 
 -- NOTE: I don't love the repetitiveness of the type family approach below.
 --  I tried a data family like in this comment, but apparently data family instance
@@ -690,20 +420,3 @@ instance SingKind (PWord64) where
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
         Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
-
-
-data L0Word64 (size :: PWord64) = L0Word64
-    { size :: Sing size
-    } deriving (Show, GHC.Generic)
-instance GenericK L0Word64 (size :&&: 'LoT0) where
-    type RepK L0Word64 = Field (Sing :$: Var0)
-instance GenericK (L0Word64 size) 'LoT0 where
-    type RepK (L0Word64 size) = Field ('Kon (Sing size))
-deriving instance DepKDeserialize L0Word64
-
-testL0Word64 :: String
-testL0Word64 =
-    case evalState
-            (depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [0,1,2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
