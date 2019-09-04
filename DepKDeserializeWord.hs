@@ -150,3 +150,49 @@ instance SingKind (PWord64) where
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
         Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
+
+
+-- TODO: Too specialized? Not sure what's a good abstraction yet. Could be an x-to-y (i.e. PWord8-to-Nat) conversion.
+--  Or it could be more semantics/purpose focused, like "Can this kind represent a vector's (or other collection's) length?".
+--  In this form it's basically "Can this kind losslessly and unambiguously be converted to a natural number?".
+class HasToNat k where
+    type ToNat (a :: k) :: Nat
+    toNat :: Sing (a :: k) -> Sing (ToNat a :: Nat)
+instance HasToNat PWord8 where
+    type ToNat ('PWord8 a) = FinToNat a
+    toNat (SWord8 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat PWord16 where
+    type ToNat ('PWord16 a) = FinToNat a
+    toNat (SWord16 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat PWord32 where
+    type ToNat ('PWord32 a) = FinToNat a
+    toNat (SWord32 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat PWord64 where
+    type ToNat ('PWord64 a) = FinToNat a
+    toNat (SWord64 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+
+-- TODO: Is there room for more generalization? A "Generalized" anything that's indexed by a Nat?
+--  A "Generalized" anything that's indexed by anything that can by converted to whatever the wrapped thing is indexed by?
+--  Also, this case is quite simple because deserializing a Vector doesn't learn anything. Generalizing something like Sing
+--  would require conversion in the opposite direction, which, unless the kinds are bijective, one direction would have to
+--  to be partial...
+--  Not to mention generalizing things that are indexed on more than one type variable, e.g. the L0R1 example type.
+newtype GeneralizedVector (a :: Type) (n :: k) where
+    GeneralizedVector :: forall a k (n :: k). Vector a (ToNat n) -> GeneralizedVector a n
+deriving instance Show (Vector a (ToNat n)) => Show (GeneralizedVector a n)
+
+instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k -> Type) where
+    type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
+    type Learn (GeneralizedVector a :: k -> Type) as ds = ds
+
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
+        .  Require (GeneralizedVector a) as ds
+        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (GeneralizedVector a), KnowledgeList (Learn (GeneralizedVector a) as ds))
+    depKDeserialize _ kl = do
+        case getAtom @d @k @(AtomAt 'VZ as) @ds kl of
+            SomeSing (n :: Sing n) ->
+                case toNat n of
+                    (SNat :: Sing (ToNat n)) -> do
+                        (a :: Vector a (ToNat n)) <- state deserialize
+                        return (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), kl)

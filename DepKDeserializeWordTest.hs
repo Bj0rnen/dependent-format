@@ -89,3 +89,21 @@ testL0Word64 =
             (depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [0,1,2,3,4,5,6,7] of
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+
+
+data L0R0Word16 (size :: PWord16) = L0R0Word16
+    { size :: Sing size
+    , vec  :: GeneralizedVector Word8 size
+    } deriving (Show, GHC.Generic)
+instance GenericK L0R0Word16 (size :&&: 'LoT0) where
+    type RepK L0R0Word16 = Field (Sing :$: Var0) :*: Field (GeneralizedVector Word8 :$: Var0)
+instance GenericK (L0R0Word16 size) 'LoT0 where
+    type RepK (L0R0Word16 size) = Field ('Kon (Sing size)) :*: Field ('Kon (GeneralizedVector Word8 size))
+deriving instance DepKDeserialize L0R0Word16
+
+testL0R0Word16 :: String
+testL0R0Word16 =
+    case evalState
+            (depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            [0,1,2,3,4,5,6,7] of
+        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a

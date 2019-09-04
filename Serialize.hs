@@ -47,6 +47,8 @@ import Data.Word
 import Data.Bits
 import Numeric.Natural
 
+-- TODO: Use state monad. Also encode failures for deserialize.
+-- TODO: We may also drop this class entirely in favor of DepKDeserialize.
 class Serialize a where
     serialize :: a -> [Word8]
     deserialize :: [Word8] -> (a, [Word8])
@@ -110,6 +112,7 @@ instance Serialize Word64 where
                 , bs'
                 )
 
+-- TODO: This instance should go away.
 instance Serialize Natural where  -- 8-bit
     serialize n = [fromIntegral n]
     deserialize bs =
@@ -117,6 +120,7 @@ instance Serialize Natural where  -- 8-bit
             (a :: Word8, bs') ->
                 (fromIntegral a, bs')
 
+-- TODO: This instance should go away.
 instance SingI n => Serialize (Sing (n :: Nat)) where  -- 8-bit
     serialize SNat = serialize $ natVal @n Proxy
     deserialize bs =
@@ -128,12 +132,14 @@ instance SingI n => Serialize (Sing (n :: Nat)) where  -- 8-bit
                     else
                         error "Deserialized wrong SNat"
 
+-- TODO: I don't think we need this anymore.
 instance (SingKind t, Serialize (Demote t)) => Serialize (Some1 (Sing :: t -> Type)) where
     serialize (Some1 s1 s2) = serialize (FromSing s2)
     deserialize bs =
         case deserialize bs of
             (FromSing s, bs') -> (Some1 s s, bs')
 
+-- TODO: This instance should go away.
 instance SingI a => Serialize (Sing (a :: Fin n)) where  -- 8-bit
     serialize SFin = [fromIntegral $ finVal @a]
     deserialize (a : bs) =
