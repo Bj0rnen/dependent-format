@@ -34,7 +34,6 @@
 module DepKDeserializeTest where
 
 import DepKDeserialize
-import Serialize
 import Vector
 import DepState
 import Knowledge
@@ -229,3 +228,15 @@ deriving instance DepKDeserialize EmptyRecord
 
 testEmptyRecordSimple :: (EmptyRecord, [Word8])
 testEmptyRecordSimple = runState (dep0Deserialize @EmptyRecord) [2,3,4,5,6,7]
+
+
+data PlainField = PlainField
+    { word16 :: Word16
+    } deriving (Show, GHC.Generic)
+instance GenericK PlainField 'LoT0 where
+    type RepK PlainField = Field ('Kon Word16)
+
+deriving instance DepKDeserialize PlainField
+
+testPlainFieldSimple :: (PlainField, [Word8])
+testPlainFieldSimple = runState (dep0Deserialize @PlainField) [2,3,4,5,6,7]

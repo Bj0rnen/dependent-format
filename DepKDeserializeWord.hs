@@ -34,7 +34,6 @@
 module DepKDeserializeWord where
 
 import DepKDeserialize
-import Serialize
 import Vector
 import DepState
 import Knowledge
@@ -194,5 +193,5 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
             SomeSing (n :: Sing n) ->
                 case toNat n of
                     (SNat :: Sing (ToNat n)) -> do
-                        (a :: Vector a (ToNat n)) <- state deserialize
+                        (a :: Vector a (ToNat n)) <- dep0Deserialize
                         return (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), kl)

@@ -35,7 +35,6 @@ module DepKDeserializeWordTest where
 
 import DepKDeserializeWord
 import DepKDeserialize
-import Serialize
 import Vector
 import DepState
 import Knowledge
