@@ -216,3 +216,16 @@ testSameExistentialVarL0R1 =
 
 testSameExistentialVarL0R1Simple :: SameExistentialVarL0R1
 testSameExistentialVarL0R1Simple = evalState (dep0Deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
+
+
+data EmptyRecord = EmptyRecord
+    {} deriving (Show, GHC.Generic)
+instance GenericK EmptyRecord 'LoT0 where
+    type RepK EmptyRecord = U1
+    fromK EmptyRecord = U1
+    toK U1 = EmptyRecord
+
+deriving instance DepKDeserialize EmptyRecord
+
+testEmptyRecordSimple :: (EmptyRecord, [Word8])
+testEmptyRecordSimple = runState (dep0Deserialize @EmptyRecord) [2,3,4,5,6,7]

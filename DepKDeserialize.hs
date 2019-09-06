@@ -310,6 +310,11 @@ instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
         (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
         return (AnyKK (M1 a), kl')
 
+instance DepKDeserializeK U1 where
+    type RequireK U1 as ds = ()
+    type LearnK U1 as ds = ds
+    depKDeserializeK p kl = return (AnyKK U1, kl)
+
 
 type family
     IncrVar k (t :: Atom d a) :: Atom (k -> d) a where
