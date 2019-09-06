@@ -116,6 +116,7 @@ testL0R1SameVar =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testL0R1DifferentVars :: String
@@ -123,6 +124,7 @@ testL0R1DifferentVars =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (KnowledgeCons KnowledgeU (KnowledgeCons (KnowledgeK (sing @5)) KnowledgeNil)))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testL0R1Kons :: String
@@ -130,6 +132,7 @@ testL0R1Kons =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 2) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testL0R1KonsContradictory :: String
@@ -137,6 +140,7 @@ testL0R1KonsContradictory =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 1) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testL0R1AlreadyKnown :: String
@@ -144,6 +148,7 @@ testL0R1AlreadyKnown =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @2)) KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 
@@ -152,6 +157,7 @@ testL0R1AlreadyKnownContradictory =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @1)) KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testL0R1SameVarK :: String
@@ -159,6 +165,7 @@ testL0R1SameVarK =
     case evalState
             (runExceptT $ depKDeserializeK @_ @(Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyKK a, _) -> show a
 
 testL0R1Of2AndKnown3 :: String
@@ -166,6 +173,7 @@ testL0R1Of2AndKnown3 =
     case evalState
             (runExceptT $ depKDeserialize @_ @(L0R1 2) (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons (KnowledgeK (sing @3)) KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) show a
 
 testL0R1Of2And3 :: String
@@ -173,6 +181,7 @@ testL0R1Of2And3 =
     case evalState
             (runExceptT $ depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil) KnowledgeNil)
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) show a
 
 
@@ -193,6 +202,7 @@ testSameVarL0R1Unkown =
     case evalState
             (runExceptT $ depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 
@@ -212,6 +222,7 @@ testSameExistentialVarL0R1 =
     case evalState
             (runExceptT $ depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil) KnowledgeNil)
             [2,3,4,5,6,7] of
+        Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testSameExistentialVarL0R1Simple :: (Either DeserializeError SameExistentialVarL0R1, [Word8])

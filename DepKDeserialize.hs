@@ -187,7 +187,13 @@ instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds
     --serialize a = [a]
-    depKDeserialize Proxy kl = state (\(b : bs) -> ((AnyK (Proxy @'LoT0) b, kl), bs))
+    depKDeserialize Proxy kl = do
+        (bs :: [Word8]) <- get
+        case bs of
+            [] -> throwError $ DeserializeError "No more bytes to read!"
+            (b : bs') -> do
+                put bs'
+                return (AnyK (Proxy @'LoT0) b, kl)
 
 instance DepKDeserialize Word16 where
     type Require Word16 as ds = ()
@@ -284,7 +290,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         case d of
             FromSing (s :: Sing (s :: k)) ->
                 case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
-                    Nothing -> error "Learned something contradictory"
+                    Nothing -> throwError $ DeserializeError "Learned something contradictory"
                     Just kl' ->
                         return (AnyK (Proxy @(s :&&: 'LoT0)) s, kl')
 
@@ -304,7 +310,7 @@ instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeseriali
                     Disproved f ->
                         -- TODO: Can we show the expected and actual values?
                         --  A Show instance would be intrusive though. Maybe just show the bytes?
-                        error "Deserialized a specified Sing and got another value than specified"
+                        throwError $ DeserializeError  "Deserialized a specified Sing and got another value than specified"
                     Proved Refl -> return (AnyK (Proxy @'LoT0) s, kl)
 
 -- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
