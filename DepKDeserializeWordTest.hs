@@ -71,6 +71,7 @@ import Data.Singletons.Fin
 import Data.Reflection
 
 import Control.Monad.State
+import Control.Monad.Except
 
 
 data L0Word64 (size :: PWord64) = L0Word64
@@ -85,9 +86,9 @@ deriving instance DepKDeserialize L0Word64
 testL0Word64 :: String
 testL0Word64 =
     case evalState
-            (depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            (runExceptT $ depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [0,1,2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 
 data L0R0Word16 (size :: PWord16) = L0R0Word16
@@ -103,6 +104,6 @@ deriving instance DepKDeserialize L0R0Word16
 testL0R0Word16 :: String
 testL0R0Word16 =
     case evalState
-            (depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
+            (runExceptT $ depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [0,1,2,3,4,5,6,7] of
-        (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a

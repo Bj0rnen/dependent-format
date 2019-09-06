@@ -70,6 +70,7 @@ import Data.Singletons.Fin
 import Data.Reflection
 
 import Control.Monad.State
+import Control.Monad.Except
 
 
 data DepStateList :: Type -> Type where
@@ -147,6 +148,11 @@ genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
 genericKInstance = Sub (withDict (interpretVarsIsJustVars @xs) Dict)
 
 
+-- TODO: Add meaningful structure.
+data DeserializeError = DeserializeError String
+    deriving (Show)
+
+
 data AnyK (f :: ks) where
     AnyK :: Proxy xs -> f :@@: xs -> AnyK f
 
@@ -156,7 +162,7 @@ class DepKDeserialize (f :: ks) where
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  Require f as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK f, KnowledgeList (Learn f as ds))
 
     -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
@@ -164,7 +170,7 @@ class DepKDeserialize (f :: ks) where
     default depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK f, KnowledgeList (Learn f as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK f, KnowledgeList (Learn f as ds))
     depKDeserialize p kl = do
         (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
         return (AnyK (Proxy @xs) (toK @_ @f r \\ genericKInstance @f @xs), kl')
@@ -172,7 +178,7 @@ class DepKDeserialize (f :: ks) where
 -- TODO: Helper used while dropping the old Serialize class. Might not want to keep this.
 class (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
 instance (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
-deserialize :: forall a. Serialize a => State [Word8] a
+deserialize :: forall a. Serialize a => ExceptT DeserializeError (State [Word8]) a
 deserialize = do
     (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
     return (withDict (interpretVarsIsJustVars @xs) a)
@@ -272,7 +278,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (Sing :: k -> Type) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
     depKDeserialize _ kl = do
         d <- deserialize
         case d of
@@ -289,7 +295,7 @@ instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeseriali
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
         .  Require (Sing (a :: k)) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing (a :: k)), KnowledgeList (Learn (Sing (a :: k)) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Sing (a :: k)), KnowledgeList (Learn (Sing (a :: k)) as ds))
     depKDeserialize _ kl = do
         d <- deserialize
         case d of
@@ -314,7 +320,7 @@ instance Serialize a => DepKDeserialize (Vector a) where
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
         .  Require (Vector a) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Vector a), KnowledgeList (Learn (Vector a) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Vector a), KnowledgeList (Learn (Vector a) as ds))
     depKDeserialize _ kl =
         case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
             SomeSing (SNat :: Sing n) -> do
@@ -349,7 +355,7 @@ class DepKDeserializeK (f :: LoT ks -> Type) where
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK f as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK f, KnowledgeList (LearnK f as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK f, KnowledgeList (LearnK f as ds))
 
 -- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
 type family
@@ -389,7 +395,7 @@ instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) 
     depKDeserializeK
         :: forall d (ds :: DepStateList d) as
         .  RequireK (Field t) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Field t), KnowledgeList (LearnK (Field t) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK (Field t), KnowledgeList (LearnK (Field t) as ds))
     depKDeserializeK _ kl = do
         (AnyK Proxy a, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
         return (AnyKK (Field (unsafeCoerce a)), kl')
@@ -438,7 +444,7 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)), KnowledgeList (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)), KnowledgeList (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds))
     depKDeserializeK Proxy kl = do
         (AnyKK a, kl') <- depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)) (KnowledgeCons KnowledgeU kl)
         case

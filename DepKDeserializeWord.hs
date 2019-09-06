@@ -70,6 +70,7 @@ import Data.Singletons.Fin
 import Data.Reflection
 
 import Control.Monad.State
+import Control.Monad.Except
 
 
 -- NOTE: I don't love the repetitiveness of the type family approach below.
@@ -187,7 +188,7 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds
-        => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (GeneralizedVector a), KnowledgeList (Learn (GeneralizedVector a) as ds))
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (GeneralizedVector a), KnowledgeList (Learn (GeneralizedVector a) as ds))
     depKDeserialize _ kl = do
         case getAtom @d @k @(AtomAt 'VZ as) @ds kl of
             SomeSing (n :: Sing n) ->
