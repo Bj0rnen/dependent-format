@@ -214,7 +214,7 @@ testSameExistentialVarL0R1 =
         (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
 
 testSameExistentialVarL0R1Simple :: SameExistentialVarL0R1
-testSameExistentialVarL0R1Simple = evalState (dep0Deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
+testSameExistentialVarL0R1Simple = evalState (deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
 
 
 data EmptyRecord = EmptyRecord
@@ -227,7 +227,7 @@ instance GenericK EmptyRecord 'LoT0 where
 deriving instance DepKDeserialize EmptyRecord
 
 testEmptyRecordSimple :: (EmptyRecord, [Word8])
-testEmptyRecordSimple = runState (dep0Deserialize @EmptyRecord) [2,3,4,5,6,7]
+testEmptyRecordSimple = runState (deserialize @EmptyRecord) [2,3,4,5,6,7]
 
 
 data PlainField = PlainField
@@ -239,4 +239,4 @@ instance GenericK PlainField 'LoT0 where
 deriving instance DepKDeserialize PlainField
 
 testPlainFieldSimple :: (PlainField, [Word8])
-testPlainFieldSimple = runState (dep0Deserialize @PlainField) [2,3,4,5,6,7]
+testPlainFieldSimple = runState (deserialize @PlainField) [2,3,4,5,6,7]

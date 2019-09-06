@@ -172,6 +172,10 @@ class DepKDeserialize (f :: ks) where
 -- TODO: Helper used while dropping the old Serialize class. Might not want to keep this.
 class (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
 instance (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
+deserialize :: forall a. Serialize a => State [Word8] a
+deserialize = do
+    (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
+    return (withDict (interpretVarsIsJustVars @xs) a)
 
 instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
@@ -187,7 +191,7 @@ instance DepKDeserialize Word16 where
     --    , fromIntegral (a .&. 0xFF)
     --    ]
     depKDeserialize _ kl = do
-        bs <- dep0Deserialize @(Vector Word8 2)
+        bs <- deserialize @(Vector Word8 2)
         case bs of
             a :> b :> Nil ->
                 return
@@ -208,7 +212,7 @@ instance DepKDeserialize Word32 where
     --    , fromIntegral (a .&. 0xFF)
     --    ]
     depKDeserialize _ kl = do
-        bs <- dep0Deserialize @(Vector Word8 4)
+        bs <- deserialize @(Vector Word8 4)
         case bs of
             a :> b :> c :> d :> Nil ->
                 return
@@ -235,7 +239,7 @@ instance DepKDeserialize Word64 where
     --    , fromIntegral (a .&. 0xFF)
     --    ]
     depKDeserialize _ kl = do
-        bs <- dep0Deserialize @(Vector Word8 8)
+        bs <- deserialize @(Vector Word8 8)
         case bs of
             a :> b :> c :> d :> e :> f :> g :> h :> Nil ->
                 return
@@ -258,7 +262,7 @@ instance DepKDeserialize Natural where  -- 8-bit
     type Learn Natural as ds = ds
     --serialize n = [fromIntegral n]
     depKDeserialize _ kl = do
-        b <- dep0Deserialize @Word8
+        b <- deserialize @Word8
         return (AnyK (Proxy @'LoT0) (fromIntegral b), kl)
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
@@ -270,7 +274,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         .  Require (Sing :: k -> Type) as ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing :: k -> Type), KnowledgeList (Learn (Sing :: k -> Type) as ds))
     depKDeserialize _ kl = do
-        d <- dep0Deserialize
+        d <- deserialize
         case d of
             FromSing (s :: Sing (s :: k)) ->
                 case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
@@ -287,7 +291,7 @@ instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeseriali
         .  Require (Sing (a :: k)) as ds
         => Proxy as -> KnowledgeList ds -> State [Word8] (AnyK (Sing (a :: k)), KnowledgeList (Learn (Sing (a :: k)) as ds))
     depKDeserialize _ kl = do
-        d <- dep0Deserialize
+        d <- deserialize
         case d of
             FromSing (s :: Sing (s :: k)) ->
                 case s %~ (sing @a) of
@@ -314,7 +318,7 @@ instance Serialize a => DepKDeserialize (Vector a) where
     depKDeserialize _ kl =
         case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
             SomeSing (SNat :: Sing n) -> do
-                (a :: Vector a n) <- dep0Deserialize
+                (a :: Vector a n) <- deserialize
                 return (AnyK (Proxy @(n :&&: 'LoT0)) a, kl)
 
 instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
@@ -331,8 +335,8 @@ instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
             Vector.ifZeroElse @n
                 (return (AnyK (Proxy @'LoT0) Nil, kl))
                 \(Proxy :: Proxy n1) -> do
-                    a <- dep0Deserialize @a
-                    as <- dep0Deserialize @(Vector a n1)
+                    a <- deserialize @a
+                    as <- deserialize @(Vector a n1)
                     return (AnyK (Proxy @'LoT0) (a :> as), kl)
 
 
@@ -445,9 +449,3 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
                 case kl' of
                     KnowledgeCons _ kl'' ->
                         return (AnyKK (Exists (unsafeCoerce a)), kl'')
-
-
-dep0Deserialize :: forall a. (DepKDeserialize a, Require a 'AtomNil 'DZ) => State [Word8] a
-dep0Deserialize = do
-    (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
-    return (withDict (interpretVarsIsJustVars @xs) a)

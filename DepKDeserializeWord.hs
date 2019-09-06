@@ -193,5 +193,5 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
             SomeSing (n :: Sing n) ->
                 case toNat n of
                     (SNat :: Sing (ToNat n)) -> do
-                        (a :: Vector a (ToNat n)) <- dep0Deserialize
+                        a <- deserialize @(Vector a (ToNat n))
                         return (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), kl)
