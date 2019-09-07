@@ -236,6 +236,7 @@ deriving instance DepKDeserialize PlainField
 testPlainFieldSimple :: (Either DeserializeError PlainField, [Word8])
 testPlainFieldSimple = runState (runExceptT $ deserialize @PlainField) [2,3,4,5,6,7]
 
+
 data ExistentialL0L0 = forall (size :: Nat). ExistentialL0L0
     { size0 :: Sing size
     , size1 :: Sing size
@@ -247,3 +248,18 @@ deriving instance DepKDeserialize ExistentialL0L0
 
 testExistentialL0L0ContradictorySimple :: (Either DeserializeError ExistentialL0L0, [Word8])
 testExistentialL0L0ContradictorySimple = runState (runExceptT $ deserialize @ExistentialL0L0) [2,3,4,5,6,7]
+
+
+data ExistentialL0L1R0R1 = forall size0 size1. ExistentialL0L1R0R1
+    { size0 :: Sing size0
+    , size1 :: Sing size1
+    , vect0 :: Vector Word8 size0
+    , vect1 :: Vector Word8 size1
+    }
+deriving instance Show ExistentialL0L1R0R1
+$(deriveGenericK ''ExistentialL0L1R0R1)
+
+deriving instance DepKDeserialize ExistentialL0L1R0R1
+
+testExistentialL0L1R0R1Simple :: (Either DeserializeError ExistentialL0L1R0R1, [Word8])
+testExistentialL0L1R0R1Simple = runState (runExceptT $ deserialize @ExistentialL0L1R0R1) [1,2,3,4,5,6]
