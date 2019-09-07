@@ -76,11 +76,9 @@ import Control.Monad.Except
 
 data L0Word64 (size :: PWord64) = L0Word64
     { size :: Sing size
-    } deriving (Show, GHC.Generic)
-instance GenericK L0Word64 (size :&&: 'LoT0) where
-    type RepK L0Word64 = Field (Sing :$: Var0)
-instance GenericK (L0Word64 size) 'LoT0 where
-    type RepK (L0Word64 size) = Field ('Kon (Sing size))
+    } deriving (Show)
+$(deriveGenericK ''L0Word64)
+
 deriving instance DepKDeserialize L0Word64
 
 testL0Word64 :: String
@@ -94,11 +92,9 @@ testL0Word64 =
 data L0R0Word16 (size :: PWord16) = L0R0Word16
     { size :: Sing size
     , vec  :: GeneralizedVector Word8 size
-    } deriving (Show, GHC.Generic)
-instance GenericK L0R0Word16 (size :&&: 'LoT0) where
-    type RepK L0R0Word16 = Field (Sing :$: Var0) :*: Field (GeneralizedVector Word8 :$: Var0)
-instance GenericK (L0R0Word16 size) 'LoT0 where
-    type RepK (L0R0Word16 size) = Field ('Kon (Sing size)) :*: Field ('Kon (GeneralizedVector Word8 size))
+    } deriving (Show)
+$(deriveGenericK ''L0R0Word16)
+
 deriving instance DepKDeserialize L0R0Word16
 
 testL0R0Word16 :: String

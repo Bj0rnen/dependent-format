@@ -98,14 +98,8 @@ AtomCons Var3 (AtomCons Var3 AtomNil)
 data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
     { size0 :: Sing size0
     , arr1  :: Vector Word8 size1
-    } deriving (Show, GHC.Generic)
--- $(deriveGenericK 'L0R1)  -- BUG: Not this alone, but upon deriving DepKDeserialize, GHC hangs. Doesn't happen with manually written GenericK instances...
-instance GenericK L0R1 (size0 :&&: size1 :&&: 'LoT0) where
-    type RepK L0R1 = Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)
-instance GenericK (L0R1 size0) (size1 :&&: 'LoT0) where
-    type RepK (L0R1 size0) = Field ('Kon (Sing size0)) :*: Field (Vector Word8 :$: Var0)
-instance GenericK (L0R1 size0 size1) 'LoT0 where
-    type RepK (L0R1 size0 size1) = Field ('Kon (Sing size0)) :*: Field ('Kon (Vector Word8 size1))
+    } deriving (Show)
+$(deriveGenericK ''L0R1)
 
 deriving instance DepKDeserialize L0R1
 deriving instance SingI size0 => DepKDeserialize (L0R1 size0)
@@ -187,12 +181,8 @@ testL0R1Of2And3 =
 
 data SameVarL0R1 size = SameVarL0R1
     { l0r1 :: L0R1 size size
-    } deriving (Show, GHC.Generic)
--- $(deriveGenericK 'SameVarL0R1)
-instance GenericK SameVarL0R1 (size :&&: 'LoT0) where
-    type RepK SameVarL0R1 = Field (L0R1 :$: Var0 :@: Var0)
-instance GenericK (SameVarL0R1 size) 'LoT0 where
-    type RepK (SameVarL0R1 size) = Field ('Kon (L0R1 size size))
+    } deriving (Show)
+$(deriveGenericK ''SameVarL0R1)
 
 deriving instance DepKDeserialize SameVarL0R1
 deriving instance SingI size => DepKDeserialize (SameVarL0R1 size)
@@ -210,10 +200,7 @@ data SameExistentialVarL0R1 = forall size. SameExistentialVarL0R1
     { l0r1 :: L0R1 size size
     }
 deriving instance Show SameExistentialVarL0R1
-instance GenericK SameExistentialVarL0R1 'LoT0 where
-    type RepK SameExistentialVarL0R1 = Exists Nat (Field (L0R1 :$: Var0 :@: Var0))
-    fromK (SameExistentialVarL0R1 a) = Exists (Field a)
-    toK (Exists (Field a)) = SameExistentialVarL0R1 a
+$(deriveGenericK ''SameExistentialVarL0R1)
 
 deriving instance DepKDeserialize SameExistentialVarL0R1
 
@@ -230,11 +217,8 @@ testSameExistentialVarL0R1Simple = runState (runExceptT $ deserialize @SameExist
 
 
 data EmptyRecord = EmptyRecord
-    {} deriving (Show, GHC.Generic)
-instance GenericK EmptyRecord 'LoT0 where
-    type RepK EmptyRecord = U1
-    fromK EmptyRecord = U1
-    toK U1 = EmptyRecord
+    {} deriving (Show)
+$(deriveGenericK ''EmptyRecord)
 
 deriving instance DepKDeserialize EmptyRecord
 
@@ -244,9 +228,8 @@ testEmptyRecordSimple = runState (runExceptT $ deserialize @EmptyRecord) [2,3,4,
 
 data PlainField = PlainField
     { word16 :: Word16
-    } deriving (Show, GHC.Generic)
-instance GenericK PlainField 'LoT0 where
-    type RepK PlainField = Field ('Kon Word16)
+    } deriving (Show)
+$(deriveGenericK ''PlainField)
 
 deriving instance DepKDeserialize PlainField
 
@@ -258,10 +241,7 @@ data ExistentialL0L0 = forall (size :: Nat). ExistentialL0L0
     , size1 :: Sing size
     }
 deriving instance Show ExistentialL0L0
-instance GenericK ExistentialL0L0 'LoT0 where
-    type RepK ExistentialL0L0 = Exists Nat (Field (Sing :$: Var0) :*: Field (Sing :$: Var0))
-    fromK (ExistentialL0L0 size0 size1) = Exists (Field size0 :*: Field size1)
-    toK (Exists (Field size0 :*: Field size1)) = ExistentialL0L0 size0 size1
+$(deriveGenericK ''ExistentialL0L0)
 
 deriving instance DepKDeserialize ExistentialL0L0
 
