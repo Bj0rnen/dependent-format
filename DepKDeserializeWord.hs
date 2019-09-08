@@ -56,6 +56,7 @@ import Generics.Kind.TH
 
 import Data.Proxy
 import Data.Constraint
+import Data.Constraint.Nat
 import Unsafe.Coerce
 import GHC.Types (Any)
 import Data.Coerce
@@ -184,7 +185,16 @@ deriving instance Show (Vector a (ToNat n)) => Show (GeneralizedVector a n)
 instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k -> Type) where
     type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (GeneralizedVector a :: k -> Type) as ds = ds
-
+    -- TODO: Copy-pasted from (Vector a) instance. Prefer delegation.
+    serialize (AnyK (Proxy :: Proxy xs) (GeneralizedVector a)) =
+        withSingI (resolveLength a) $
+            serialize @_ @(Vector a (ToNat (InterpretVar 'VZ xs))) (AnyK Proxy a)
+        where
+            resolveLength :: forall a n. Vector a n -> Sing n
+            resolveLength Nil = SNat @0
+            resolveLength (_ :> xs) =
+                case resolveLength xs of
+                    (SNat :: Sing m) -> SNat @(1 + m) \\ plusNat @1 @m
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds

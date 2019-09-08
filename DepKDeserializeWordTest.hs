@@ -86,7 +86,7 @@ testL0Word64 =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [0,1,2,3,4,5,6,7] of
-        Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
 data L0R0Word16 (size :: PWord16) = L0R0Word16
@@ -102,4 +102,4 @@ testL0R0Word16 =
     case evalState
             (runExceptT $ depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
             [0,1,2,3,4,5,6,7] of
-        Right (AnyK (Proxy :: Proxy xs) a, _) -> withDict (interpretVarsIsJustVars @xs) $ show a
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a

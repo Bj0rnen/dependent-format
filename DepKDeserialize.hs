@@ -31,6 +31,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module DepKDeserialize where
 
@@ -56,6 +58,7 @@ import Generics.Kind.TH
 
 import Data.Proxy
 import Data.Constraint
+import Data.Constraint.Nat
 import Unsafe.Coerce
 import GHC.Types (Any)
 import Data.Coerce
@@ -154,11 +157,12 @@ data DeserializeError = DeserializeError String
 
 
 data AnyK (f :: ks) where
-    AnyK :: Proxy xs -> f :@@: xs -> AnyK f
+    AnyK :: Proxy xs -> f :@@: InterpretVars xs -> AnyK f
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
+    serialize :: AnyK f -> [Word8]
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  Require f as ds
@@ -167,26 +171,30 @@ class DepKDeserialize (f :: ks) where
     -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
+    default serialize :: (forall xs. GenericK' f xs, DepKDeserializeK (RepK f)) => AnyK f -> [Word8]
+    serialize (AnyK (Proxy :: Proxy xs) a) =
+        serializeK (AnyKK @(RepK f) @xs (withDict (interpretVarsIsJustVars @xs) (fromK @_ @f @xs a \\ genericKInstance @f @xs)))
     default depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
         => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK f, KnowledgeList (Learn f as ds))
     depKDeserialize p kl = do
         (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
-        return (AnyK (Proxy @xs) (toK @_ @f r \\ genericKInstance @f @xs), kl')
+        -- TODO: This is messy. Could we at least make it so just one of interpretVarsIsJustVars genericKInstance is needed?
+        return (AnyK (Proxy @xs) ((withDict (interpretVarsIsJustVars @xs) (toK @_ @f @xs r)) \\ genericKInstance @f @xs), kl')
 
 -- TODO: Helper used while dropping the old Serialize class. Might not want to keep this.
 class (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
 instance (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
 deserialize :: forall a. Serialize a => ExceptT DeserializeError (State [Word8]) a
 deserialize = do
-    (AnyK (Proxy :: Proxy xs) a, _) <- depKDeserialize @Type @a (Proxy @AtomNil) KnowledgeNil
-    return (withDict (interpretVarsIsJustVars @xs) a)
+    (AnyK _ a, _) <- depKDeserialize @Type @a (Proxy @'AtomNil) KnowledgeNil
+    return a
 
 instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds
-    --serialize a = [a]
+    serialize (AnyK _ a) = [a]
     depKDeserialize Proxy kl = do
         (bs :: [Word8]) <- get
         case bs of
@@ -198,10 +206,10 @@ instance DepKDeserialize Word8 where
 instance DepKDeserialize Word16 where
     type Require Word16 as ds = ()
     type Learn Word16 as ds = ds
-    --serialize a =
-    --    [ fromIntegral ((a `shiftR` 8) .&. 0xFF)
-    --    , fromIntegral (a .&. 0xFF)
-    --    ]
+    serialize (AnyK _ a) =
+        [ fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
     depKDeserialize _ kl = do
         bs <- deserialize @(Vector Word8 2)
         case bs of
@@ -217,12 +225,12 @@ instance DepKDeserialize Word16 where
 instance DepKDeserialize Word32 where
     type Require Word32 as ds = ()
     type Learn Word32 as ds = ds
-    --serialize a =
-    --    [ fromIntegral ((a `shiftR` 24) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 16) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 8) .&. 0xFF)
-    --    , fromIntegral (a .&. 0xFF)
-    --    ]
+    serialize (AnyK _ a) =
+        [ fromIntegral ((a `shiftR` 24) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 16) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
     depKDeserialize _ kl = do
         bs <- deserialize @(Vector Word8 4)
         case bs of
@@ -240,16 +248,16 @@ instance DepKDeserialize Word32 where
 instance DepKDeserialize Word64 where
     type Require Word64 as ds = ()
     type Learn Word64 as ds = ds
-    --serialize a =
-    --    [ fromIntegral ((a `shiftR` 56) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 48) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 40) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 32) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 24) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 16) .&. 0xFF)
-    --    , fromIntegral ((a `shiftR` 8) .&. 0xFF)
-    --    , fromIntegral (a .&. 0xFF)
-    --    ]
+    serialize (AnyK _ a) =
+        [ fromIntegral ((a `shiftR` 56) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 48) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 40) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 32) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 24) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 16) .&. 0xFF)
+        , fromIntegral ((a `shiftR` 8) .&. 0xFF)
+        , fromIntegral (a .&. 0xFF)
+        ]
     depKDeserialize _ kl = do
         bs <- deserialize @(Vector Word8 8)
         case bs of
@@ -272,7 +280,7 @@ instance DepKDeserialize Word64 where
 instance DepKDeserialize Natural where  -- 8-bit
     type Require Natural as ds = ()
     type Learn Natural as ds = ds
-    --serialize n = [fromIntegral n]
+    serialize (AnyK _ a) = [fromIntegral a]
     depKDeserialize _ kl = do
         b <- deserialize @Word8
         return (AnyK (Proxy @'LoT0) (fromIntegral b), kl)
@@ -280,7 +288,7 @@ instance DepKDeserialize Natural where  -- 8-bit
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
     type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
     type Learn (Sing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
-
+    serialize (AnyK _ a) = serialize @_ @(Demote k) (AnyK Proxy (FromSing a))
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (Sing :: k -> Type) as ds
@@ -297,7 +305,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
 instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeserialize (Sing (a :: k)) where
     type Require (Sing (a :: k)) as ds = ()
     type Learn (Sing (a :: k)) _ ds = ds
-
+    serialize (AnyK _ a) = serialize @_ @(Demote k) (AnyK Proxy (FromSing a))
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
         .  Require (Sing (a :: k)) as ds
@@ -310,7 +318,7 @@ instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeseriali
                     Disproved f ->
                         -- TODO: Can we show the expected and actual values?
                         --  A Show instance would be intrusive though. Maybe just show the bytes?
-                        throwError $ DeserializeError  "Deserialized a specified Sing and got another value than specified"
+                        throwError $ DeserializeError "Deserialized a specified Sing and got another value than specified"
                     Proved Refl -> return (AnyK (Proxy @'LoT0) s, kl)
 
 -- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
@@ -322,7 +330,21 @@ type family
 instance Serialize a => DepKDeserialize (Vector a) where
     type Require (Vector a) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (Vector a) _ ds = ds
-
+    serialize (AnyK (Proxy :: Proxy xs) a) =
+        -- TODO: This approach seems more like a workaround than The Right Thing.
+        --  There's computational cost to figuring out this length, and I don't know
+        --  if this approach is possible in all cases (a Vector happens to be a
+        --  "singleton" for its own length). Maybe the wrapper around the input
+        --  (AnyK for now) is supposed to hold singletons for all the parts of `xs`
+        --  which are the "target" of `Require`, i.e. 'VZ.
+        withSingI (resolveLength a) $
+            serialize @_ @(Vector a (InterpretVar 'VZ xs)) (AnyK Proxy a)
+        where
+            resolveLength :: forall a n. Vector a n -> Sing n
+            resolveLength Nil = SNat @0
+            resolveLength (_ :> xs) =
+                case resolveLength xs of
+                    (SNat :: Sing m) -> SNat @(1 + m) \\ plusNat @1 @m
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
         .  Require (Vector a) as ds
@@ -336,12 +358,12 @@ instance Serialize a => DepKDeserialize (Vector a) where
 instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
     type Require (Vector a n) as ds = ()
     type Learn (Vector a n) _ ds = ds
-    --serialize (v :: Vector a n) =
-    --    withKnownNat @n sing $
-    --        Vector.ifZeroElse @n [] $ \_ ->
-    --            case v of
-    --                x :> xs ->
-    --                    serialize x ++ serialize xs \\ samePredecessor @n
+    serialize (AnyK _ (v :: Vector a n)) =
+        withKnownNat @n sing $
+            Vector.ifZeroElse @n [] $ \_ ->
+                case v of
+                    x :> xs ->
+                        serialize (AnyK (Proxy @'LoT0) x) ++ serialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
     depKDeserialize _ kl =
         withKnownNat @n sing $
             Vector.ifZeroElse @n
@@ -358,6 +380,7 @@ data AnyKK :: (LoT ks -> Type) -> Type where
 class DepKDeserializeK (f :: LoT ks -> Type) where
     type RequireK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type LearnK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
+    serializeK :: AnyKK f -> [Word8]
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK f as ds
@@ -392,12 +415,25 @@ type family
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
+--given xs ~ (x0 :&&: x1 :&&: x2 :&&: x3 :&&: 'LoT0)
+--and t ~ L0R1 :$: Var3 :@: Var3
+--so AtomKonAtomList t ~ as ~ 'AtomCons Var3 ('AtomCons Var3 'AtomNil)
+--we want L0R1 :@@: ys where ys ~ x3 :&&: x3 :&&: 'LoT0
+--ys ~ Foo as xs
+
+type family
+    InterpretAll (as :: AtomList ks ks') (xs :: LoT ks) :: LoT ks' where
+    InterpretAll 'AtomNil _ = 'LoT0
+    InterpretAll ('AtomCons t as) xs = Interpret t xs :&&: InterpretAll as xs
+
+
 instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) where
     type RequireK (Field t) as (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
     type LearnK (Field t) as (ds :: DepStateList d) =
         Learn (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
-
+    -- TODO: There's about a 1% chance that I got this right first try. That's a highly unproven unsafeCoerce, just guesswork.
+    serializeK (AnyKK (Field a :: Field t xs)) = serialize @(AtomKonKind t) @(AtomKonConstructor t) (AnyK (Proxy @(InterpretAll (AtomKonAtomList t) xs)) (unsafeCoerce a))
     depKDeserializeK
         :: forall d (ds :: DepStateList d) as
         .  RequireK (Field t) as ds
@@ -412,14 +448,16 @@ instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g) 
         , RequireK g as (LearnK f as ds)
         )
     type LearnK (f :*: g) as ds = LearnK g as (LearnK f as ds)
+    serializeK (AnyKK (a :*: b)) = serializeK (AnyKK a) ++ serializeK (AnyKK b)
     depKDeserializeK p kl = do
         (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
-        (AnyKK a', kl'') <- depKDeserializeK @_ @g p kl'
-        return (AnyKK (unsafeCoerce a :*: a'), kl'')  -- TODO: Would be excellent to get rid of unsafeCoerce!
+        (AnyKK b, kl'') <- depKDeserializeK @_ @g p kl'
+        return (AnyKK (unsafeCoerce a :*: b), kl'')  -- TODO: Would be excellent to get rid of unsafeCoerce!
 
 instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
     type RequireK (M1 i c f) as ds = RequireK f as ds
     type LearnK (M1 i c f) as ds = LearnK f as ds
+    serializeK (AnyKK (M1 a)) = serializeK (AnyKK a)
     depKDeserializeK p kl = do
         (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
         return (AnyKK (M1 a), kl')
@@ -427,6 +465,7 @@ instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
 instance DepKDeserializeK U1 where
     type RequireK U1 as ds = ()
     type LearnK U1 as ds = ds
+    serializeK _ = []
     depKDeserializeK p kl = return (AnyKK U1, kl)
 
 
@@ -447,6 +486,7 @@ type family
 instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) -> Type)) where
     type RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = RequireK f (IntroduceTyVar k ks as) ('DS 'Unknown ds)
     type LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = DiscardTyVar (LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
+    serializeK (AnyKK (Exists a)) = serializeK (AnyKK a)
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds
