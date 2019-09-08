@@ -186,9 +186,9 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
     type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (GeneralizedVector a :: k -> Type) as ds = ds
     -- TODO: Copy-pasted from (Vector a) instance. Prefer delegation.
-    serialize (AnyK (Proxy :: Proxy xs) (GeneralizedVector a)) =
+    depKSerialize (AnyK (Proxy :: Proxy xs) (GeneralizedVector a)) =
         withSingI (resolveLength a) $
-            serialize @_ @(Vector a (ToNat (InterpretVar 'VZ xs))) (AnyK Proxy a)
+            depKSerialize @_ @(Vector a (ToNat (InterpretVar 'VZ xs))) (AnyK Proxy a)
         where
             resolveLength :: forall a n. Vector a n -> Sing n
             resolveLength Nil = SNat @0
