@@ -56,6 +56,7 @@ import Generics.Kind.TH
 
 import Data.Proxy
 import Data.Constraint
+import Data.Constraint.Nat
 import Unsafe.Coerce
 import GHC.Types (Any)
 import Data.Coerce
@@ -263,3 +264,22 @@ deriving instance DepKDeserialize ExistentialL0L1R0R1
 
 testExistentialL0L1R0R1Simple :: (Either DeserializeError ExistentialL0L1R0R1, [Word8])
 testExistentialL0L1R0R1Simple = runState (runExceptT $ deserialize @ExistentialL0L1R0R1) [1,2,3,4,5,6]
+
+
+data OnePlus :: Nat ~> Nat
+type instance Apply OnePlus n = 1 + n
+instance DeDefunctionalize OnePlus where
+    deDefunctionalize (SNat :: Sing n) = SNat \\ plusNat @1 @n
+
+data RecordWithOnePlus = forall (a :: Nat) (b :: Nat). RecordWithOnePlus
+    { a :: Sing a
+    , b :: Let OnePlus a b
+    , v :: Vector Word8 b
+    }
+deriving instance Show RecordWithOnePlus
+$(deriveGenericK ''RecordWithOnePlus)
+
+deriving instance DepKDeserialize RecordWithOnePlus
+
+testRecordWithOnePlus :: (Either DeserializeError RecordWithOnePlus, [Word8])
+testRecordWithOnePlus = runState (runExceptT $ deserialize @RecordWithOnePlus) [1,2,3,4,5,6]

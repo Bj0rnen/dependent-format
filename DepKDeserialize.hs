@@ -503,3 +503,30 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
                 case kl' of
                     KnowledgeCons _ kl'' ->
                         return (AnyKK (Exists (unsafeCoerce a)), kl'')
+
+
+data Let (f :: a ~> b) (x :: a) (y :: b) where
+    Let :: f @@ x :~: y -> Let f x y
+    deriving (Show)
+
+
+-- TODO: Very experimental feature of binding a variable purely based on another variable and a defunctionalized function.
+-- TODO: I would assume that 'singletons' already has something like deDefunctionalize. Silly name too :)
+class DeDefunctionalize (f :: a ~> b) where
+    deDefunctionalize :: Sing (x :: a) -> Sing (f @@ x :: b)
+
+instance DeDefunctionalize f => DepKDeserialize (Let f :: a -> b -> Type) where
+    type Require (Let f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
+    type Learn (Let f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
+    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (a -> b -> Type))
+        .  Require (Let f :: a -> b -> Type) as ds
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f :: a -> b -> Type), KnowledgeList (Learn (Let f :: a -> b -> Type) as ds))
+    depKDeserialize _ kl =
+        case getAtom @d @a @(AtomAt 'VZ as) @ds kl of
+            SomeSing (x :: Sing x) ->
+                case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing (deDefunctionalize @_ @_ @f x :: Sing (f @@ x))) kl of
+                    Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
+                    Just kl' ->
+                        return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
