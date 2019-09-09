@@ -105,21 +105,20 @@ testL0R0Word16 =
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
-data PWord32ToNat :: PWord32 ~> Nat
-type instance Apply PWord32ToNat n = ToNat n
-instance DeDefunctionalize PWord32ToNat where
---    toNat (SWord8 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
-    deDefunctionalize (SWord32 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+data PWordToNat :: a ~> Nat
+type instance Apply PWordToNat n = ToNat n
+instance HasToNat a => DeDefunctionalize (PWordToNat :: a ~> Nat) where
+    deDefunctionalize s = toNat s
 
-data RecordWithPWord32ToNat = forall (a :: PWord32) (b :: Nat). RecordWithPWord32ToNat
+data RecordWithPWordToNat = forall (a :: PWord32) (b :: Nat). RecordWithPWordToNat
     { a :: Sing a
-    , b :: Let PWord32ToNat a b
+    , b :: Let PWordToNat a b
     , v :: Vector Word8 b
     }
-deriving instance Show RecordWithPWord32ToNat
-$(deriveGenericK ''RecordWithPWord32ToNat)
+deriving instance Show RecordWithPWordToNat
+$(deriveGenericK ''RecordWithPWordToNat)
 
-deriving instance DepKDeserialize RecordWithPWord32ToNat
+deriving instance DepKDeserialize RecordWithPWordToNat
 
-testRecordWithPWord32ToNat :: (Either DeserializeError RecordWithPWord32ToNat, [Word8])
-testRecordWithPWord32ToNat = runState (runExceptT $ deserialize @RecordWithPWord32ToNat) [0,0,0,2,5,6,7]
+testRecordWithPWordToNat :: (Either DeserializeError RecordWithPWordToNat, [Word8])
+testRecordWithPWordToNat = runState (runExceptT $ deserialize @RecordWithPWordToNat) [0,0,0,2,5,6,7]
