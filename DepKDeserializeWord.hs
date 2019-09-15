@@ -63,10 +63,13 @@ import Data.Coerce
 import Data.Functor.Const
 
 import Data.Word
+import Data.Int
 import Data.Bits
 import Numeric.Natural
 import Data.Kind.Fin (ltNat, predecessor, subNat)
 import Data.Singletons.Fin
+import Data.Kind.FinInt
+import Data.Singletons.FinInt
 
 import Data.Reflection
 
@@ -189,3 +192,18 @@ deriving instance Show a => Show (GVector a n)
 -- TODO: As of writing this, it's the only use of TemplateHaskell in a non-test module. Should that be avoided?
 $(deriveGenericK ''GVector)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
+
+
+class HasIntToNat k where
+    type IntToNatF (a :: k) :: Nat
+    intToNat :: Sing (a :: k) -> Sing (IntToNatF a :: Nat)
+type instance Promote Int8 = FinInt 128 128
+instance HasIntToNat (Promoted Int8) where
+    type IntToNatF ('Promoted n) = FinIntToNat n
+    -- TODO: Still left to figure out how we handle the inherent partiality of FinIntToNat. TypeError or Maybe? And more questions...
+    --intToNat (SPromoted s) = sFinIntToSNat s
+
+data IntToNat :: a ~> Nat
+type instance Apply IntToNat n = IntToNatF n
+instance HasIntToNat a => DeDefunctionalize (IntToNat :: a ~> Nat) where
+    deDefunctionalize s = intToNat s

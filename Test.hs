@@ -37,5 +37,7 @@ import Data.Bits
 import Numeric.Natural
 import Data.Kind.Fin (ltNat, predecessor, subNat)
 import Data.Singletons.Fin
+import Data.Kind.FinInt
+import Data.Singletons.FinInt
 
 import Data.Reflection
