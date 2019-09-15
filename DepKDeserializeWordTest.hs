@@ -117,3 +117,16 @@ deriving instance DepKDeserialize RecordWithWordToNat
 
 testRecordWithWordToNat :: (Either DeserializeError RecordWithWordToNat, [Word8])
 testRecordWithWordToNat = runState (runExceptT $ deserialize @RecordWithWordToNat) [0,0,0,2,5,6,7]
+
+
+data L0R0Word8 = forall (size :: Promoted Word8). L0R0Word8
+    { size :: Sing size
+    , vec  :: GVector Word16 size
+    }
+deriving instance Show L0R0Word8
+$(deriveGenericK ''L0R0Word8)
+
+deriving instance DepKDeserialize L0R0Word8
+
+testL0R0Word8 :: (Either DeserializeError L0R0Word8, [Word8])
+testL0R0Word8 = runState (runExceptT $ deserialize @L0R0Word8) [3,1,2,3,4,5,6,7]

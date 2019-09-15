@@ -178,3 +178,14 @@ data WordToNat :: a ~> Nat
 type instance Apply WordToNat n = ToNat n
 instance HasToNat a => DeDefunctionalize (WordToNat :: a ~> Nat) where
     deDefunctionalize s = toNat s
+
+
+-- Also, leveraging the above, we can define something like GeneralizedVector in just a few lines:
+data GVector (a :: Type) (n :: k) = forall (m :: Nat). GVector
+    { m :: Let WordToNat n m
+    , v :: Vector a m
+    }
+deriving instance Show a => Show (GVector a n)
+-- TODO: As of writing this, it's the only use of TemplateHaskell in a non-test module. Should that be avoided?
+$(deriveGenericK ''GVector)
+deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
