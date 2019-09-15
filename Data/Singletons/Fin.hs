@@ -11,12 +11,14 @@ module Data.Singletons.Fin (
 
     Fin(..), KnownFin, finVal, SomeFin(..),
     someFinVal, someFin,
-    FinToNat, knownFinToKnownNat) where
+    FinToNat, knownFinToKnownNat,
+    sFinVal, sFinToSNat) where
 
 import Data.Singletons
+import Data.Singletons.TypeLits (Nat, KnownNat, Sing(SNat), natVal)
 import Data.Kind.Fin
-import GHC.TypeNats
 import Data.Kind
+import Data.Constraint
 import Control.Monad
 import Numeric.Natural
 import Data.Typeable
@@ -75,3 +77,9 @@ instance (KnownNat n, KnownFin a) => Read (SFin n a) where
                     case sameFin @n @a @b of
                         Nothing -> mzero
                         Just Refl -> return $ SFin @n @a
+
+sFinVal :: Sing (x :: Fin n) -> Natural
+sFinVal (SFin :: Sing x) = finVal @x
+
+sFinToSNat :: Sing (x :: Fin n) -> Sing (FinToNat x)
+sFinToSNat (SFin :: Sing x) = withDict (knownFinToKnownNat @x Dict) SNat

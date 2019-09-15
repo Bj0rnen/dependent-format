@@ -105,11 +105,6 @@ testL0R0Word16 =
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
-data WordToNat :: a ~> Nat
-type instance Apply WordToNat n = ToNat n
-instance HasToNat a => DeDefunctionalize (WordToNat :: a ~> Nat) where
-    deDefunctionalize s = toNat s
-
 data RecordWithWordToNat = forall (a :: Promoted Word32) (b :: Nat). RecordWithWordToNat
     { a :: Sing a
     , b :: Let WordToNat a b

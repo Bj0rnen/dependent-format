@@ -82,113 +82,60 @@ data instance Sing :: Promoted a -> Type where
     SPromoted :: Sing (x :: Promote a) -> Sing ('Promoted x :: Promoted a)
 deriving instance (pa ~ Promote a, forall y. Show (Sing (y :: pa))) => Show (Sing (x :: Promoted a))
 
-newtype PWord8 = PWord8 (Fin 256)
-type instance Promote Word8 = PWord8
-newtype PWord16 = PWord16 (Fin 65536)
-type instance Promote Word16 = PWord16
-newtype PWord32 = PWord32 (Fin 4294967296)
-type instance Promote Word32 = PWord32
-newtype PWord64 = PWord64 (Fin 18446744073709551616)
-type instance Promote Word64 = PWord64
-
-data instance Sing :: PWord8 -> Type where
-    SWord8 :: forall (a :: Fin 256). Sing a -> Sing ('PWord8 a)
-deriving instance Show (Sing (a :: PWord8))
-data instance Sing :: PWord16 -> Type where
-    SWord16 :: forall (a :: Fin 65536). Sing a -> Sing ('PWord16 a)
-deriving instance Show (Sing (a :: PWord16))
-data instance Sing :: PWord32 -> Type where
-    SWord32 :: forall (a :: Fin 4294967296). Sing a -> Sing ('PWord32 a)
-deriving instance Show (Sing (a :: PWord32))
-data instance Sing :: PWord64 -> Type where
-    SWord64 :: forall (a :: Fin 18446744073709551616). Sing a -> Sing ('PWord64 a)
-deriving instance Show (Sing (a :: PWord64))
+type instance Promote Word8 = Fin 256
+type instance Promote Word16 = Fin 65536
+type instance Promote Word32 = Fin 4294967296
+type instance Promote Word64 = Fin 18446744073709551616
 
 
---instance SingKind (PWord8) where
---    type Demote (PWord8) = Word8
---    fromSing (SWord8 (SFin :: Sing a)) = fromIntegral $ finVal @a
---    toSing n = case someFinVal $ fromIntegral n of
---        Nothing -> error $ show n ++ " out of bounds for PWord8. This should not be possible."
---        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord8 (SFin :: Sing a))
 instance SingKind (Promoted Word8) where
     type Demote (Promoted Word8) = Word8
-    fromSing (SPromoted (SWord8 (SFin :: Sing a))) = fromIntegral $ finVal @a
+    fromSing (SPromoted s) = fromIntegral $ sFinVal s
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Word8. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord8 (SFin :: Sing a)))
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SFin :: Sing a))
 
---instance SingKind (PWord16) where
---    type Demote (PWord16) = Word16
---    fromSing (SWord16 (SFin :: Sing a)) = fromIntegral $ finVal @a
---    toSing n = case someFinVal $ fromIntegral n of
---        Nothing -> error $ show n ++ " out of bounds for PWord16. This should not be possible."
---        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord16 (SFin :: Sing a))
 instance SingKind (Promoted Word16) where
     type Demote (Promoted Word16) = Word16
-    fromSing (SPromoted (SWord16 (SFin :: Sing a))) = fromIntegral $ finVal @a
+    fromSing (SPromoted s) = fromIntegral $ sFinVal s
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Word16. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord16 (SFin :: Sing a)))
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SFin :: Sing a))
 
---instance SingKind (PWord32) where
---    type Demote (PWord32) = Word32
---    fromSing (SWord32 (SFin :: Sing a)) = fromIntegral $ finVal @a
---    toSing n = case someFinVal $ fromIntegral n of
---        Nothing -> error $ show n ++ " out of bounds for Fin SWord32. This should not be possible."
---        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord32 (SFin :: Sing a))
 instance SingKind (Promoted Word32) where
     type Demote (Promoted Word32) = Word32
-    fromSing (SPromoted (SWord32 (SFin :: Sing a))) = fromIntegral $ finVal @a
+    fromSing (SPromoted s) = fromIntegral $ sFinVal s
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Word32. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord32 (SFin :: Sing a)))
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SFin :: Sing a))
 
---instance SingKind (PWord64) where
---    type Demote (PWord64) = Word64
---    fromSing (SWord64 (SFin :: Sing a)) = fromIntegral $ finVal @a
---    toSing n = case someFinVal $ fromIntegral n of
---        Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
---        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
 instance SingKind (Promoted Word64) where
     type Demote (Promoted Word64) = Word64
-    fromSing (SPromoted (SWord64 (SFin :: Sing a))) = fromIntegral $ finVal @a
+    fromSing (SPromoted s) = fromIntegral $ sFinVal s
     toSing n = case someFinVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Word64. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord64 (SFin :: Sing a)))
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SFin :: Sing a))
 
 
--- TODO: Too specialized? Not sure what's a good abstraction yet. Could be an x-to-y (i.e. PWord8-to-Nat) conversion.
+-- TODO: Too specialized? Not sure what's a good abstraction yet. Could be an x-to-y (i.e. Promoted Word8-to-Nat) conversion.
 --  Or it could be more semantics/purpose focused, like "Can this kind represent a vector's (or other collection's) length?".
 --  In this form it's basically "Can this kind losslessly and unambiguously be converted to a natural number?".
 class HasToNat k where
     type ToNat (a :: k) :: Nat
     toNat :: Sing (a :: k) -> Sing (ToNat a :: Nat)
 instance HasToNat (Promoted Word8) where
-    type ToNat ('Promoted ('PWord8 n)) = FinToNat n
-    toNat (SPromoted (SWord8 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+    type ToNat ('Promoted n) = FinToNat n
+    toNat (SPromoted s) = sFinToSNat s
 instance HasToNat (Promoted Word16) where
-    type ToNat ('Promoted ('PWord16 n)) = FinToNat n
-    toNat (SPromoted (SWord16 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+    type ToNat ('Promoted n) = FinToNat n
+    toNat (SPromoted s) = sFinToSNat s
 instance HasToNat (Promoted Word32) where
-    type ToNat ('Promoted ('PWord32 n)) = FinToNat n
-    toNat (SPromoted (SWord32 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+    type ToNat ('Promoted n) = FinToNat n
+    toNat (SPromoted s) = sFinToSNat s
 instance HasToNat (Promoted Word64) where
-    type ToNat ('Promoted ('PWord64 n)) = FinToNat n
-    toNat (SPromoted (SWord64 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+    type ToNat ('Promoted n) = FinToNat n
+    toNat (SPromoted s) = sFinToSNat s
 
---instance HasToNat PWord8 where
---    type ToNat ('PWord8 a) = FinToNat a
---    toNat (SWord8 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
---instance HasToNat PWord16 where
---    type ToNat ('PWord16 a) = FinToNat a
---    toNat (SWord16 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
---instance HasToNat PWord32 where
---    type ToNat ('PWord32 a) = FinToNat a
---    toNat (SWord32 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
---instance HasToNat PWord64 where
---    type ToNat ('PWord64 a) = FinToNat a
---    toNat (SWord64 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
 
 -- TODO: Is there room for more generalization? A "Generalized" anything that's indexed by a Nat?
 --  A "Generalized" anything that's indexed by anything that can by converted to whatever the wrapped thing is indexed by?
@@ -224,3 +171,10 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
                     (SNat :: Sing (ToNat n)) -> do
                         a <- deserialize @(Vector a (ToNat n))
                         return (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), kl)
+
+
+-- Using this, GeneralizedVector isn't really necessary.
+data WordToNat :: a ~> Nat
+type instance Apply WordToNat n = ToNat n
+instance HasToNat a => DeDefunctionalize (WordToNat :: a ~> Nat) where
+    deDefunctionalize s = toNat s
