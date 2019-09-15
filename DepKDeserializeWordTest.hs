@@ -74,7 +74,7 @@ import Control.Monad.State
 import Control.Monad.Except
 
 
-data L0Word64 (size :: PWord64) = L0Word64
+data L0Word64 (size :: Promoted Word64) = L0Word64
     { size :: Sing size
     } deriving (Show)
 $(deriveGenericK ''L0Word64)
@@ -89,7 +89,7 @@ testL0Word64 =
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
-data L0R0Word16 (size :: PWord16) = L0R0Word16
+data L0R0Word16 (size :: Promoted Word16) = L0R0Word16
     { size :: Sing size
     , vec  :: GeneralizedVector Word8 size
     } deriving (Show)
@@ -105,20 +105,20 @@ testL0R0Word16 =
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
-data PWordToNat :: a ~> Nat
-type instance Apply PWordToNat n = ToNat n
-instance HasToNat a => DeDefunctionalize (PWordToNat :: a ~> Nat) where
+data WordToNat :: a ~> Nat
+type instance Apply WordToNat n = ToNat n
+instance HasToNat a => DeDefunctionalize (WordToNat :: a ~> Nat) where
     deDefunctionalize s = toNat s
 
-data RecordWithPWordToNat = forall (a :: PWord32) (b :: Nat). RecordWithPWordToNat
+data RecordWithWordToNat = forall (a :: Promoted Word32) (b :: Nat). RecordWithWordToNat
     { a :: Sing a
-    , b :: Let PWordToNat a b
+    , b :: Let WordToNat a b
     , v :: Vector Word8 b
     }
-deriving instance Show RecordWithPWordToNat
-$(deriveGenericK ''RecordWithPWordToNat)
+deriving instance Show RecordWithWordToNat
+$(deriveGenericK ''RecordWithWordToNat)
 
-deriving instance DepKDeserialize RecordWithPWordToNat
+deriving instance DepKDeserialize RecordWithWordToNat
 
-testRecordWithPWordToNat :: (Either DeserializeError RecordWithPWordToNat, [Word8])
-testRecordWithPWordToNat = runState (runExceptT $ deserialize @RecordWithPWordToNat) [0,0,0,2,5,6,7]
+testRecordWithWordToNat :: (Either DeserializeError RecordWithWordToNat, [Word8])
+testRecordWithWordToNat = runState (runExceptT $ deserialize @RecordWithWordToNat) [0,0,0,2,5,6,7]

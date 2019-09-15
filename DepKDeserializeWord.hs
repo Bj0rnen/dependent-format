@@ -74,83 +74,88 @@ import Control.Monad.State
 import Control.Monad.Except
 
 
--- NOTE: I don't love the repetitiveness of the type family approach below.
---  I tried a data family like in this comment, but apparently data family instance
---  constructors simply never promote to the kind level... GHC's user guide says it
---  would require full dependent types. I'm not sure why.
---data family Promote (a :: Type)
---
---newtype instance Promote Word8 = PWord8 (Fin 256)
---newtype instance Promote Word16 = PWord16 (Fin 65536)
---newtype instance Promote Word32 = PWord32 (Fin 4294967296)
---newtype instance Promote Word64 = PWord64 (Fin 18446744073709551616)
+type family Promote (a :: Type) = (b :: Type) | b -> a
+newtype Promoted (a :: Type) where
+    Promoted :: forall a. Promote a -> Promoted a
+deriving instance Show (Promote a) => Show (Promoted a)
+data instance Sing :: Promoted a -> Type where
+    SPromoted :: Sing (x :: Promote a) -> Sing ('Promoted x :: Promoted a)
+deriving instance (pa ~ Promote a, forall y. Show (Sing (y :: pa))) => Show (Sing (x :: Promoted a))
 
 newtype PWord8 = PWord8 (Fin 256)
+type instance Promote Word8 = PWord8
 newtype PWord16 = PWord16 (Fin 65536)
+type instance Promote Word16 = PWord16
 newtype PWord32 = PWord32 (Fin 4294967296)
+type instance Promote Word32 = PWord32
 newtype PWord64 = PWord64 (Fin 18446744073709551616)
-
--- NOTE: Also, it turns out that there are no uses for this type family either.
---  Basically it seems I have to use concrete stand-alone types like PWord8 directly.
---  I could use types like Fin 256 directly too and say Demote (Fin 256) = Word8,
---  but I find that a somewhat arbitrary mapping, hence these newtype wrappers.
---type family Promote (a :: Type) = (b :: Type) | b -> a
---
---type instance Promote Word8 = PWord8
---type instance Promote Word16 = PWord16
---type instance Promote Word32 = PWord32
---type instance Promote Word64 = PWord64
---
--- TODO: Potentially, we can explore other approaches than the `Sing (a :: Promote Word8)`
---  that I had imagined, by not trying to make something that can be wrapped in a sing.
---  For example, what if instead of `Sing (a :: Promote Word8)`, we try to make
---  something like `PromotedSing (a :: Word8)` work?
+type instance Promote Word64 = PWord64
 
 data instance Sing :: PWord8 -> Type where
     SWord8 :: forall (a :: Fin 256). Sing a -> Sing ('PWord8 a)
+deriving instance Show (Sing (a :: PWord8))
 data instance Sing :: PWord16 -> Type where
     SWord16 :: forall (a :: Fin 65536). Sing a -> Sing ('PWord16 a)
+deriving instance Show (Sing (a :: PWord16))
 data instance Sing :: PWord32 -> Type where
     SWord32 :: forall (a :: Fin 4294967296). Sing a -> Sing ('PWord32 a)
+deriving instance Show (Sing (a :: PWord32))
 data instance Sing :: PWord64 -> Type where
     SWord64 :: forall (a :: Fin 18446744073709551616). Sing a -> Sing ('PWord64 a)
+deriving instance Show (Sing (a :: PWord64))
 
-instance Show (Sing (a :: PWord8)) where
-    show (SWord8 a) = "SWord8 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
-instance Show (Sing (a :: PWord16)) where
-    show (SWord16 a) = "SWord16 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
-instance Show (Sing (a :: PWord32)) where
-    show (SWord32 a) = "SWord32 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
-instance Show (Sing (a :: PWord64)) where
-    show (SWord64 a) = "SWord64 (" ++ show a ++ ")" -- TODO: Not a proper implementation...
 
-instance SingKind (PWord8) where
-    type Demote (PWord8) = Word8
-    fromSing (SWord8 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--instance SingKind (PWord8) where
+--    type Demote (PWord8) = Word8
+--    fromSing (SWord8 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--    toSing n = case someFinVal $ fromIntegral n of
+--        Nothing -> error $ show n ++ " out of bounds for PWord8. This should not be possible."
+--        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord8 (SFin :: Sing a))
+instance SingKind (Promoted Word8) where
+    type Demote (Promoted Word8) = Word8
+    fromSing (SPromoted (SWord8 (SFin :: Sing a))) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for PWord8. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord8 (SFin :: Sing a))
+        Nothing -> error $ show n ++ " out of bounds for Word8. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord8 (SFin :: Sing a)))
 
-instance SingKind (PWord16) where
-    type Demote (PWord16) = Word16
-    fromSing (SWord16 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--instance SingKind (PWord16) where
+--    type Demote (PWord16) = Word16
+--    fromSing (SWord16 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--    toSing n = case someFinVal $ fromIntegral n of
+--        Nothing -> error $ show n ++ " out of bounds for PWord16. This should not be possible."
+--        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord16 (SFin :: Sing a))
+instance SingKind (Promoted Word16) where
+    type Demote (Promoted Word16) = Word16
+    fromSing (SPromoted (SWord16 (SFin :: Sing a))) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for PWord16. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord16 (SFin :: Sing a))
+        Nothing -> error $ show n ++ " out of bounds for Word16. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord16 (SFin :: Sing a)))
 
-instance SingKind (PWord32) where
-    type Demote (PWord32) = Word32
-    fromSing (SWord32 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--instance SingKind (PWord32) where
+--    type Demote (PWord32) = Word32
+--    fromSing (SWord32 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--    toSing n = case someFinVal $ fromIntegral n of
+--        Nothing -> error $ show n ++ " out of bounds for Fin SWord32. This should not be possible."
+--        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord32 (SFin :: Sing a))
+instance SingKind (Promoted Word32) where
+    type Demote (Promoted Word32) = Word32
+    fromSing (SPromoted (SWord32 (SFin :: Sing a))) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin SWord32. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord32 (SFin :: Sing a))
+        Nothing -> error $ show n ++ " out of bounds for Word32. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord32 (SFin :: Sing a)))
 
-instance SingKind (PWord64) where
-    type Demote (PWord64) = Word64
-    fromSing (SWord64 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--instance SingKind (PWord64) where
+--    type Demote (PWord64) = Word64
+--    fromSing (SWord64 (SFin :: Sing a)) = fromIntegral $ finVal @a
+--    toSing n = case someFinVal $ fromIntegral n of
+--        Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
+--        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
+instance SingKind (Promoted Word64) where
+    type Demote (Promoted Word64) = Word64
+    fromSing (SPromoted (SWord64 (SFin :: Sing a))) = fromIntegral $ finVal @a
     toSing n = case someFinVal $ fromIntegral n of
-        Nothing -> error $ show n ++ " out of bounds for Fin SWord64. This should not be possible."
-        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SWord64 (SFin :: Sing a))
+        Nothing -> error $ show n ++ " out of bounds for Word64. This should not be possible."
+        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SWord64 (SFin :: Sing a)))
 
 
 -- TODO: Too specialized? Not sure what's a good abstraction yet. Could be an x-to-y (i.e. PWord8-to-Nat) conversion.
@@ -159,18 +164,31 @@ instance SingKind (PWord64) where
 class HasToNat k where
     type ToNat (a :: k) :: Nat
     toNat :: Sing (a :: k) -> Sing (ToNat a :: Nat)
-instance HasToNat PWord8 where
-    type ToNat ('PWord8 a) = FinToNat a
-    toNat (SWord8 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
-instance HasToNat PWord16 where
-    type ToNat ('PWord16 a) = FinToNat a
-    toNat (SWord16 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
-instance HasToNat PWord32 where
-    type ToNat ('PWord32 a) = FinToNat a
-    toNat (SWord32 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
-instance HasToNat PWord64 where
-    type ToNat ('PWord64 a) = FinToNat a
-    toNat (SWord64 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat (Promoted Word8) where
+    type ToNat ('Promoted ('PWord8 n)) = FinToNat n
+    toNat (SPromoted (SWord8 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat (Promoted Word16) where
+    type ToNat ('Promoted ('PWord16 n)) = FinToNat n
+    toNat (SPromoted (SWord16 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat (Promoted Word32) where
+    type ToNat ('Promoted ('PWord32 n)) = FinToNat n
+    toNat (SPromoted (SWord32 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+instance HasToNat (Promoted Word64) where
+    type ToNat ('Promoted ('PWord64 n)) = FinToNat n
+    toNat (SPromoted (SWord64 (SFin :: Sing a))) = withDict (knownFinToKnownNat @a Dict) SNat
+
+--instance HasToNat PWord8 where
+--    type ToNat ('PWord8 a) = FinToNat a
+--    toNat (SWord8 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+--instance HasToNat PWord16 where
+--    type ToNat ('PWord16 a) = FinToNat a
+--    toNat (SWord16 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+--instance HasToNat PWord32 where
+--    type ToNat ('PWord32 a) = FinToNat a
+--    toNat (SWord32 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
+--instance HasToNat PWord64 where
+--    type ToNat ('PWord64 a) = FinToNat a
+--    toNat (SWord64 (SFin :: Sing a)) = withDict (knownFinToKnownNat @a Dict) SNat
 
 -- TODO: Is there room for more generalization? A "Generalized" anything that's indexed by a Nat?
 --  A "Generalized" anything that's indexed by anything that can by converted to whatever the wrapped thing is indexed by?
