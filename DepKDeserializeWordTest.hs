@@ -63,6 +63,7 @@ import Data.Coerce
 import Data.Functor.Const
 
 import Data.Word
+import Data.Int
 import Data.Bits
 import Numeric.Natural
 import Data.Kind.Fin (ltNat, predecessor, subNat)
@@ -130,3 +131,17 @@ deriving instance DepKDeserialize L0R0Word8
 
 testL0R0Word8 :: (Either DeserializeError L0R0Word8, [Word8])
 testL0R0Word8 = runState (runExceptT $ deserialize @L0R0Word8) [3,1,2,3,4,5,6,7]
+
+
+data RecordWithIntToNat = forall (a :: Promoted Int8) (b :: Nat). RecordWithIntToNat
+    { a :: Sing a
+    , b :: LetFromJust IntToMaybeNat a b
+    , v :: Vector Word8 b
+    }
+deriving instance Show RecordWithIntToNat
+$(deriveGenericK ''RecordWithIntToNat)
+
+deriving instance DepKDeserialize RecordWithIntToNat
+
+testRecordWithIntToNat :: (Either DeserializeError RecordWithIntToNat, [Word8])
+testRecordWithIntToNat = runState (runExceptT $ deserialize @RecordWithIntToNat) [3,2,5,6,7]

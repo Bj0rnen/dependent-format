@@ -43,6 +43,7 @@ import DepLevel
 
 import Data.Singletons
 import Data.Singletons.TH
+import Data.Singletons.Prelude.Maybe
 import GHC.TypeNats
 import Data.Singletons.TypeLits
 import Data.Kind
@@ -65,6 +66,7 @@ import Data.Coerce
 import Data.Functor.Const
 
 import Data.Word
+import Data.Int
 import Data.Bits
 import Numeric.Natural
 import Data.Kind.Fin (ltNat, predecessor, subNat)
@@ -277,6 +279,18 @@ instance DepKDeserialize Word64 where
                         )
                         , kl
                     )
+
+instance DepKDeserialize Int8 where
+    type Require Int8 as ds = ()
+    type Learn Int8 as ds = ds
+    depKSerialize (AnyK _ a) = [fromIntegral a]
+    depKDeserialize Proxy kl = do
+        (bs :: [Word8]) <- get
+        case bs of
+            [] -> throwError $ DeserializeError "No more bytes to read!"
+            (b : bs') -> do
+                put bs'
+                return (AnyK (Proxy @'LoT0) (fromIntegral b), kl)
 
 -- TODO: This instance should go away.
 instance DepKDeserialize Natural where  -- 8-bit
@@ -530,3 +544,27 @@ instance DeDefunctionalize f => DepKDeserialize (Let f :: a -> b -> Type) where
                     Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
                     Just kl' ->
                         return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
+
+
+data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
+    LetFromJust :: f @@ x :~: 'Just y -> LetFromJust f x y
+    deriving (Show)
+
+instance DeDefunctionalize f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
+    type Require (LetFromJust f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
+    type Learn (LetFromJust f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
+    depKSerialize (AnyK (Proxy :: Proxy xs) (LetFromJust Refl)) = []
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (a -> b -> Type))
+        .  Require (LetFromJust f :: a -> b -> Type) as ds
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (LetFromJust f :: a -> b -> Type), KnowledgeList (Learn (LetFromJust f :: a -> b -> Type) as ds))
+    depKDeserialize _ kl =
+        case getAtom @d @a @(AtomAt 'VZ as) @ds kl of
+            SomeSing (x :: Sing x) ->
+                case deDefunctionalize @_ @_ @f x :: Sing (f @@ x) of
+                    SNothing -> throwError $ DeserializeError "LetFromJust-binding failed because it resulted in Nothing"
+                    (SJust (s :: Sing y)) ->
+                        case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing s) kl of
+                            Nothing -> throwError $ DeserializeError "Learned something contradictory while LetFromJust-binding"
+                            Just kl' ->
+                                return (AnyK (Proxy @(x :&&: y :&&: 'LoT0)) (LetFromJust Refl), kl')

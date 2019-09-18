@@ -194,16 +194,21 @@ $(deriveGenericK ''GVector)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
 
 
-class HasIntToNat k where
-    type IntToNatF (a :: k) :: Nat
-    intToNat :: Sing (a :: k) -> Sing (IntToNatF a :: Nat)
+class HasIntToMaybeNat k where
+    type IntToMaybeNatF (a :: k) :: Maybe Nat
+    intToNat :: Sing (a :: k) -> Sing (IntToMaybeNatF a :: Maybe Nat)
 type instance Promote Int8 = FinInt 128 128
-instance HasIntToNat (Promoted Int8) where
-    type IntToNatF ('Promoted n) = FinIntToNat n
-    -- TODO: Still left to figure out how we handle the inherent partiality of FinIntToNat. TypeError or Maybe? And more questions...
-    --intToNat (SPromoted s) = sFinIntToSNat s
+instance HasIntToMaybeNat (Promoted Int8) where
+    type IntToMaybeNatF ('Promoted n) = FinIntToMaybeNat n
+    intToNat (SPromoted s) = sFinIntToSNat s
+instance SingKind (Promoted Int8) where
+    type Demote (Promoted Int8) = Int8
+    fromSing (SPromoted s) = fromIntegral $ sFinIntVal s
+    toSing n = case someFinIntVal $ fromIntegral n of
+        Nothing -> error $ show n ++ " out of bounds for Int8. This should not be possible."
+        Just (SomeFinInt (_ :: Proxy a)) -> SomeSing (SPromoted (SFinInt :: Sing a))
 
-data IntToNat :: a ~> Nat
-type instance Apply IntToNat n = IntToNatF n
-instance HasIntToNat a => DeDefunctionalize (IntToNat :: a ~> Nat) where
+data IntToMaybeNat :: a ~> Maybe Nat
+type instance Apply IntToMaybeNat n = IntToMaybeNatF n
+instance HasIntToMaybeNat a => DeDefunctionalize (IntToMaybeNat :: a ~> Maybe Nat) where
     deDefunctionalize s = intToNat s

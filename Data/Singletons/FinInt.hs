@@ -5,16 +5,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Data.Singletons.FinInt (
     Sing(SFinInt), SFinInt, withKnownFinInt,
 
     FinInt(..), KnownFinInt, finIntVal, SomeFinInt(..),
     someFinIntVal, someFinInt,
-    FinIntToNat, knownFinIntToKnownNat,
+    FinIntToMaybeNat,
     sFinIntVal, sFinIntToSNat) where
 
 import Data.Singletons
+import Data.Singletons.Prelude.Maybe
+import Data.Singletons.Decide
 import Data.Singletons.TypeLits (Nat, KnownNat, Sing(SNat), natVal)
 import Data.Kind.FinInt
 import Data.Kind
@@ -25,8 +28,7 @@ import Data.Typeable
 import Text.Read
 import GHC.Show (appPrec, appPrec1)
 
-import Data.Word
-
+import Unsafe.Coerce
 
 data instance Sing :: FinInt n m -> Type where
     SFinInt :: forall (n :: Nat) (m :: Nat) (a :: FinInt n m). KnownFinInt a => Sing a
@@ -40,6 +42,7 @@ withKnownFinInt :: forall a r. Sing a -> (KnownFinInt a => r) -> r
 withKnownFinInt SFinInt f = f
 
 -- TODO: Fix! Basically translate sign of Integer to/from 'Negative/'NonNegative.
+deriving instance Show (SFinInt n m a)
 --instance (KnownNat n, KnownNat m) => Show (SFinInt n m a) where
 --    showsPrec p SFinInt =
 --        showParen (p > appPrec) $
@@ -76,8 +79,22 @@ withKnownFinInt SFinInt f = f
 sFinIntVal :: Sing (x :: FinInt n m) -> Integer
 sFinIntVal (SFinInt :: Sing x) = finIntVal @x
 
-sFinIntToSNat :: Sing (x :: FinInt n m) -> Maybe (Sing (FinIntToNat x))
-sFinIntToSNat (SFinInt :: Sing x) =
-    case knownFinIntToKnownNat @x Dict of
-        Nothing -> Nothing
-        Just Dict -> Just SNat
+
+newtype MagicNat r = MagicNat (forall (n :: Nat). KnownNat n => Proxy n -> r)
+
+reifyNat :: forall r. Natural -> (forall (n :: Nat). KnownNat n => Proxy n -> r) -> r
+reifyNat n k = unsafeCoerce (MagicNat k :: MagicNat r) n Proxy
+
+axiom :: forall a b. Dict (a ~ b)
+axiom = unsafeCoerce (Dict :: Dict (a ~ a))
+
+sFinIntToSNat :: Sing (x :: FinInt n m) -> Sing (FinIntToMaybeNat x)
+sFinIntToSNat (SFinInt :: Sing x)
+    | val < 0 = case axiom @'Nothing @(FinIntToMaybeNat x) of
+        Dict -> SNothing
+    | otherwise =
+        reifyNat (fromInteger val) $ \(Proxy :: Proxy n) ->
+            case axiom @('Just n) @(FinIntToMaybeNat x) of
+                Dict -> SJust SNat
+    where
+        val = finIntVal @x

@@ -10,7 +10,7 @@
 
 module Data.Kind.FinInt (FinInt(..), KnownFinInt, finIntVal, SomeFinInt(..),
                          someFinIntVal, someFinInt, someFinIntNegative, someFinIntNonNegative, sameFinInt,
-                         FinIntToNat, knownFinIntToKnownNat) where
+                         FinIntToMaybeNat) where
 
 import Prelude hiding (Int)
 
@@ -124,16 +124,24 @@ knownFinIntToKnownInt Dict =
         case axiom @n @(FinIntToInt a) of
             Dict -> Dict
 -}
-
+{-
 type family
-    FinIntToNat (a :: FinInt n m) :: Nat where
+    MaybeFinIntToNat (a :: FinInt n m) :: Nat where
     FinIntToNat ('Negative a) =
         TypeError ('Text "Negative integer (-" ':<>:
                    'ShowType a ':<>:
                    'Text ") cannot be converted to Nat")
     FinIntToNat ('NonNegative a) = a
+-}
+type family
+    FinIntToMaybeNat (a :: FinInt n m) :: Maybe Nat where
+    FinIntToMaybeNat ('Negative a) = 'Nothing
+    FinIntToMaybeNat ('NonNegative a) = 'Just a
 
-
+-- TODO: To match with Fin, we probably should have a working knownFinIntToKnownMaybeNat.
+--  But it seems to require a proper KnownMaybeNat, in the same spirit as these modules.
+--  Current workaround is to directly implement this logic in the singletons version of this module.
+{-
 newtype MagicNat r = MagicNat (forall (n :: Nat). KnownNat n => Proxy n -> r)
 
 reifyNat :: forall r. Natural -> (forall (n :: Nat). KnownNat n => Proxy n -> r) -> r
@@ -142,12 +150,19 @@ reifyNat n k = unsafeCoerce (MagicNat k :: MagicNat r) n Proxy
 axiom :: forall a b. Dict (a ~ b)
 axiom = unsafeCoerce (Dict :: Dict (a ~ a))
 
-knownFinIntToKnownNat :: forall a. Dict (KnownFinInt a) -> Maybe (Dict (KnownNat (FinIntToNat a)))
-knownFinIntToKnownNat Dict
-    | val < 0 = Nothing
-    | otherwise = Just $
+class KnownMaybeNat (n :: Maybe Nat) where
+instance KnownMaybeNat 'Nothing
+instance KnownNat n => KnownMaybeNat ('Just n)
+
+knownFinIntToKnownMaybeNat :: forall a. Dict (KnownFinInt a) -> Dict (KnownMaybeNat (FinIntToNat a))
+knownFinIntToKnownMaybeNat Dict
+    | val < 0 =
+        case axiom @'Nothing @(FinIntToNat a) of
+            Dict -> Dict
+    | otherwise =
         reifyNat (fromInteger val) $ \(Proxy :: Proxy n) ->
-            case axiom @n @(FinIntToNat a) of
+            case axiom @('Just n) @(FinIntToNat a) of
                 Dict -> Dict
     where
         val = finIntVal @a
+-}
