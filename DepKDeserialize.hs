@@ -524,12 +524,7 @@ data Let (f :: a ~> b) (x :: a) (y :: b) where
     deriving (Show)
 
 
--- TODO: Very experimental feature of binding a variable purely based on another variable and a defunctionalized function.
--- TODO: I would assume that 'singletons' already has something like deDefunctionalize. Silly name too :)
-class DeDefunctionalize (f :: a ~> b) where
-    deDefunctionalize :: Sing (x :: a) -> Sing (f @@ x :: b)
-
-instance DeDefunctionalize f => DepKDeserialize (Let f :: a -> b -> Type) where
+instance SingI f => DepKDeserialize (Let f :: a -> b -> Type) where
     type Require (Let f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (Let f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
     depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
@@ -540,7 +535,7 @@ instance DeDefunctionalize f => DepKDeserialize (Let f :: a -> b -> Type) where
     depKDeserialize _ kl =
         case getAtom @d @a @(AtomAt 'VZ as) @ds kl of
             SomeSing (x :: Sing x) ->
-                case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing (deDefunctionalize @_ @_ @f x :: Sing (f @@ x))) kl of
+                case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing (sing @f @@ x)) kl of
                     Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
                     Just kl' ->
                         return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
@@ -550,7 +545,7 @@ data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
     LetFromJust :: f @@ x :~: 'Just y -> LetFromJust f x y
     deriving (Show)
 
-instance DeDefunctionalize f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
+instance SingI f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
     type Require (LetFromJust f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (LetFromJust f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
     depKSerialize (AnyK (Proxy :: Proxy xs) (LetFromJust Refl)) = []
@@ -561,7 +556,7 @@ instance DeDefunctionalize f => DepKDeserialize (LetFromJust f :: a -> b -> Type
     depKDeserialize _ kl =
         case getAtom @d @a @(AtomAt 'VZ as) @ds kl of
             SomeSing (x :: Sing x) ->
-                case deDefunctionalize @_ @_ @f x :: Sing (f @@ x) of
+                case sing @f @@ x of
                     SNothing -> throwError $ DeserializeError "LetFromJust-binding failed because it resulted in Nothing"
                     (SJust (s :: Sing y)) ->
                         case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing s) kl of

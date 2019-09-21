@@ -268,8 +268,12 @@ testExistentialL0L1R0R1Simple = runState (runExceptT $ deserialize @ExistentialL
 
 data OnePlus :: Nat ~> Nat
 type instance Apply OnePlus n = 1 + n
-instance DeDefunctionalize OnePlus where
-    deDefunctionalize (SNat :: Sing n) = SNat \\ plusNat @1 @n
+
+sOnePlus :: Sing n -> Sing (1 + n)
+sOnePlus (SNat :: Sing n) = SNat \\ plusNat @1 @n
+
+instance SingI OnePlus where
+    sing = singFun1 sOnePlus
 
 data RecordWithOnePlus = forall (a :: Nat) (b :: Nat). RecordWithOnePlus
     { a :: Sing a

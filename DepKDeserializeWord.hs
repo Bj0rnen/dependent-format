@@ -179,11 +179,11 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
 -- Using this, GeneralizedVector isn't really necessary.
 data WordToNat :: a ~> Nat
 type instance Apply WordToNat n = ToNat n
-instance HasToNat a => DeDefunctionalize (WordToNat :: a ~> Nat) where
-    deDefunctionalize s = toNat s
+instance HasToNat a => SingI (WordToNat :: a ~> Nat) where
+    sing = singFun1 toNat
 
 
--- Also, leveraging the above, we can define something like GeneralizedVector in just a few lines:
+-- Leveraging the above, we can define the equivalent of GeneralizedVector in just a few lines:
 data GVector (a :: Type) (n :: k) = forall (m :: Nat). GVector
     { m :: Let WordToNat n m
     , v :: Vector a m
@@ -210,5 +210,5 @@ instance SingKind (Promoted Int8) where
 
 data IntToMaybeNat :: a ~> Maybe Nat
 type instance Apply IntToMaybeNat n = IntToMaybeNatF n
-instance HasIntToMaybeNat a => DeDefunctionalize (IntToMaybeNat :: a ~> Maybe Nat) where
-    deDefunctionalize s = intToNat s
+instance HasIntToMaybeNat a => SingI (IntToMaybeNat :: a ~> Maybe Nat) where
+    sing = singFun1 intToNat
