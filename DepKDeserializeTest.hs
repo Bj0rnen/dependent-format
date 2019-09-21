@@ -287,3 +287,33 @@ deriving instance DepKDeserialize RecordWithOnePlus
 
 testRecordWithOnePlus :: (Either DeserializeError RecordWithOnePlus, [Word8])
 testRecordWithOnePlus = runState (runExceptT $ deserialize @RecordWithOnePlus) [1,2,3,4,5,6]
+
+
+data PlusSym0 :: Nat ~> Nat ~> Nat
+data PlusSym1 :: Nat -> Nat ~> Nat
+type PlusSym2 n m = n + m
+type instance Apply PlusSym0 n = PlusSym1 n
+type instance Apply (PlusSym1 n) m = n + m
+
+sPlus :: Sing n -> Sing m -> Sing (n + m)
+sPlus (SNat :: Sing n) (SNat :: Sing m) = SNat \\ plusNat @n @m
+
+instance SingI PlusSym0 where
+    sing = singFun2 sPlus
+instance SingI n => SingI (PlusSym1 n) where
+    sing = singFun1 (sPlus (sing @n))
+
+data RecordWithPlus = forall (a :: Nat) (b :: Nat) (f :: Nat ~> Nat) (c :: Nat). RecordWithPlus
+    { a :: Sing a
+    , b :: Sing b
+    , f :: Let PlusSym0 a f
+    , c :: Let f b c
+    , v :: Vector Word8 c
+    }
+deriving instance Show RecordWithPlus
+$(deriveGenericK ''RecordWithPlus)
+
+deriving instance DepKDeserialize RecordWithPlus
+
+--testRecordWithPlus :: (Either DeserializeError RecordWithPlus, [Word8])
+--testRecordWithPlus = runState (runExceptT $ deserialize @RecordWithPlus) [1,2,3,4,5,6]
