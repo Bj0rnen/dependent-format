@@ -524,6 +524,25 @@ data Let (f :: a ~> b) (x :: a) (y :: b) where
     deriving (Show)
 
 
+instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
+    type Require (Let :: (a ~> b) -> a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, RequireAtom (AtomAt ('VS 'VZ) as) ds, LearnableAtom (AtomAt ('VS ('VS 'VZ)) as) ds)
+    type Learn (Let :: (a ~> b) -> a -> b -> Type) as ds = LearnAtom (AtomAt ('VS ('VS 'VZ)) as) ds
+    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d ((a ~> b) -> a -> b -> Type))
+        .  Require (Let :: (a ~> b) -> a -> b -> Type) as ds
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let :: (a ~> b) -> a -> b -> Type), KnowledgeList (Learn (Let :: (a ~> b) -> a -> b -> Type) as ds))
+    depKDeserialize _ kl =
+        case getAtom @d @(a ~> b) @(AtomAt 'VZ as) @ds kl of
+            SomeSing (f :: Sing f) ->
+                case getAtom @d @a @(AtomAt ('VS 'VZ) as) @ds kl of
+                    SomeSing (x :: Sing x) ->
+                        case learnAtom @d @b @(AtomAt ('VS ('VS 'VZ)) as) (SomeSing (f @@ x)) kl of
+                            Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
+                            Just kl' ->
+                                return (AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
+
+
 instance SingI f => DepKDeserialize (Let f :: a -> b -> Type) where
     type Require (Let f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (Let f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds

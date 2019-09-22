@@ -315,5 +315,5 @@ $(deriveGenericK ''RecordWithPlus)
 
 deriving instance DepKDeserialize RecordWithPlus
 
---testRecordWithPlus :: (Either DeserializeError RecordWithPlus, [Word8])
---testRecordWithPlus = runState (runExceptT $ deserialize @RecordWithPlus) [1,2,3,4,5,6]
+testRecordWithPlus :: (Either DeserializeError RecordWithPlus, [Word8])
+testRecordWithPlus = runState (runExceptT $ deserialize @RecordWithPlus) [1,2,3,4,5,6]
