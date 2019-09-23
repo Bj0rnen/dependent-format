@@ -558,6 +558,7 @@ instance SingI f => DepKDeserialize (Let f :: a -> b -> Type) where
                     Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
                     Just kl' ->
                         return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
+-- TODO: Still missing the more fully applied instances for Let.
 
 
 data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
@@ -582,3 +583,17 @@ instance SingI f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
                             Nothing -> throwError $ DeserializeError "Learned something contradictory while LetFromJust-binding"
                             Just kl' ->
                                 return (AnyK (Proxy @(x :&&: y :&&: 'LoT0)) (LetFromJust Refl), kl')
+
+
+data Let2 (f :: a ~> b ~> c) (x :: a) (y :: b) (z :: c) = forall f1. Let2
+    { f1 :: Let f x f1
+    , z  :: Let f1 y z
+    }
+deriving instance Show (Let2 f x y z)
+$(deriveGenericK ''Let2)
+deriving instance DepKDeserialize Let2
+deriving instance SingI f => DepKDeserialize (Let2 f)
+-- TODO: I haven't put much thought into the constraints on these instances. Just listened to the type checker.
+deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x)
+deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x y)
+deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x y z)
