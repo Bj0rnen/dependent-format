@@ -310,7 +310,7 @@ testRecordWithPlus :: (Either DeserializeError RecordWithPlus, [Word8])
 testRecordWithPlus = runState (runExceptT $ deserialize @RecordWithPlus) [1,2,3,4,5,6]
 
 
-data RecordWithPlus2 = forall (a :: Nat) (b :: Nat) (f :: Nat ~> Nat) (c :: Nat). RecordWithPlus2
+data RecordWithPlus2 = forall (a :: Nat) (b :: Nat) (c :: Nat). RecordWithPlus2
     { a :: Sing a
     , b :: Sing b
     , c :: Let2 PlusSym0 a b c
@@ -323,3 +323,15 @@ deriving instance DepKDeserialize RecordWithPlus2
 
 testRecordWithPlus2 :: (Either DeserializeError RecordWithPlus2, [Word8])
 testRecordWithPlus2 = runState (runExceptT $ deserialize @RecordWithPlus2) [1,2,3,4,5,6]
+
+
+data RecordWithPlus2Contradictory = RecordWithPlus2Contradictory
+    { c :: Let2 PlusSym0 1 2 4
+    }
+deriving instance Show RecordWithPlus2Contradictory
+$(deriveGenericK ''RecordWithPlus2Contradictory)
+
+deriving instance DepKDeserialize RecordWithPlus2Contradictory
+
+testRecordWithPlus2Contradictory :: (Either DeserializeError RecordWithPlus2Contradictory, [Word8])
+testRecordWithPlus2Contradictory = runState (runExceptT $ deserialize @RecordWithPlus2Contradictory) [1,2,3,4,5,6]

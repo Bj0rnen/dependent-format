@@ -558,7 +558,35 @@ instance SingI f => DepKDeserialize (Let f :: a -> b -> Type) where
                     Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
                     Just kl' ->
                         return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
--- TODO: Still missing the more fully applied instances for Let.
+
+
+instance (SingI f, SingI x) => DepKDeserialize (Let f (x :: a) :: b -> Type) where
+    type Require (Let f (x :: a) :: b -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
+    type Learn (Let f (x :: a) :: b -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
+    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (b -> Type))
+        .  Require (Let f (x :: a) :: b -> Type) as ds
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f (x :: a) :: b -> Type), KnowledgeList (Learn (Let f (x :: a) :: b -> Type) as ds))
+    depKDeserialize _ kl =
+        case learnAtom @d @b @(AtomAt 'VZ as) (SomeSing (sing @f @@ sing @x)) kl of
+            Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
+            Just kl' ->
+                return (AnyK (Proxy @(Apply f x :&&: 'LoT0)) (Let Refl), kl')
+
+
+instance (SingI f, SingI x, SingI y, SDecide b) => DepKDeserialize (Let f (x :: a) (y :: b)) where
+    type Require (Let f (x :: a) (y :: b)) as ds = ()
+    type Learn (Let f (x :: a) (y :: b)) as ds = ds
+    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
+    depKDeserialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
+        .  Require (Let f (x :: a) (y :: b)) as ds
+        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f (x :: a) (y :: b)), KnowledgeList (Learn (Let f (x :: a) (y :: b)) as ds))
+    depKDeserialize _ kl =
+        case (sing @f @@ sing @x) %~ sing @y of
+            Disproved f -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
+            Proved Refl -> return (AnyK (Proxy @'LoT0) (Let Refl), kl)
 
 
 data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
@@ -593,7 +621,12 @@ deriving instance Show (Let2 f x y z)
 $(deriveGenericK ''Let2)
 deriving instance DepKDeserialize Let2
 deriving instance SingI f => DepKDeserialize (Let2 f)
--- TODO: I haven't put much thought into the constraints on these instances. Just listened to the type checker.
-deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x)
-deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x y)
-deriving instance (SingI f, DepKDeserialize (Let f x)) => DepKDeserialize (Let2 f x y z)
+-- TODO: These constraints look a bit funny, but they're what GHC asked for.
+--  The last two might not look like they make sense, but remember that Require
+--  adds additional constraints that will affect y and z. So this works. But I
+--  don't really like how for instance x and y get different treatment here, when
+--  they server a highly similar purpose (they are the two argument to f). Maybe
+--  there's some way to give x the same treatment? And f too? Or go the other way?
+deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x)
+deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x y)
+deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x y z)
