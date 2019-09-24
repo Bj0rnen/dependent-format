@@ -266,18 +266,19 @@ testExistentialL0L1R0R1Simple :: (Either DeserializeError ExistentialL0L1R0R1, [
 testExistentialL0L1R0R1Simple = runState (runExceptT $ deserialize @ExistentialL0L1R0R1) [1,2,3,4,5,6]
 
 
-data OnePlus :: Nat ~> Nat
-type instance Apply OnePlus n = 1 + n
+(%+) :: Sing n -> Sing m -> Sing (n + m)
+(SNat :: Sing n) %+ (SNat :: Sing m) = SNat \\ plusNat @n @m
+$(genDefunSymbols [''(+)])
 
-sOnePlus :: Sing n -> Sing (1 + n)
-sOnePlus (SNat :: Sing n) = SNat \\ plusNat @1 @n
 
-instance SingI OnePlus where
-    sing = singFun1 sOnePlus
+$(singletons [d|
+  onePlus :: Nat -> Nat
+  onePlus a = 1 + a
+  |])
 
 data RecordWithOnePlus = forall (a :: Nat) (b :: Nat). RecordWithOnePlus
     { a :: Sing a
-    , b :: Let OnePlus a b
+    , b :: Let OnePlusSym0 a b
     , v :: Vector Word8 b
     }
 deriving instance Show RecordWithOnePlus
@@ -288,20 +289,10 @@ deriving instance DepKDeserialize RecordWithOnePlus
 testRecordWithOnePlus :: (Either DeserializeError RecordWithOnePlus, [Word8])
 testRecordWithOnePlus = runState (runExceptT $ deserialize @RecordWithOnePlus) [1,2,3,4,5,6]
 
-
-data PlusSym0 :: Nat ~> Nat ~> Nat
-data PlusSym1 :: Nat -> Nat ~> Nat
-type PlusSym2 n m = n + m
-type instance Apply PlusSym0 n = PlusSym1 n
-type instance Apply (PlusSym1 n) m = n + m
-
-sPlus :: Sing n -> Sing m -> Sing (n + m)
-sPlus (SNat :: Sing n) (SNat :: Sing m) = SNat \\ plusNat @n @m
-
-instance SingI PlusSym0 where
-    sing = singFun2 sPlus
-instance SingI n => SingI (PlusSym1 n) where
-    sing = singFun1 (sPlus (sing @n))
+$(singletons [d|
+  plus :: Nat -> Nat -> Nat
+  plus a b = a + b
+  |])
 
 data RecordWithPlus = forall (a :: Nat) (b :: Nat) (f :: Nat ~> Nat) (c :: Nat). RecordWithPlus
     { a :: Sing a
