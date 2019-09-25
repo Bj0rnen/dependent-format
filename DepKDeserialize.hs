@@ -543,50 +543,45 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
                                 return (AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
 
 
-instance SingI f => DepKDeserialize (Let f :: a -> b -> Type) where
-    type Require (Let f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
-    type Learn (Let f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
-    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
-    depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d (a -> b -> Type))
-        .  Require (Let f :: a -> b -> Type) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f :: a -> b -> Type), KnowledgeList (Learn (Let f :: a -> b -> Type) as ds))
-    depKDeserialize _ kl =
-        case getAtom @d @a @(AtomAt 'VZ as) @ds kl of
-            SomeSing (x :: Sing x) ->
-                case learnAtom @d @b @(AtomAt ('VS 'VZ) as) (SomeSing (sing @f @@ x)) kl of
-                    Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
-                    Just kl' ->
-                        return (AnyK (Proxy @(x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
+-- Helpers for defining DepKDeserialize instances where there's already an instance with one less type variable applied.
+-- Example: There's an instance for DepKDeserialize Foo; these helpers make it trivial to write a DepKDeserialize (Foo x) instance.
+-- TODO: Can we make it even easier? DerivingVia?
+depKSerialize1Up :: forall k ks (f :: k -> ks) (x :: k). DepKDeserialize f => AnyK (f x) -> [Word8]
+depKSerialize1Up (AnyK (Proxy :: Proxy xs) a) = depKSerialize @_ @f (AnyK (Proxy :: Proxy (x :&&: xs)) a)
+type family Require1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint where
+    Require1Up (f x) as ds = Require f ('AtomCons ('Kon x) as) ds
+type family Learn1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d where
+    Learn1Up (f x) as ds = Learn f ('AtomCons ('Kon x) as) ds
+depKDeserialize1Up
+    :: forall k ks (f :: k -> ks) (x :: k) d (ds :: DepStateList d) (as :: AtomList d ks)
+    . ( DepKDeserialize f
+      , Learn (f x) as ds ~ Learn1Up (f x) as ds
+      , Require (f x) as ds ~ Require1Up (f x) as ds
+      , Require (f x) as ds
+      )
+    => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (f x), KnowledgeList (Learn (f x) as ds))
+depKDeserialize1Up (Proxy :: Proxy as) kl = do
+    (AnyK (Proxy :: Proxy (xxs)) a, kl') <- depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) kl
+    return (AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs)), kl')  -- TODO: That's a kind of scary unsafeCoerce.
 
 
-instance (SingI f, SingI x) => DepKDeserialize (Let f (x :: a) :: b -> Type) where
-    type Require (Let f (x :: a) :: b -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
-    type Learn (Let f (x :: a) :: b -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
-    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
-    depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d (b -> Type))
-        .  Require (Let f (x :: a) :: b -> Type) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f (x :: a) :: b -> Type), KnowledgeList (Learn (Let f (x :: a) :: b -> Type) as ds))
-    depKDeserialize _ kl =
-        case learnAtom @d @b @(AtomAt 'VZ as) (SomeSing (sing @f @@ sing @x)) kl of
-            Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
-            Just kl' ->
-                return (AnyK (Proxy @(Apply f x :&&: 'LoT0)) (Let Refl), kl')
+instance DepKDeserialize (Let f) where
+    type Require (Let f) as ds = Require1Up (Let f) as ds
+    type Learn (Let f) as ds = Learn1Up (Let f) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
 
+instance DepKDeserialize (Let f x) where
+    type Require (Let f x) as ds = Require1Up (Let f x) as ds
+    type Learn (Let f x) as ds = Learn1Up (Let f x) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
 
-instance (SingI f, SingI x, SingI y, SDecide b) => DepKDeserialize (Let f (x :: a) (y :: b)) where
-    type Require (Let f (x :: a) (y :: b)) as ds = ()
-    type Learn (Let f (x :: a) (y :: b)) as ds = ds
-    depKSerialize (AnyK (Proxy :: Proxy xs) (Let Refl)) = []
-    depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
-        .  Require (Let f (x :: a) (y :: b)) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Let f (x :: a) (y :: b)), KnowledgeList (Learn (Let f (x :: a) (y :: b)) as ds))
-    depKDeserialize _ kl =
-        case (sing @f @@ sing @x) %~ sing @y of
-            Disproved f -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
-            Proved Refl -> return (AnyK (Proxy @'LoT0) (Let Refl), kl)
+instance DepKDeserialize (Let f x y) where
+    type Require (Let f x y) as ds = Require1Up (Let f x y) as ds
+    type Learn (Let f x y) as ds = Learn1Up (Let f x y) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
 
 
 data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
@@ -620,13 +615,7 @@ data Let2 (f :: a ~> b ~> c) (x :: a) (y :: b) (z :: c) = forall f1. Let2
 deriving instance Show (Let2 f x y z)
 $(deriveGenericK ''Let2)
 deriving instance DepKDeserialize Let2
-deriving instance SingI f => DepKDeserialize (Let2 f)
--- TODO: These constraints look a bit funny, but they're what GHC asked for.
---  The last two might not look like they make sense, but remember that Require
---  adds additional constraints that will affect y and z. So this works. But I
---  don't really like how for instance x and y get different treatment here, when
---  they server a highly similar purpose (they are the two argument to f). Maybe
---  there's some way to give x the same treatment? And f too? Or go the other way?
-deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x)
-deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x y)
-deriving instance (SingI f, SingI x) => DepKDeserialize (Let2 f x y z)
+deriving instance DepKDeserialize (Let2 f)
+deriving instance DepKDeserialize (Let2 f x)
+deriving instance DepKDeserialize (Let2 f x y)
+deriving instance DepKDeserialize (Let2 f x y z)
