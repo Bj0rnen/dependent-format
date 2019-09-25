@@ -596,3 +596,16 @@ deriving instance DepKDeserialize (Let2 f)
 deriving instance DepKDeserialize (Let2 f x)
 deriving instance DepKDeserialize (Let2 f x y)
 deriving instance DepKDeserialize (Let2 f x y z)
+
+data Let3 (f :: a0 ~> a1 ~> a2 ~> b) (x0 :: a0) (x1 :: a1) (x2 :: a2) (y :: b) = forall f1. Let3
+    { f1 :: Let f x0 f1
+    , y  :: Let2 f1 x1 x2 y
+    }
+deriving instance Show (Let3 f x0 x1 x2 y)
+$(deriveGenericK ''Let3)
+deriving instance DepKDeserialize Let3
+deriving instance DepKDeserialize (Let3 f)
+deriving instance DepKDeserialize (Let3 f x0)
+deriving instance DepKDeserialize (Let3 f x0 x1)
+deriving instance DepKDeserialize (Let3 f x0 x1 x2)
+deriving instance DepKDeserialize (Let3 f x0 x1 x2 y)
