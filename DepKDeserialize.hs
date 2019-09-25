@@ -195,6 +195,29 @@ deserialize = do
     (AnyK _ a, _) <- depKDeserialize @Type @a (Proxy @'AtomNil) KnowledgeNil
     return a
 
+
+-- Helpers for defining DepKDeserialize instances where there's already an instance with one less type variable applied.
+-- Example: There's an instance for DepKDeserialize Foo; these helpers make it trivial to write a DepKDeserialize (Foo x) instance.
+-- TODO: Can we make it even easier? DerivingVia?
+depKSerialize1Up :: forall k ks (f :: k -> ks) (x :: k). DepKDeserialize f => AnyK (f x) -> [Word8]
+depKSerialize1Up (AnyK (Proxy :: Proxy xs) a) = depKSerialize @_ @f (AnyK (Proxy :: Proxy (x :&&: xs)) a)
+type family Require1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint where
+    Require1Up (f x) as ds = Require f ('AtomCons ('Kon x) as) ds
+type family Learn1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d where
+    Learn1Up (f x) as ds = Learn f ('AtomCons ('Kon x) as) ds
+depKDeserialize1Up
+    :: forall k ks (f :: k -> ks) (x :: k) d (ds :: DepStateList d) (as :: AtomList d ks)
+    . ( DepKDeserialize f
+      , Learn (f x) as ds ~ Learn1Up (f x) as ds
+      , Require (f x) as ds ~ Require1Up (f x) as ds
+      , Require (f x) as ds
+      )
+    => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (f x), KnowledgeList (Learn (f x) as ds))
+depKDeserialize1Up (Proxy :: Proxy as) kl = do
+    (AnyK (Proxy :: Proxy (xxs)) a, kl') <- depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) kl
+    return (AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs)), kl')  -- TODO: That's a kind of scary unsafeCoerce.
+
+
 instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds
@@ -314,28 +337,18 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         case d of
             FromSing (s :: Sing (s :: k)) ->
                 case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
+                    -- TODO: Can we show the expected and actual values?
+                    --  A Show instance would be intrusive though. Maybe just show the bytes?
                     Nothing -> throwError $ DeserializeError "Learned something contradictory"
                     Just kl' ->
                         return (AnyK (Proxy @(s :&&: 'LoT0)) s, kl')
 
-instance (SingKind k, Serialize (Demote k), SDecide k, SingI a) => DepKDeserialize (Sing (a :: k)) where
-    type Require (Sing (a :: k)) as ds = ()
-    type Learn (Sing (a :: k)) _ ds = ds
-    depKSerialize (AnyK _ a) = depKSerialize @_ @(Demote k) (AnyK Proxy (FromSing a))
-    depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d Type)
-        .  Require (Sing (a :: k)) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (Sing (a :: k)), KnowledgeList (Learn (Sing (a :: k)) as ds))
-    depKDeserialize _ kl = do
-        d <- deserialize
-        case d of
-            FromSing (s :: Sing (s :: k)) ->
-                case s %~ (sing @a) of
-                    Disproved f ->
-                        -- TODO: Can we show the expected and actual values?
-                        --  A Show instance would be intrusive though. Maybe just show the bytes?
-                        throwError $ DeserializeError "Deserialized a specified Sing and got another value than specified"
-                    Proved Refl -> return (AnyK (Proxy @'LoT0) s, kl)
+instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) where
+    type Require (Sing (a :: k)) as ds = Require1Up (Sing (a :: k)) as ds
+    type Learn (Sing (a :: k)) as ds = Learn1Up (Sing (a :: k)) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
+
 
 -- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
 type family
@@ -371,23 +384,11 @@ instance Serialize a => DepKDeserialize (Vector a) where
                 (a :: Vector a n) <- deserialize
                 return (AnyK (Proxy @(n :&&: 'LoT0)) a, kl)
 
-instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
-    type Require (Vector a n) as ds = ()
-    type Learn (Vector a n) _ ds = ds
-    depKSerialize (AnyK _ (v :: Vector a n)) =
-        withKnownNat @n sing $
-            Vector.ifZeroElse @n [] $ \_ ->
-                case v of
-                    x :> xs ->
-                        depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
-    depKDeserialize _ kl =
-        withKnownNat @n sing $
-            Vector.ifZeroElse @n
-                (return (AnyK (Proxy @'LoT0) Nil, kl))
-                \(Proxy :: Proxy n1) -> do
-                    a <- deserialize @a
-                    as <- deserialize @(Vector a n1)
-                    return (AnyK (Proxy @'LoT0) (a :> as), kl)
+instance Serialize a => DepKDeserialize (Vector a n) where
+    type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
+    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
 
 
 data AnyKK :: (LoT ks -> Type) -> Type where
@@ -430,12 +431,6 @@ type family
     DereferenceAtomList (base :: AtomList d ks) (as :: AtomList ks ks') :: AtomList d ks' where
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
-
---given xs ~ (x0 :&&: x1 :&&: x2 :&&: x3 :&&: 'LoT0)
---and t ~ L0R1 :$: Var3 :@: Var3
---so AtomKonAtomList t ~ as ~ 'AtomCons Var3 ('AtomCons Var3 'AtomNil)
---we want L0R1 :@@: ys where ys ~ x3 :&&: x3 :&&: 'LoT0
---ys ~ Foo as xs
 
 type family
     InterpretAll (as :: AtomList ks ks') (xs :: LoT ks) :: LoT ks' where
@@ -541,29 +536,6 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
                             Nothing -> throwError $ DeserializeError "Learned something contradictory while Let-binding"
                             Just kl' ->
                                 return (AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) (Let Refl), kl')
-
-
--- Helpers for defining DepKDeserialize instances where there's already an instance with one less type variable applied.
--- Example: There's an instance for DepKDeserialize Foo; these helpers make it trivial to write a DepKDeserialize (Foo x) instance.
--- TODO: Can we make it even easier? DerivingVia?
-depKSerialize1Up :: forall k ks (f :: k -> ks) (x :: k). DepKDeserialize f => AnyK (f x) -> [Word8]
-depKSerialize1Up (AnyK (Proxy :: Proxy xs) a) = depKSerialize @_ @f (AnyK (Proxy :: Proxy (x :&&: xs)) a)
-type family Require1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint where
-    Require1Up (f x) as ds = Require f ('AtomCons ('Kon x) as) ds
-type family Learn1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d where
-    Learn1Up (f x) as ds = Learn f ('AtomCons ('Kon x) as) ds
-depKDeserialize1Up
-    :: forall k ks (f :: k -> ks) (x :: k) d (ds :: DepStateList d) (as :: AtomList d ks)
-    . ( DepKDeserialize f
-      , Learn (f x) as ds ~ Learn1Up (f x) as ds
-      , Require (f x) as ds ~ Require1Up (f x) as ds
-      , Require (f x) as ds
-      )
-    => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (f x), KnowledgeList (Learn (f x) as ds))
-depKDeserialize1Up (Proxy :: Proxy as) kl = do
-    (AnyK (Proxy :: Proxy (xxs)) a, kl') <- depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) kl
-    return (AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs)), kl')  -- TODO: That's a kind of scary unsafeCoerce.
-
 
 instance DepKDeserialize (Let f) where
     type Require (Let f) as ds = Require1Up (Let f) as ds
