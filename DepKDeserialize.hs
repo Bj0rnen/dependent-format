@@ -384,12 +384,32 @@ instance Serialize a => DepKDeserialize (Vector a) where
                 (a :: Vector a n) <- deserialize
                 return (AnyK (Proxy @(n :&&: 'LoT0)) a, kl)
 
-instance Serialize a => DepKDeserialize (Vector a n) where
-    type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
-    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
-    depKSerialize = depKSerialize1Up
-    depKDeserialize = depKDeserialize1Up
-
+-- TODO: Can't currently implement in this easy way.
+--  The reason is that DepKDeserialize (Vector a) uses DepKDeserialize (Vector a n), so it's circular.
+--
+--instance Serialize a => DepKDeserialize (Vector a n) where
+--    type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
+--    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
+--    depKSerialize = depKSerialize1Up
+--    depKDeserialize = depKDeserialize1Up
+instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
+    type Require (Vector a n) as ds = ()
+    type Learn (Vector a n) _ ds = ds
+    -- TODO: Can't we write this in some way without (SingI n), so we can move that to Require?
+    depKSerialize (AnyK _ (v :: Vector a n)) =
+        withKnownNat @n sing $
+            Vector.ifZeroElse @n [] $ \_ ->
+                case v of
+                    x :> xs ->
+                        depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
+    depKDeserialize _ kl =
+        withKnownNat @n sing $
+            Vector.ifZeroElse @n
+                (return (AnyK (Proxy @'LoT0) Nil, kl))
+                \(Proxy :: Proxy n1) -> do
+                    a <- deserialize @a
+                    as <- deserialize @(Vector a n1)
+                    return (AnyK (Proxy @'LoT0) (a :> as), kl)
 
 data AnyKK :: (LoT ks -> Type) -> Type where
     AnyKK :: f xs -> AnyKK f
