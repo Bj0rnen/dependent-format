@@ -83,6 +83,8 @@ newtype Promoted (a :: Type) where
 deriving instance Show (Promote a) => Show (Promoted a)
 data instance Sing :: Promoted a -> Type where
     SPromoted :: Sing (x :: Promote a) -> Sing ('Promoted x :: Promoted a)
+instance SingI x => SingI ('Promoted x :: Promoted a) where
+    sing = SPromoted (sing @x)
 deriving instance (pa ~ Promote a, forall y. Show (Sing (y :: pa))) => Show (Sing (x :: Promoted a))
 
 type instance Promote Word8 = Fin 256

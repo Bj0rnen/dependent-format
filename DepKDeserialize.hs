@@ -360,20 +360,7 @@ instance Serialize a => DepKDeserialize (Vector a) where
     type Require (Vector a) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (Vector a) _ ds = ds
     depKSerialize (AnyK (Proxy :: Proxy xs) a) =
-        -- TODO: This approach seems more like a workaround than The Right Thing.
-        --  There's computational cost to figuring out this length, and I don't know
-        --  if this approach is possible in all cases (a Vector happens to be a
-        --  "singleton" for its own length). Maybe the wrapper around the input
-        --  (AnyK for now) is supposed to hold singletons for all the parts of `xs`
-        --  which are the "target" of `Require`, i.e. 'VZ.
-        withSingI (resolveLength a) $
-            depKSerialize @_ @(Vector a (InterpretVar 'VZ xs)) (AnyK Proxy a)
-        where
-            resolveLength :: forall a n. Vector a n -> Sing n
-            resolveLength Nil = SNat @0
-            resolveLength (_ :> xs) =
-                case resolveLength xs of
-                    (SNat :: Sing m) -> SNat @(1 + m) \\ plusNat @1 @m
+        depKSerialize @_ @(Vector a (InterpretVar 'VZ xs)) (AnyK Proxy a)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
         .  Require (Vector a) as ds
@@ -392,16 +379,14 @@ instance Serialize a => DepKDeserialize (Vector a) where
 --    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
 --    depKSerialize = depKSerialize1Up
 --    depKDeserialize = depKDeserialize1Up
-instance (Serialize a, SingI n) => DepKDeserialize (Vector a n) where
-    type Require (Vector a n) as ds = ()
+instance Serialize a => DepKDeserialize (Vector a n) where
+    type Require (Vector a n) as ds = SingI n
     type Learn (Vector a n) _ ds = ds
-    -- TODO: Can't we write this in some way without (SingI n), so we can move that to Require?
     depKSerialize (AnyK _ (v :: Vector a n)) =
-        withKnownNat @n sing $
-            Vector.ifZeroElse @n [] $ \_ ->
-                case v of
-                    x :> xs ->
-                        depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
+        case v of
+            Nil -> []
+            x :> xs ->
+                depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
     depKDeserialize _ kl =
         withKnownNat @n sing $
             Vector.ifZeroElse @n
