@@ -16,6 +16,7 @@ module DepKDeserializeWordTest where
 
 import DepKDeserializeWord
 import DepKDeserialize
+import DepKDeserializeLet
 import Vector
 import Knowledge
 

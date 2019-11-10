@@ -17,6 +17,7 @@
 module DepKDeserializeWord where
 
 import DepKDeserialize
+import DepKDeserializeLet
 import Vector
 
 import Data.Singletons.TH
@@ -153,7 +154,7 @@ data GVector (a :: Type) (n :: k) = forall (m :: Nat). GVector
     , v :: Vector a m
     }
 deriving instance Show a => Show (GVector a n)
--- TODO: As of writing this, it's the only use of TemplateHaskell in a non-test module. Should that be avoided?
+-- TODO: Should all (non-test) uses of TemplateHaskell, be avoided or moved to a *.TH module?
 $(deriveGenericK ''GVector)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
 
