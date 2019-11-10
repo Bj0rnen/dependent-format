@@ -1,10 +1,10 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeInType #-}
 
 module Data.Singletons.Fin (
     Sing(SFin), SFin, withKnownFin,
@@ -24,8 +24,6 @@ import Numeric.Natural
 import Data.Typeable
 import Text.Read
 import GHC.Show (appPrec, appPrec1)
-
-import Data.Word
 
 
 data instance Sing :: Fin n -> Type where

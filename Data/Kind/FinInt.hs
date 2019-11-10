@@ -1,18 +1,15 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Data.Kind.FinInt (FinInt(..), KnownFinInt, finIntVal, SomeFinInt(..),
                          someFinIntVal, someFinInt, someFinIntNegative, someFinIntNonNegative, sameFinInt,
                          FinIntToMaybeNat) where
-
-import Prelude hiding (Int)
 
 import Data.Proxy
 import Data.Type.Equality
@@ -23,9 +20,6 @@ import Unsafe.Coerce
 
 import Control.Monad
 import Text.Read
-
-import GHC.TypeLits (TypeError, ErrorMessage(..))
-import Data.Constraint
 
 
 data FinInt (n :: Nat) (m :: Nat) = Negative Nat | NonNegative Nat

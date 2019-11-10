@@ -1,78 +1,46 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RoleAnnotations #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module DepKDeserialize where
 
 import Vector
 import DepState
 import Knowledge
-import DepLevel
 
-import Data.Singletons
 import Data.Singletons.TH
 import Data.Singletons.Prelude.Maybe
-import GHC.TypeNats
 import Data.Singletons.TypeLits
 import Data.Kind
 
-import qualified GHC.Generics as GHC hiding (from, to)
-import Generics.SOP hiding (Sing, Nil, SingI, sing)
-import qualified Generics.SOP as SOP
-import Generics.SOP.Classes (Same)
 import GHC.TypeLits (TypeError(..), ErrorMessage(..))
 import           Generics.Kind hiding (Nat, (:~:))
-import qualified Generics.Kind as K
 import Generics.Kind.TH
 
-import Data.Proxy
 import Data.Constraint
-import Data.Constraint.Nat
 import Unsafe.Coerce
-import GHC.Types (Any)
-import Data.Coerce
-import Data.Functor.Const
 
 import Data.Word
 import Data.Int
 import Data.Bits
 import Numeric.Natural
-import Data.Kind.Fin (ltNat, predecessor, subNat)
-import Data.Singletons.Fin
-
-import Data.Reflection
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -81,10 +49,6 @@ import Control.Monad.Except
 data DepStateList :: Type -> Type where
     DZ :: DepStateList Type
     DS :: DepState -> DepStateList xs -> DepStateList (x -> xs)
-
-data DepLevelList :: Type -> Type where
-    DLZ :: DepLevelList Type
-    DLS :: DepLevel -> DepLevelList xs -> DepLevelList (x -> xs)
 
 data AtomList :: Type -> Type -> Type where
     AtomNil  :: AtomList d Type

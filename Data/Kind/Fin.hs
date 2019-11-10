@@ -1,29 +1,11 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Data.Kind.Fin (Fin(..), KnownFin, finVal, SomeFin(..),
                       someFinVal, someFin, sameFin,

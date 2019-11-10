@@ -1,15 +1,14 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Data.Singletons.FinInt (
     Sing(SFinInt), SFinInt, withKnownFinInt,
-
     FinInt(..), KnownFinInt, finIntVal, SomeFinInt(..),
     someFinIntVal, someFinInt,
     FinIntToMaybeNat,
@@ -17,16 +16,11 @@ module Data.Singletons.FinInt (
 
 import Data.Singletons
 import Data.Singletons.Prelude.Maybe
-import Data.Singletons.Decide
 import Data.Singletons.TypeLits (Nat, KnownNat, Sing(SNat), natVal)
 import Data.Kind.FinInt
 import Data.Kind
 import Data.Constraint
-import Control.Monad
 import Numeric.Natural
-import Data.Typeable
-import Text.Read
-import GHC.Show (appPrec, appPrec1)
 
 import Unsafe.Coerce
 
