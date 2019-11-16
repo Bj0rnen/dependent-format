@@ -2,10 +2,12 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -124,39 +126,48 @@ genericKInstance = Sub (withDict (interpretVarsIsJustVars @xs) Dict)
 data DeserializeError = DeserializeError String
     deriving (Show)
 
-
--- TODO: Could we make a more specialized form like (IxGet (ds :: DepStateList d) (ds' :: DepStateList d) a)?
+class IxMonad m => IxMonadError e m | m -> e where
+    ithrowError :: e -> m i j a
+instance MonadError e m => IxMonadError e (IxStateT m) where
+    ithrowError e = IxStateT \_ -> throwError e
 newtype IxStateEither (e :: Type) (i :: Type) (j :: Type) (a :: Type) =
     IxStateEither { runIxStateEither :: IxStateT (Either e) i j a }
-    deriving newtype (IxFunctor, IxPointed, IxApplicative, IxMonad, IxMonadState, Functor)
+    deriving newtype (IxFunctor, IxPointed, IxApplicative, IxMonad, IxMonadState, IxMonadError e, Functor)
 deriving newtype instance Applicative (IxStateEither e i i)
 deriving newtype instance Monad (IxStateEither e i i)
 deriving newtype instance MonadError e (IxStateEither e i i)
--- TODO: I guess an IxMonadError class might be in order.
-ithrowError :: e -> IxStateEither e i j a
-ithrowError e = IxStateEither $ IxStateT \_ -> throwError e
-getKnowledge
-    :: IxStateEither
-        DeserializeError
-        (KnowledgeList ds, [Word8])
-        (KnowledgeList ds, [Word8])
-        (KnowledgeList ds)
-getKnowledge = fst <$> iget
-putKnowledge
-    :: KnowledgeList ds'
-    -> IxStateEither
-        DeserializeError
-        (KnowledgeList ds, [Word8])
-        (KnowledgeList ds', [Word8])
-        ()
-putKnowledge kl = imodify \(_, bs) -> (kl, bs)
-getBytes
-    :: IxStateEither
-        DeserializeError
-        (KnowledgeList ds, [Word8])
-        (KnowledgeList ds, [Word8])
-        [Word8]
-getBytes = snd <$> iget
+
+newtype IxGet (ds :: DepStateList d) (ds' :: DepStateList d) (a :: Type) =
+    IxGet { runIxGet :: IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList ds', [Word8]) a }
+    deriving newtype (Functor)
+deriving newtype instance Applicative (IxGet ds ds)
+deriving newtype instance Monad (IxGet ds ds)
+deriving newtype instance MonadError DeserializeError (IxGet ds ds)
+-- TODO: Can I get an explanation for why I can't simply derive these?
+-- TODO: Says it "cannot eta-reduce the representation type enough".
+instance IxFunctor IxGet where
+    imap f (IxGet a) = IxGet (imap f a)
+instance IxPointed IxGet where
+    ireturn a = IxGet (ireturn a)
+instance IxApplicative IxGet where
+    iap (IxGet f) (IxGet a) = IxGet (iap f a)
+instance IxMonad IxGet where
+    ibind f (IxGet a) = IxGet $ ibind (runIxGet . f) a
+instance IxMonadError DeserializeError IxGet where
+    ithrowError e = IxGet (ithrowError e)
+getKnowledge :: IxGet ds ds (KnowledgeList ds)
+getKnowledge = IxGet (fst <$> iget)
+modifyKnowledge :: (KnowledgeList ds -> KnowledgeList ds') -> IxGet ds ds' ()
+modifyKnowledge f = IxGet $ imodify \(kl, bs) -> (f kl, bs)
+putKnowledge :: KnowledgeList ds' -> IxGet ds ds' ()
+putKnowledge kl = modifyKnowledge (const kl)
+getBytes :: IxGet ds ds [Word8]
+getBytes = IxGet (snd <$> iget)
+modifyBytes :: ([Word8] -> [Word8]) -> IxGet ds ds ()
+modifyBytes f = IxGet $ imodify \(kl, bs) -> (kl, f bs)
+putBytes :: [Word8] -> IxGet ds ds ()
+putBytes bs = modifyBytes (const bs)
+
 
 data AnyK (f :: ks) where
     AnyK :: Proxy xs -> f :@@: InterpretVars xs -> AnyK f
@@ -169,7 +180,7 @@ class DepKDeserialize (f :: ks) where
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  Require f as ds
         -- TODO: Drop the proxy, if that's viable.
-        => Proxy as -> IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList (Learn f as ds), [Word8]) (AnyK f)
+        => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
 {-
     -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
@@ -195,7 +206,7 @@ serialize a = depKSerialize (AnyK (Proxy @'LoT0) a)
 deserialize :: forall a. Serialize a => StateT [Word8] (Either DeserializeError) a
 deserialize = 
     StateT $ \bs -> do
-        (AnyK _ r, (_, bs')) <- runIxStateT (runIxStateEither $ depKDeserialize (Proxy @'AtomNil)) (KnowledgeNil, bs)
+        (AnyK _ r, (_, bs')) <- runIxStateT (runIxStateEither $ runIxGet $ depKDeserialize (Proxy @'AtomNil)) (KnowledgeNil, bs)
         return (r, bs')
 
 
@@ -215,20 +226,15 @@ depKDeserialize1Up
       , Require (f x) as ds ~ Require1Up (f x) as ds
       , Require (f x) as ds
       )
-    => Proxy as -> IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList (Learn (f x) as ds), [Word8]) (AnyK (f x))
+    => Proxy as -> IxGet ds (Learn (f x) as ds) (AnyK (f x))
 depKDeserialize1Up (Proxy :: Proxy as) =
     depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) >>>= \(AnyK (Proxy :: Proxy (xxs)) a) ->
     ireturn $ AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs))  -- TODO: That's a kind of scary unsafeCoerce.
 
 
-withoutKnowledge
-    :: StateT [Word8] (Either DeserializeError) a
-    -> IxStateEither DeserializeError
-        (KnowledgeList ds, [Word8])
-        (KnowledgeList ds, [Word8])
-        (AnyK a)
+withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds (AnyK a)
 withoutKnowledge (StateT f) =
-    IxStateEither $ IxStateT \(kl, bs) -> do
+    IxGet $ IxStateEither $ IxStateT \(kl, bs) -> do
         (a, bs') <- f bs
         return (AnyK (Proxy @'LoT0) a, (kl, bs'))
 
@@ -343,7 +349,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (Sing :: k -> Type) as ds
-        => Proxy as -> IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList (Learn (Sing :: k -> Type) as ds), [Word8]) (AnyK (Sing :: k -> Type))
+        => Proxy as -> IxGet ds (Learn (Sing :: k -> Type) as ds) (AnyK (Sing :: k -> Type))
     depKDeserialize _ =
         getKnowledge >>>= \kl ->
         withoutKnowledge deserialize >>>= \(AnyK _ (FromSing (s :: Sing (s :: k)))) ->
@@ -369,7 +375,7 @@ instance Serialize a => DepKDeserialize (Vector a) where
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
         .  Require (Vector a) as ds
-        => Proxy as -> IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList (Learn (Vector a) as ds), [Word8]) (AnyK (Vector a))
+        => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
     depKDeserialize _ =
         getKnowledge >>>= \kl ->
         case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
