@@ -130,15 +130,8 @@ class IxMonad m => IxMonadError e m | m -> e where
     ithrowError :: e -> m i j a
 instance MonadError e m => IxMonadError e (IxStateT m) where
     ithrowError e = IxStateT \_ -> throwError e
-newtype IxStateEither (e :: Type) (i :: Type) (j :: Type) (a :: Type) =
-    IxStateEither { runIxStateEither :: IxStateT (Either e) i j a }
-    deriving newtype (IxFunctor, IxPointed, IxApplicative, IxMonad, IxMonadState, IxMonadError e, Functor)
-deriving newtype instance Applicative (IxStateEither e i i)
-deriving newtype instance Monad (IxStateEither e i i)
-deriving newtype instance MonadError e (IxStateEither e i i)
-
 newtype IxGet (ds :: DepStateList d) (ds' :: DepStateList d) (a :: Type) =
-    IxGet { runIxGet :: IxStateEither DeserializeError (KnowledgeList ds, [Word8]) (KnowledgeList ds', [Word8]) a }
+    IxGet { runIxGet :: IxStateT (Either DeserializeError) (KnowledgeList ds, [Word8]) (KnowledgeList ds', [Word8]) a }
     deriving newtype (Functor)
 deriving newtype instance Applicative (IxGet ds ds)
 deriving newtype instance Monad (IxGet ds ds)
@@ -205,7 +198,7 @@ serialize a = depKSerialize (AnyK (Proxy @'LoT0) a)
 deserialize :: forall a. Serialize a => StateT [Word8] (Either DeserializeError) a
 deserialize = 
     StateT $ \bs -> do
-        (AnyK _ r, (_, bs')) <- runIxStateT (runIxStateEither $ runIxGet $ depKDeserialize (Proxy @'AtomNil)) (KnowledgeNil, bs)
+        (AnyK _ r, (_, bs')) <- runIxStateT (runIxGet $ depKDeserialize (Proxy @'AtomNil)) (KnowledgeNil, bs)
         return (r, bs')
 
 
@@ -233,7 +226,7 @@ depKDeserialize1Up (Proxy :: Proxy as) =
 
 withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds (AnyK a)
 withoutKnowledge (StateT f) =
-    IxGet $ IxStateEither $ IxStateT \(kl, bs) -> do
+    IxGet $ IxStateT \(kl, bs) -> do
         (a, bs') <- f bs
         return (AnyK (Proxy @'LoT0) a, (kl, bs'))
 
@@ -520,19 +513,18 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
         => Proxy as -> IxGet ds (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds) (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)))
     depKDeserializeK _ =
         IxGet $
-            IxStateEither $
-                IxStateT $ \(kl, bs) ->
-                    case
-                        runIxStateT
-                            (runIxStateEither $ runIxGet $ depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)))
-                            (KnowledgeCons KnowledgeU kl, bs) of
-                        Left e -> Left e
-                        Right (AnyKK a, (kl', bs')) ->
-                            case
-                                unsafeCoerce  -- TODO: If this is sound and there's no other way, at least factor this out into something general and safe.
-                                    (Refl :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
-                                          :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: 'DS something ds of
-                                Refl ->
-                                    case kl' of
-                                        KnowledgeCons _ kl'' ->
-                                            Right (AnyKK (Exists (unsafeCoerce a)), (kl'', bs'))
+            IxStateT $ \(kl, bs) ->
+                case
+                    runIxStateT
+                        (runIxGet $ depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)))
+                        (KnowledgeCons KnowledgeU kl, bs) of
+                    Left e -> Left e
+                    Right (AnyKK a, (kl', bs')) ->
+                        case
+                            unsafeCoerce  -- TODO: If this is sound and there's no other way, at least factor this out into something general and safe.
+                                (Refl :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
+                                        :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: 'DS something ds of
+                            Refl ->
+                                case kl' of
+                                    KnowledgeCons _ kl'' ->
+                                        Right (AnyKK (Exists (unsafeCoerce a)), (kl'', bs'))
