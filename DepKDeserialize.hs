@@ -181,7 +181,7 @@ class DepKDeserialize (f :: ks) where
         .  Require f as ds
         -- TODO: Drop the proxy, if that's viable.
         => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
-{-
+
     -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
@@ -191,13 +191,12 @@ class DepKDeserialize (f :: ks) where
     default depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK f, KnowledgeList (Learn f as ds))
-    depKDeserialize p kl = do
-        (AnyKK (r :: RepK f xs), kl') <- depKDeserializeK @_ @(RepK f) p kl
-        -- TODO: This is messy. Could we at least make it so just one of interpretVarsIsJustVars genericKInstance is needed?
-        return (AnyK (Proxy @xs) ((withDict (interpretVarsIsJustVars @xs) (toK @_ @f @xs r)) \\ genericKInstance @f @xs), kl')
--}
--- TODO: Helper used while dropping the old Serialize class. Might not want to keep this.
+        => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
+    depKDeserialize p =
+        depKDeserializeK @_ @(RepK f) p >>>= \(AnyKK (r :: RepK f xs)) ->
+        -- TODO: This is messy. Could we at least make it so just one of interpretVarsIsJustVars or genericKInstance is needed?
+        ireturn $ AnyK (Proxy @xs) ((withDict (interpretVarsIsJustVars @xs) (toK @_ @f @xs r)) \\ genericKInstance @f @xs)
+
 
 class (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
 instance (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
@@ -318,7 +317,7 @@ instance DepKDeserialize Int8 where
     type Require Int8 as ds = ()
     type Learn Int8 as ds = ds
     depKSerialize (AnyK _ a) = [fromIntegral a]
-    depKDeserialize Proxy = withoutKnowledge do
+    depKDeserialize _ = withoutKnowledge do
         (bs :: [Word8]) <- get
         case bs of
             [] -> throwError $ DeserializeError "No more bytes to read!"
@@ -359,7 +358,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
             Nothing -> ithrowError $ DeserializeError "Learned something contradictory"
             Just kl' ->
                 putKnowledge kl' >>>= \_ ->
-                ireturn (AnyK (Proxy @(s :&&: 'LoT0)) s)
+                ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) where
     type Require (Sing (a :: k)) as ds = Require1Up (Sing (a :: k)) as ds
@@ -407,7 +406,7 @@ instance Serialize a => DepKDeserialize (Vector a n) where
                     a <- deserialize @a
                     as <- deserialize @(Vector a n1)
                     return (a :> as)
-{-
+
 data AnyKK :: (LoT ks -> Type) -> Type where
     AnyKK :: f xs -> AnyKK f
 
@@ -418,7 +417,7 @@ class DepKDeserializeK (f :: LoT ks -> Type) where
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK f as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK f, KnowledgeList (LearnK f as ds))
+        => Proxy as -> IxGet ds (LearnK f as ds) (AnyKK f)
 
 -- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
 type family
@@ -465,10 +464,10 @@ instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) 
     depKDeserializeK
         :: forall d (ds :: DepStateList d) as
         .  RequireK (Field t) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK (Field t), KnowledgeList (LearnK (Field t) as ds))
-    depKDeserializeK _ kl = do
-        (AnyK Proxy a, kl') <- depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) kl
-        return (AnyKK (Field (unsafeCoerce a)), kl')
+        => Proxy as -> IxGet ds (LearnK (Field t) as ds) (AnyKK (Field t))
+    depKDeserializeK _ =
+        depKDeserialize @(AtomKonKind t) @(AtomKonConstructor t) (Proxy @(DereferenceAtomList as (AtomKonAtomList t))) >>>= \(AnyK Proxy a) ->
+        ireturn $ AnyKK (Field (unsafeCoerce a))
 
 instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g) where
     type RequireK (f :*: g) as ds =
@@ -477,24 +476,24 @@ instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g) 
         )
     type LearnK (f :*: g) as ds = LearnK g as (LearnK f as ds)
     depKSerializeK (AnyKK (a :*: b)) = depKSerializeK (AnyKK a) ++ depKSerializeK (AnyKK b)
-    depKDeserializeK p kl = do
-        (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
-        (AnyKK b, kl'') <- depKDeserializeK @_ @g p kl'
-        return (AnyKK (unsafeCoerce a :*: b), kl'')  -- TODO: Would be excellent to get rid of unsafeCoerce!
+    depKDeserializeK p =
+        depKDeserializeK @_ @f p >>>= \(AnyKK a) ->
+        depKDeserializeK @_ @g p >>>= \(AnyKK b) ->
+        ireturn $ AnyKK (unsafeCoerce a :*: b)  -- TODO: Would be excellent to get rid of unsafeCoerce!
 
 instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
     type RequireK (M1 i c f) as ds = RequireK f as ds
     type LearnK (M1 i c f) as ds = LearnK f as ds
     depKSerializeK (AnyKK (M1 a)) = depKSerializeK (AnyKK a)
-    depKDeserializeK p kl = do
-        (AnyKK a, kl') <- depKDeserializeK @_ @f p kl
-        return (AnyKK (M1 a), kl')
+    depKDeserializeK p =
+        depKDeserializeK @_ @f p >>>= \(AnyKK a) ->
+        ireturn $ AnyKK (M1 a)
 
 instance DepKDeserializeK U1 where
     type RequireK U1 as ds = ()
     type LearnK U1 as ds = ds
     depKSerializeK _ = []
-    depKDeserializeK p kl = return (AnyKK U1, kl)
+    depKDeserializeK _ = ireturn $ AnyKK U1
 
 
 type family
@@ -518,15 +517,22 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)), KnowledgeList (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds))
-    depKDeserializeK Proxy kl = do
-        (AnyKK a, kl') <- depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)) (KnowledgeCons KnowledgeU kl)
-        case
-            unsafeCoerce  -- TODO: If this is sound and there's no other way, at least factor this out into something general and safe.
-                (Refl :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
-                      :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: 'DS something ds of
-            Refl ->
-                case kl' of
-                    KnowledgeCons _ kl'' ->
-                        return (AnyKK (Exists (unsafeCoerce a)), kl'')
--}
+        => Proxy as -> IxGet ds (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds) (AnyKK (Exists k (f :: LoT (k -> ks) -> Type)))
+    depKDeserializeK _ =
+        IxGet $
+            IxStateEither $
+                IxStateT $ \(kl, bs) ->
+                    case
+                        runIxStateT
+                            (runIxStateEither $ runIxGet $ depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)))
+                            (KnowledgeCons KnowledgeU kl, bs) of
+                        Left e -> Left e
+                        Right (AnyKK a, (kl', bs')) ->
+                            case
+                                unsafeCoerce  -- TODO: If this is sound and there's no other way, at least factor this out into something general and safe.
+                                    (Refl :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
+                                          :: LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds) :~: 'DS something ds of
+                                Refl ->
+                                    case kl' of
+                                        KnowledgeCons _ kl'' ->
+                                            Right (AnyKK (Exists (unsafeCoerce a)), (kl'', bs'))
