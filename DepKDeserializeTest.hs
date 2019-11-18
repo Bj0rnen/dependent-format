@@ -26,7 +26,7 @@ import Generics.Kind.TH
 import Data.Word
 
 import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad.Indexed.State
 
 
 {-
@@ -63,74 +63,74 @@ deriving instance (SingI size0, SingI size1) => DepKDeserialize (L0R1 size0 size
 
 testL0R1SameVar :: String
 testL0R1SameVar =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))))
+            (KnowledgeCons KnowledgeU KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1DifferentVars :: String
 testL0R1DifferentVars =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (KnowledgeCons KnowledgeU (KnowledgeCons (KnowledgeK (sing @5)) KnowledgeNil)))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
+            (KnowledgeCons KnowledgeU (KnowledgeCons (KnowledgeK (sing @5)) KnowledgeNil), [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1Kons :: String
 testL0R1Kons =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 2) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 2) (AtomCons ('Kon 5) AtomNil))))
+            (KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1KonsContradictory :: String
 testL0R1KonsContradictory =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 1) (AtomCons ('Kon 5) AtomNil))) KnowledgeNil)
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons ('Kon 1) (AtomCons ('Kon 5) AtomNil))))
+            (KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1AlreadyKnown :: String
 testL0R1AlreadyKnown =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @2)) KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))))
+            ((KnowledgeCons (KnowledgeK (sing @2)) KnowledgeNil), [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
 testL0R1AlreadyKnownContradictory :: String
 testL0R1AlreadyKnownContradictory =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))) (KnowledgeCons (KnowledgeK (sing @1)) KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R1 (Proxy @(AtomCons Var0 (AtomCons ('Kon 5) AtomNil))))
+            ((KnowledgeCons (KnowledgeK (sing @1)) KnowledgeNil), [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1SameVarK :: String
 testL0R1SameVarK =
-    case evalState
-            (runExceptT $ depKDeserializeK @_ @(Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserializeK @_ @(Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))))
+            (KnowledgeCons KnowledgeU KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyKK a, _) -> show a
 
 testL0R1Of2AndKnown3 :: String
 testL0R1Of2AndKnown3 =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @(L0R1 2) (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons (KnowledgeK (sing @3)) KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @(L0R1 2) (Proxy @(AtomCons Var0 AtomNil)))
+            (KnowledgeCons (KnowledgeK (sing @3)) KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 testL0R1Of2And3 :: String
 testL0R1Of2And3 =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil) KnowledgeNil)
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @(L0R1 2 3) (Proxy @AtomNil))
+            (KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
@@ -145,9 +145,9 @@ deriving instance SingI size => DepKDeserialize (SameVarL0R1 size)
 
 testSameVarL0R1Unkown :: String
 testSameVarL0R1Unkown =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @SameVarL0R1 (Proxy @(AtomCons Var0 AtomNil)))
+            (KnowledgeCons KnowledgeU KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
@@ -162,14 +162,14 @@ deriving instance DepKDeserialize SameExistentialVarL0R1
 
 testSameExistentialVarL0R1 :: String
 testSameExistentialVarL0R1 =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil) KnowledgeNil)
-            [2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @SameExistentialVarL0R1 (Proxy @AtomNil))
+            (KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
-testSameExistentialVarL0R1Simple :: (Either DeserializeError SameExistentialVarL0R1, [Word8])
-testSameExistentialVarL0R1Simple = runState (runExceptT $ deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
+testSameExistentialVarL0R1Simple :: (Either DeserializeError (SameExistentialVarL0R1, [Word8]))
+testSameExistentialVarL0R1Simple = runStateT (deserialize @SameExistentialVarL0R1) [2,3,4,5,6,7]
 
 
 data EmptyRecord = EmptyRecord
@@ -178,8 +178,8 @@ $(deriveGenericK ''EmptyRecord)
 
 deriving instance DepKDeserialize EmptyRecord
 
-testEmptyRecordSimple :: (Either DeserializeError EmptyRecord, [Word8])
-testEmptyRecordSimple = runState (runExceptT $ deserialize @EmptyRecord) [2,3,4,5,6,7]
+testEmptyRecordSimple :: (Either DeserializeError (EmptyRecord, [Word8]))
+testEmptyRecordSimple = runStateT (deserialize @EmptyRecord) [2,3,4,5,6,7]
 
 
 data PlainField = PlainField
@@ -189,8 +189,8 @@ $(deriveGenericK ''PlainField)
 
 deriving instance DepKDeserialize PlainField
 
-testPlainFieldSimple :: (Either DeserializeError PlainField, [Word8])
-testPlainFieldSimple = runState (runExceptT $ deserialize @PlainField) [2,3,4,5,6,7]
+testPlainFieldSimple :: (Either DeserializeError (PlainField, [Word8]))
+testPlainFieldSimple = runStateT (deserialize @PlainField) [2,3,4,5,6,7]
 
 
 data ExistentialL0L0 = forall (size :: Nat). ExistentialL0L0
@@ -202,8 +202,8 @@ $(deriveGenericK ''ExistentialL0L0)
 
 deriving instance DepKDeserialize ExistentialL0L0
 
-testExistentialL0L0ContradictorySimple :: (Either DeserializeError ExistentialL0L0, [Word8])
-testExistentialL0L0ContradictorySimple = runState (runExceptT $ deserialize @ExistentialL0L0) [2,3,4,5,6,7]
+testExistentialL0L0ContradictorySimple :: (Either DeserializeError (ExistentialL0L0, [Word8]))
+testExistentialL0L0ContradictorySimple = runStateT (deserialize @ExistentialL0L0) [2,3,4,5,6,7]
 
 
 data ExistentialL0L1R0R1 = forall size0 size1. ExistentialL0L1R0R1
@@ -217,5 +217,5 @@ $(deriveGenericK ''ExistentialL0L1R0R1)
 
 deriving instance DepKDeserialize ExistentialL0L1R0R1
 
-testExistentialL0L1R0R1Simple :: (Either DeserializeError ExistentialL0L1R0R1, [Word8])
-testExistentialL0L1R0R1Simple = runState (runExceptT $ deserialize @ExistentialL0L1R0R1) [1,2,3,4,5,6]
+testExistentialL0L1R0R1Simple :: (Either DeserializeError (ExistentialL0L1R0R1, [Word8]))
+testExistentialL0L1R0R1Simple = runStateT (deserialize @ExistentialL0L1R0R1) [1,2,3,4,5,6]

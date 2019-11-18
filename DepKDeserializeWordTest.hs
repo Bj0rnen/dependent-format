@@ -29,7 +29,7 @@ import Data.Word
 import Data.Int
 
 import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad.Indexed.State
 
 
 data L0Word64 (size :: Promoted Word64) = L0Word64
@@ -41,9 +41,9 @@ deriving instance DepKDeserialize L0Word64
 
 testL0Word64 :: String
 testL0Word64 =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [0,1,2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0Word64 (Proxy @('AtomCons Var0 'AtomNil)))
+            (KnowledgeCons KnowledgeU KnowledgeNil, [0,1,2,3,4,5,6,7]) of
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
@@ -57,9 +57,9 @@ deriving instance DepKDeserialize L0R0Word16
 
 testL0R0Word16 :: String
 testL0R0Word16 =
-    case evalState
-            (runExceptT $ depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)) (KnowledgeCons KnowledgeU KnowledgeNil))
-            [0,1,2,3,4,5,6,7] of
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @L0R0Word16 (Proxy @('AtomCons Var0 'AtomNil)))
+            (KnowledgeCons KnowledgeU KnowledgeNil, [0,1,2,3,4,5,6,7]) of
         Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 
@@ -73,8 +73,8 @@ $(deriveGenericK ''RecordWithWordToNat)
 
 deriving instance DepKDeserialize RecordWithWordToNat
 
-testRecordWithWordToNat :: (Either DeserializeError RecordWithWordToNat, [Word8])
-testRecordWithWordToNat = runState (runExceptT $ deserialize @RecordWithWordToNat) [0,0,0,2,5,6,7]
+testRecordWithWordToNat :: (Either DeserializeError (RecordWithWordToNat, [Word8]))
+testRecordWithWordToNat = runStateT (deserialize @RecordWithWordToNat) [0,0,0,2,5,6,7]
 
 
 data L0R0Word8 = forall (size :: Promoted Word8). L0R0Word8
@@ -86,8 +86,8 @@ $(deriveGenericK ''L0R0Word8)
 
 deriving instance DepKDeserialize L0R0Word8
 
-testL0R0Word8 :: (Either DeserializeError L0R0Word8, [Word8])
-testL0R0Word8 = runState (runExceptT $ deserialize @L0R0Word8) [3,1,2,3,4,5,6,7]
+testL0R0Word8 :: (Either DeserializeError (L0R0Word8, [Word8]))
+testL0R0Word8 = runStateT (deserialize @L0R0Word8) [3,1,2,3,4,5,6,7]
 
 
 data RecordWithIntToNat = forall (a :: Promoted Int8) (b :: Nat). RecordWithIntToNat
@@ -100,5 +100,5 @@ $(deriveGenericK ''RecordWithIntToNat)
 
 deriving instance DepKDeserialize RecordWithIntToNat
 
-testRecordWithIntToNat :: (Either DeserializeError RecordWithIntToNat, [Word8])
-testRecordWithIntToNat = runState (runExceptT $ deserialize @RecordWithIntToNat) [3,2,5,6,7]
+testRecordWithIntToNat :: (Either DeserializeError (RecordWithIntToNat, [Word8]))
+testRecordWithIntToNat = runStateT (deserialize @RecordWithIntToNat) [3,2,5,6,7]

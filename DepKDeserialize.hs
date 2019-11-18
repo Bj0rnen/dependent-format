@@ -68,6 +68,7 @@ data KnowledgeList (ds :: DepStateList d) where
 
 
 class RequireAtom (a :: Atom d k) (ds :: DepStateList d) where
+    -- TODO: Make IxGet convenience function for this. And use everywhere.
     getAtom :: KnowledgeList ds -> SomeSing k
 instance SingI a => RequireAtom ('Kon (a :: k)) ds where
     getAtom _ = SomeSing (sing @a)
@@ -90,6 +91,7 @@ type family
     LearnAtom ('Var ('VS v)) ('DS d ds) = 'DS d (LearnAtom ('Var v) ds)
 class LearnableAtom (a :: Atom d k) (ds :: DepStateList d) where  -- TODO: Bad name.
     -- TODO: `Maybe` to cover "contradiction". is an `Either` or something a better fit?
+    -- TODO: Make IxGet convenience function for this. And use everywhere.
     learnAtom :: SomeSing k -> KnowledgeList ds -> Maybe (KnowledgeList (LearnAtom a ds))
 instance (SingI a, SDecide k) => LearnableAtom ('Kon (a :: k)) ds where
     learnAtom (SomeSing s) kl =
@@ -160,8 +162,28 @@ modifyBytes :: ([Word8] -> [Word8]) -> IxGet ds ds ()
 modifyBytes f = IxGet $ imodify \(kl, bs) -> (kl, f bs)
 putBytes :: [Word8] -> IxGet ds ds ()
 putBytes bs = modifyBytes (const bs)
+igetAtom
+    :: forall (d :: Type) (k :: Type) (t :: Atom d k) (ds :: DepStateList d)
+    .  RequireAtom t ds
+    => IxGet ds ds (SomeSing k)
+igetAtom = getKnowledge >>>= \kl -> ireturn $ getAtom @d @k @t @ds kl
+-- TODO: Maybe this should take a DeserializeError. Or, right now, learnAtom
+-- TODO: returns Maybe, but if it returned (Either LearningError), then
+-- TODO: perhaps what we should take is a (LearningError -> DeserializeError).
+-- TODO: The point is: "Learned something contradictory" is a very generic message.
+ilearnAtom
+    :: forall (d :: Type) (k :: Type) (t :: Atom d k) (ds :: DepStateList d)
+    .  LearnableAtom t ds
+    => SomeSing k -> IxGet ds (LearnAtom t ds) ()
+ilearnAtom ss =
+    getKnowledge >>>= \kl ->
+    case learnAtom @d @k @t ss kl of
+        Nothing -> ithrowError $ DeserializeError "Learned something contradictory"
+        Just kl' -> putKnowledge kl'
 
-
+-- TODO: This type is more of a workaround than an intentional design...
+-- TODO: I struggle to even make a Show instance. Could I mitigate that by replacing (:@@:) and InterpretVars
+-- TODO: with some concrete datatype(s)? Well AnyK is pretty much that type, so that logic is a bit circular...
 data AnyK (f :: ks) where
     AnyK :: Proxy xs -> f :@@: InterpretVars xs -> AnyK f
 
@@ -224,6 +246,8 @@ depKDeserialize1Up (Proxy :: Proxy as) =
     ireturn $ AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs))  -- TODO: That's a kind of scary unsafeCoerce.
 
 
+-- TODO: Drop the AnyK unless there's a good motivation for it. In some places it just seems
+-- TODO: to get in the way. In others, you get slightly shorter code. Obviously, (a :: Type).
 withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds (AnyK a)
 withoutKnowledge (StateT f) =
     IxGet $ IxStateT \(kl, bs) -> do
@@ -345,13 +369,9 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
     depKDeserialize _ =
         getKnowledge >>>= \kl ->
         withoutKnowledge deserialize >>>= \(AnyK _ (FromSing (s :: Sing (s :: k)))) ->
-        case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
-            -- TODO: Can we show the expected and actual values?
-            --  A Show instance would be intrusive though. Maybe just show the bytes?
-            Nothing -> ithrowError $ DeserializeError "Learned something contradictory"
-            Just kl' ->
-                putKnowledge kl' >>>= \_ ->
-                ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
+        -- TODO: Would be awesome if we could show "expected" and "actual" in case of contradiction!
+        ilearnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) >>>= \_ ->
+        ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) where
     type Require (Sing (a :: k)) as ds = Require1Up (Sing (a :: k)) as ds
@@ -369,11 +389,9 @@ instance Serialize a => DepKDeserialize (Vector a) where
         .  Require (Vector a) as ds
         => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
     depKDeserialize _ =
-        getKnowledge >>>= \kl ->
-        case getAtom @d @Nat @(AtomAt 'VZ as) @ds kl of
-            SomeSing (SNat :: Sing n) ->
-                withoutKnowledge deserialize >>>= \(AnyK _ (a :: Vector a n)) ->
-                ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) a
+        igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
+        withoutKnowledge deserialize >>>= \(AnyK _ (a :: Vector a n)) ->
+        ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) a
 
 -- TODO: Can't currently implement in this easy way.
 --  The reason is that DepKDeserialize (Vector a) uses DepKDeserialize (Vector a n), so it's circular.

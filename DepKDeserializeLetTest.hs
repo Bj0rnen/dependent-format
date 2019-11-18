@@ -29,7 +29,6 @@ import Data.Constraint.Nat
 import Data.Word
 
 import Control.Monad.State
-import Control.Monad.Except
 
 
 (%+) :: Sing n -> Sing m -> Sing (n + m)
@@ -52,8 +51,8 @@ $(deriveGenericK ''RecordWithOnePlus)
 
 deriving instance DepKDeserialize RecordWithOnePlus
 
-testRecordWithOnePlus :: (Either DeserializeError RecordWithOnePlus, [Word8])
-testRecordWithOnePlus = runState (runExceptT $ deserialize @RecordWithOnePlus) [1,2,3,4,5,6]
+testRecordWithOnePlus :: (Either DeserializeError (RecordWithOnePlus, [Word8]))
+testRecordWithOnePlus = runStateT (deserialize @RecordWithOnePlus) [1,2,3,4,5,6]
 
 $(singletons [d|
   plus :: Nat -> Nat -> Nat
@@ -72,8 +71,8 @@ $(deriveGenericK ''RecordWithPlus)
 
 deriving instance DepKDeserialize RecordWithPlus
 
-testRecordWithPlus :: (Either DeserializeError RecordWithPlus, [Word8])
-testRecordWithPlus = runState (runExceptT $ deserialize @RecordWithPlus) [1,2,3,4,5,6]
+testRecordWithPlus :: (Either DeserializeError (RecordWithPlus, [Word8]))
+testRecordWithPlus = runStateT (deserialize @RecordWithPlus) [1,2,3,4,5,6]
 
 
 data RecordWithPlus2 = forall (a :: Nat) (b :: Nat) (c :: Nat). RecordWithPlus2
@@ -87,8 +86,8 @@ $(deriveGenericK ''RecordWithPlus2)
 
 deriving instance DepKDeserialize RecordWithPlus2
 
-testRecordWithPlus2 :: (Either DeserializeError RecordWithPlus2, [Word8])
-testRecordWithPlus2 = runState (runExceptT $ deserialize @RecordWithPlus2) [1,2,3,4,5,6]
+testRecordWithPlus2 :: (Either DeserializeError (RecordWithPlus2, [Word8]))
+testRecordWithPlus2 = runStateT (deserialize @RecordWithPlus2) [1,2,3,4,5,6]
 
 
 data RecordWithPlus2Contradictory = RecordWithPlus2Contradictory
@@ -99,5 +98,5 @@ $(deriveGenericK ''RecordWithPlus2Contradictory)
 
 deriving instance DepKDeserialize RecordWithPlus2Contradictory
 
-testRecordWithPlus2Contradictory :: (Either DeserializeError RecordWithPlus2Contradictory, [Word8])
-testRecordWithPlus2Contradictory = runState (runExceptT $ deserialize @RecordWithPlus2Contradictory) [1,2,3,4,5,6]
+testRecordWithPlus2Contradictory :: (Either DeserializeError (RecordWithPlus2Contradictory, [Word8]))
+testRecordWithPlus2Contradictory = runStateT (deserialize @RecordWithPlus2Contradictory) [1,2,3,4,5,6]

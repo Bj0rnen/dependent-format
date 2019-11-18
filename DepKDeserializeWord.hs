@@ -36,8 +36,7 @@ import Data.Int
 import Data.Singletons.Fin
 import Data.Singletons.FinInt
 
-import Control.Monad.State
-import Control.Monad.Except
+import Control.Monad.Indexed
 
 
 type family Promote (a :: Type) = (b :: Type) | b -> a
@@ -131,14 +130,13 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds
-        => Proxy as -> KnowledgeList ds -> ExceptT DeserializeError (State [Word8]) (AnyK (GeneralizedVector a), KnowledgeList (Learn (GeneralizedVector a) as ds))
-    depKDeserialize _ kl = do
-        case getAtom @d @k @(AtomAt 'VZ as) @ds kl of
-            SomeSing (n :: Sing n) ->
-                case toNat n of
-                    (SNat :: Sing (ToNat n)) -> do
-                        a <- deserialize @(Vector a (ToNat n))
-                        return (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), kl)
+        => Proxy as -> IxGet ds (Learn (GeneralizedVector a) as ds) (AnyK (GeneralizedVector a))
+    depKDeserialize _ =
+        igetAtom @d @k @(AtomAt 'VZ as) @ds >>>= \(SomeSing (n :: Sing n)) ->
+        case toNat n of
+            (SNat :: Sing (ToNat n)) ->
+                withoutKnowledge (deserialize @(Vector a (ToNat n))) >>>= \(AnyK _ a) ->
+                ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a)
 
 
 -- Using this, GeneralizedVector isn't really necessary.
