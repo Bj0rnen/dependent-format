@@ -380,41 +380,31 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) w
 instance Serialize a => DepKDeserialize (Vector a) where
     type Require (Vector a) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (Vector a) _ ds = ds
-    depKSerialize (AnyK (Proxy :: Proxy xs) a) =
-        depKSerialize @_ @(Vector a (InterpretVar 'VZ xs)) (AnyK Proxy a)
+    depKSerialize (AnyK (Proxy :: Proxy xs) v) =
+        case v of
+            Nil -> []
+            x :> xs ->
+                depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @(HeadLoT xs)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
         .  Require (Vector a) as ds
         => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
     depKDeserialize _ =
         igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
-        withoutKnowledge deserialize >>>= \(a :: Vector a n) ->
-        ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) a
+        fmap (AnyK (Proxy @(n :&&: 'LoT0))) $ withoutKnowledge $
+            withKnownNat @n sing $
+                Vector.ifZeroElse @n
+                    (return Nil)
+                    \(Proxy :: Proxy n1) -> do
+                        a <- deserialize @a
+                        as <- deserialize @(Vector a n1)
+                        return (a :> as)
 
--- TODO: Can't currently implement in this easy way.
---  The reason is that DepKDeserialize (Vector a) uses DepKDeserialize (Vector a n), so it's circular.
---
---instance Serialize a => DepKDeserialize (Vector a n) where
---    type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
---    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
---    depKSerialize = depKSerialize1Up
---    depKDeserialize = depKDeserialize1Up
 instance Serialize a => DepKDeserialize (Vector a n) where
-    type Require (Vector a n) as ds = SingI n
-    type Learn (Vector a n) _ ds = ds
-    depKSerialize (AnyK _ (v :: Vector a n)) =
-        case v of
-            Nil -> []
-            x :> xs ->
-                depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
-    depKDeserialize _ = fmap (AnyK Proxy) $ withoutKnowledge $ 
-        withKnownNat @n sing $
-            Vector.ifZeroElse @n
-                (return Nil)
-                \(Proxy :: Proxy n1) -> do
-                    a <- deserialize @a
-                    as <- deserialize @(Vector a n1)
-                    return (a :> as)
+    type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
+    type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
 
 data AnyKK :: (LoT ks -> Type) -> Type where
     AnyKK :: f xs -> AnyKK f
