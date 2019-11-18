@@ -246,19 +246,17 @@ depKDeserialize1Up (Proxy :: Proxy as) =
     ireturn $ AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs))  -- TODO: That's a kind of scary unsafeCoerce.
 
 
--- TODO: Drop the AnyK unless there's a good motivation for it. In some places it just seems
--- TODO: to get in the way. In others, you get slightly shorter code. Obviously, (a :: Type).
-withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds (AnyK a)
+withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds a
 withoutKnowledge (StateT f) =
     IxGet $ IxStateT \(kl, bs) -> do
         (a, bs') <- f bs
-        return (AnyK (Proxy @'LoT0) a, (kl, bs'))
+        return (a, (kl, bs'))
 
 instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds
     depKSerialize (AnyK _ a) = [a]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         bs <- get
         case bs of
             [] -> throwError $ DeserializeError "No more bytes to read!"
@@ -273,7 +271,7 @@ instance DepKDeserialize Word16 where
         [ fromIntegral ((a `shiftR` 8) .&. 0xFF)
         , fromIntegral (a .&. 0xFF)
         ]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         bs <- deserialize @(Vector Word8 2)
         case bs of
             a :> b :> Nil ->
@@ -291,7 +289,7 @@ instance DepKDeserialize Word32 where
         , fromIntegral ((a `shiftR` 8) .&. 0xFF)
         , fromIntegral (a .&. 0xFF)
         ]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         bs <- deserialize @(Vector Word8 4)
         case bs of
             a :> b :> c :> d :> Nil ->
@@ -315,7 +313,7 @@ instance DepKDeserialize Word64 where
         , fromIntegral ((a `shiftR` 8) .&. 0xFF)
         , fromIntegral (a .&. 0xFF)
         ]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         bs <- deserialize @(Vector Word8 8)
         case bs of
             a :> b :> c :> d :> e :> f :> g :> h :> Nil ->
@@ -334,7 +332,7 @@ instance DepKDeserialize Int8 where
     type Require Int8 as ds = ()
     type Learn Int8 as ds = ds
     depKSerialize (AnyK _ a) = [fromIntegral a]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         (bs :: [Word8]) <- get
         case bs of
             [] -> throwError $ DeserializeError "No more bytes to read!"
@@ -347,7 +345,7 @@ instance DepKDeserialize Natural where  -- 8-bit
     type Require Natural as ds = ()
     type Learn Natural as ds = ds
     depKSerialize (AnyK _ a) = [fromIntegral a]
-    depKDeserialize _ = withoutKnowledge do
+    depKDeserialize _ = AnyK Proxy <$> withoutKnowledge do
         b <- deserialize @Word8
         return $ fromIntegral b
 
@@ -368,7 +366,7 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         => Proxy as -> IxGet ds (Learn (Sing :: k -> Type) as ds) (AnyK (Sing :: k -> Type))
     depKDeserialize _ =
         getKnowledge >>>= \kl ->
-        withoutKnowledge deserialize >>>= \(AnyK _ (FromSing (s :: Sing (s :: k)))) ->
+        withoutKnowledge deserialize >>>= \(FromSing (s :: Sing (s :: k))) ->
         -- TODO: Would be awesome if we could show "expected" and "actual" in case of contradiction!
         ilearnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) >>>= \_ ->
         ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
@@ -390,7 +388,7 @@ instance Serialize a => DepKDeserialize (Vector a) where
         => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
     depKDeserialize _ =
         igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
-        withoutKnowledge deserialize >>>= \(AnyK _ (a :: Vector a n)) ->
+        withoutKnowledge deserialize >>>= \(a :: Vector a n) ->
         ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) a
 
 -- TODO: Can't currently implement in this easy way.
@@ -409,11 +407,11 @@ instance Serialize a => DepKDeserialize (Vector a n) where
             Nil -> []
             x :> xs ->
                 depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @n
-    depKDeserialize _ =
+    depKDeserialize _ = fmap (AnyK Proxy) $ withoutKnowledge $ 
         withKnownNat @n sing $
             Vector.ifZeroElse @n
-                (ireturn (AnyK (Proxy @'LoT0) Nil))
-                \(Proxy :: Proxy n1) -> withoutKnowledge do
+                (return Nil)
+                \(Proxy :: Proxy n1) -> do
                     a <- deserialize @a
                     as <- deserialize @(Vector a n1)
                     return (a :> as)

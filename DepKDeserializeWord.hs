@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -134,9 +135,9 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
     depKDeserialize _ =
         igetAtom @d @k @(AtomAt 'VZ as) @ds >>>= \(SomeSing (n :: Sing n)) ->
         case toNat n of
-            (SNat :: Sing (ToNat n)) ->
-                withoutKnowledge (deserialize @(Vector a (ToNat n))) >>>= \(AnyK _ a) ->
-                ireturn $ AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a)
+            (SNat :: Sing (ToNat n)) -> AnyK (Proxy @(n :&&: 'LoT0)) <$> withoutKnowledge do
+                a <- deserialize @(Vector a (ToNat n))
+                return $ GeneralizedVector a
 
 
 -- Using this, GeneralizedVector isn't really necessary.
