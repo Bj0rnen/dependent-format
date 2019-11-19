@@ -110,12 +110,9 @@ instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> 
 
 -- TODO: This is pretty weird... I'm surprised that this workaround works. If indeed it really always does...
 type family
-    Tail (xs :: LoT (k -> ks)) :: LoT ks where
-    Tail (x :&&: xs) = xs
-type family
     InterpretVars (xs :: LoT ks) :: LoT ks where
     InterpretVars (xs :: LoT Type) = 'LoT0
-    InterpretVars (xs :: LoT (k -> ks)) = InterpretVar 'VZ xs :&&: InterpretVars (Tail xs)
+    InterpretVars (xs :: LoT (k -> ks)) = InterpretVar 'VZ xs :&&: InterpretVars (TailLoT xs)
 interpretVarsIsJustVars :: forall xs. Dict (InterpretVars xs ~ xs)
 interpretVarsIsJustVars = unsafeCoerce (Dict @(xs ~ xs))
 class GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
@@ -243,7 +240,7 @@ depKDeserialize1Up
     => Proxy as -> IxGet ds (Learn (f x) as ds) (AnyK (f x))
 depKDeserialize1Up (Proxy :: Proxy as) =
     depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) >>>= \(AnyK (Proxy :: Proxy (xxs)) a) ->
-    ireturn $ AnyK (Proxy :: Proxy (Tail xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (Tail xxs))  -- TODO: That's a kind of scary unsafeCoerce.
+    ireturn $ AnyK (Proxy :: Proxy (TailLoT xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (TailLoT xxs))  -- TODO: That's a kind of scary unsafeCoerce.
 
 
 withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds a

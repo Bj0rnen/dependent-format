@@ -38,6 +38,9 @@ import Data.Singletons.Fin
 import Data.Singletons.FinInt
 
 import Control.Monad.Indexed
+import Control.Monad.Indexed.State
+
+import Unsafe.Coerce
 
 
 type family Promote (a :: Type) = (b :: Type) | b -> a
@@ -118,26 +121,26 @@ deriving instance Show (Vector a (ToNat n)) => Show (GeneralizedVector a n)
 instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k -> Type) where
     type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (GeneralizedVector a :: k -> Type) as ds = ds
-    -- TODO: Copy-pasted from (Vector a) instance. Prefer delegation.
     depKSerialize (AnyK (Proxy :: Proxy xs) (GeneralizedVector a)) =
-        withSingI (resolveLength a) $
-            depKSerialize @_ @(Vector a (ToNat (InterpretVar 'VZ xs))) (AnyK Proxy a)
-        where
-            resolveLength :: forall a n. Vector a n -> Sing n
-            resolveLength Nil = SNat @0
-            resolveLength (_ :> xs) =
-                case resolveLength xs of
-                    (SNat :: Sing m) -> SNat @(1 + m) \\ plusNat @1 @m
+        depKSerialize @(Nat -> Type) @(Vector a) (AnyK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds
         => Proxy as -> IxGet ds (Learn (GeneralizedVector a) as ds) (AnyK (GeneralizedVector a))
-    depKDeserialize _ =
+    depKDeserialize (Proxy :: Proxy as) =
         igetAtom @d @k @(AtomAt 'VZ as) @ds >>>= \(SomeSing (n :: Sing n)) ->
         case toNat n of
-            (SNat :: Sing (ToNat n)) -> AnyK (Proxy @(n :&&: 'LoT0)) <$> withoutKnowledge do
-                a <- deserialize @(Vector a (ToNat n))
-                return $ GeneralizedVector a
+            (SNat :: Sing (ToNat n)) ->
+                IxGet $ IxStateT $ \(kl, bs) ->
+                    case runIxStateT
+                            (runIxGet $ depKDeserialize @(Nat -> Type) @(Vector a) (Proxy @('AtomCons ('Kon (ToNat n)) 'AtomNil)))
+                            (KnowledgeNil, bs) of
+                        Left e -> Left e
+                        Right (AnyK (Proxy :: Proxy xs) a, (_, bs')) ->
+                            -- TODO: We want to show (properly) that (HeadLoT xs ~ ToNat n)
+                            case unsafeCoerce (Dict @(HeadLoT xs ~ HeadLoT xs)) :: Dict (HeadLoT xs ~ ToNat n) of
+                                Dict ->
+                                    Right (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), (kl, bs'))
 
 
 -- Using this, GeneralizedVector isn't really necessary.
