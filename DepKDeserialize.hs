@@ -249,6 +249,16 @@ withoutKnowledge (StateT f) =
         (a, bs') <- f bs
         return (a, (kl, bs'))
 
+expectBytes :: [Word8] -> StateT [Word8] (Either DeserializeError) ()
+expectBytes [] = return ()
+expectBytes (b : bs) = do
+    b' <- deserialize
+    if b /= b' then
+        throwError $ DeserializeError $
+            "Wrong byte value was read. expected: " ++ show b ++ ", actual: " ++ show b'
+    else do
+        expectBytes bs
+
 instance DepKDeserialize Word8 where
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds

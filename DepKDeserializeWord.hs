@@ -94,6 +94,9 @@ instance SingKind (Promoted Word64) where
 class HasToNat k where
     type ToNat (a :: k) :: Nat
     toNat :: Sing (a :: k) -> Sing (ToNat a :: Nat)
+instance HasToNat Nat where
+    type ToNat n = n
+    toNat s = s
 instance HasToNat (Promoted Word8) where
     type ToNat ('Promoted n) = FinToNat n
     toNat (SPromoted s) = sFinToSNat s
@@ -142,6 +145,12 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
                                 Dict ->
                                     Right (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), (kl, bs'))
 
+instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a (n :: k)) where
+    type Require (GeneralizedVector a (n :: k)) as ds = Require1Up (GeneralizedVector a (n :: k)) as ds
+    type Learn (GeneralizedVector a (n :: k)) as ds = Learn1Up (GeneralizedVector a (n :: k)) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
+
 
 -- Using this, GeneralizedVector isn't really necessary.
 data WordToNat :: a ~> Nat
@@ -159,6 +168,7 @@ deriving instance Show a => Show (GVector a n)
 -- TODO: Should all (non-test) uses of TemplateHaskell, be avoided or moved to a *.TH module?
 $(deriveGenericK ''GVector)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
+deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a (n :: k))
 
 
 class HasIntToMaybeNat k where
