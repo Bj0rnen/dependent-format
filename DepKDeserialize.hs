@@ -427,22 +427,31 @@ class DepKDeserializeK (f :: LoT ks -> Type) where
 
 -- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
 type family
-    AtomKonKind (t :: Atom ks k) :: Type where
-    AtomKonKind ('Kon (f :: k)) = k
-    AtomKonKind (t :@: _) = AtomKonKind t
+    AtomKonKind' (t :: Atom ks k) :: Type where
+    AtomKonKind' ('Kon (f :: k)) = k
+    AtomKonKind' (t :@: _) = AtomKonKind' t
+type family
+    AtomKonKind (t :: Atom ks Type) :: Type where
+    AtomKonKind t = AtomKonKind' t
 
 type family
-    AtomKonConstructor (t :: Atom ks k) :: AtomKonKind t where
-    AtomKonConstructor ('Kon (f :: k)) = f
-    AtomKonConstructor (t :@: _) = AtomKonConstructor t
+    AtomKonConstructor' (t :: Atom ks k) :: AtomKonKind' t where
+    AtomKonConstructor' ('Kon (f :: k)) = f
+    AtomKonConstructor' (t :@: _) = AtomKonConstructor' t
+type family
+    AtomKonConstructor (t :: Atom ks Type) :: AtomKonKind t where
+    AtomKonConstructor t = AtomKonConstructor' t
 
 type family
-    AtomKonAtomListStep (t :: Atom ks k) (as :: AtomList ks acc) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomListStep (t :: Atom ks k) (as :: AtomList ks acc) :: AtomList ks (AtomKonKind' t) where
     AtomKonAtomListStep ('Kon (f :: k)) as = as
     AtomKonAtomListStep (t :@: a) as = AtomKonAtomListStep t ('AtomCons a as)
 type family
-    AtomKonAtomList (t :: Atom ks k) :: AtomList ks (AtomKonKind t) where
-    AtomKonAtomList t = AtomKonAtomListStep t 'AtomNil
+    AtomKonAtomList' (t :: Atom ks k) :: AtomList ks (AtomKonKind' t) where
+    AtomKonAtomList' t = AtomKonAtomListStep t 'AtomNil
+type family
+    AtomKonAtomList (t :: Atom ks Type) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomList t = AtomKonAtomList' t
 
 -- TODO: Here be dragons. If this is actually part of a solution, I should better form an understanding around this part.
 type family
