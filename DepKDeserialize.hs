@@ -397,6 +397,14 @@ instance Serialize a => DepKDeserialize (Vector a) where
         .  Require (Vector a) as ds
         => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
     depKDeserialize _ =
+--        igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
+--        withKnownNat @n sing $
+--            Vector.ifZeroElse @n
+--                (return (AnyK (Proxy @(n :&&: 'LoT0)) Nil))
+--                \(Proxy :: Proxy n1) -> undefined
+--                    --depKDeserialize @Type @a (Proxy @'AtomNil) >>>= \(AnyK Proxy a) -> undefined
+--                    --depKDeserialize @(Nat -> Type) @(Vector a) proxy >>>= \(AnyK Proxy as) ->
+--                    --return (AnyK (Proxy @(n :&&: 'LoT0)) (a :> as))
         igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
         fmap (AnyK (Proxy @(n :&&: 'LoT0))) $ withoutKnowledge $
             withKnownNat @n sing $
@@ -427,37 +435,38 @@ class DepKDeserializeK (f :: LoT ks -> Type) where
 
 -- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
 type family
-    AtomKonKind' (t :: Atom ks k) :: Type where
-    AtomKonKind' ('Kon (f :: k)) = k
-    AtomKonKind' (t :@: _) = AtomKonKind' t
+    AtomKonKind (t :: Atom ks k) :: Type where
+    AtomKonKind ('Kon (f :: k)) = k
+    AtomKonKind (t :@: _) = AtomKonKind t
 type family
-    AtomKonKind (t :: Atom ks Type) :: Type where
-    AtomKonKind t = AtomKonKind' t
+    AtomKonKindT (t :: Atom ks Type) :: Type where
+    AtomKonKindT t = AtomKonKind t
 
 type family
-    AtomKonConstructor' (t :: Atom ks k) :: AtomKonKind' t where
-    AtomKonConstructor' ('Kon (f :: k)) = f
-    AtomKonConstructor' (t :@: _) = AtomKonConstructor' t
+    AtomKonConstructor (t :: Atom ks k) :: AtomKonKind t where
+    AtomKonConstructor ('Kon (f :: k)) = f
+    AtomKonConstructor (t :@: _) = AtomKonConstructor t
 type family
-    AtomKonConstructor (t :: Atom ks Type) :: AtomKonKind t where
-    AtomKonConstructor t = AtomKonConstructor' t
+    AtomKonConstructorT (t :: Atom ks Type) :: AtomKonKind t where
+    AtomKonConstructorT t = AtomKonConstructor t
 
 type family
-    AtomKonAtomListStep (t :: Atom ks k) (as :: AtomList ks acc) :: AtomList ks (AtomKonKind' t) where
+    AtomKonAtomListStep (t :: Atom ks k) (as :: AtomList ks acc) :: AtomList ks (AtomKonKind t) where
     AtomKonAtomListStep ('Kon (f :: k)) as = as
     AtomKonAtomListStep (t :@: a) as = AtomKonAtomListStep t ('AtomCons a as)
 type family
-    AtomKonAtomList' (t :: Atom ks k) :: AtomList ks (AtomKonKind' t) where
-    AtomKonAtomList' t = AtomKonAtomListStep t 'AtomNil
+    AtomKonAtomList (t :: Atom ks k) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomList t = AtomKonAtomListStep t 'AtomNil
 type family
-    AtomKonAtomList (t :: Atom ks Type) :: AtomList ks (AtomKonKind t) where
-    AtomKonAtomList t = AtomKonAtomList' t
+    AtomKonAtomListT (t :: Atom ks Type) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomListT t = AtomKonAtomList t
 
 -- TODO: Here be dragons. If this is actually part of a solution, I should better form an understanding around this part.
 type family
     DereferenceAtom (base :: AtomList d ks) (a :: Atom ks k) :: Atom d k where
     DereferenceAtom _ ('Kon a) = 'Kon a
     DereferenceAtom as ('Var v) = AtomAt v as
+    DereferenceAtom as (f :@: t) = DereferenceAtom as f :@: DereferenceAtom as t
 type family
     DereferenceAtomList (base :: AtomList d ks) (as :: AtomList ks ks') :: AtomList d ks' where
     DereferenceAtomList _ 'AtomNil = 'AtomNil
