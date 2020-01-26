@@ -295,27 +295,16 @@ testDict3 = Dict
 --require :: Require f as ds => Proxy as -> Proxy ds -> Proxy f
 --require = undefined
 
-instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
-    type SerConstraints (Vector :: Type -> Nat -> Type) xs = Serialize (HeadLoT xs)
-    type Require
-        (Vector :: Type -> Nat -> Type)
-        (as :: AtomList d (Type -> Nat -> Type))
-        (ds :: DepStateList d) =
-            ( ()
-            , d ~ (Nat -> Nat -> Type)
-            --, ds ~ ('DS 'Known ('DS 'Known 'DZ))
-            --, as ~ ('AtomCons (AtomAt 'VZ as) ('AtomCons (AtomAt ('VS 'VZ) as) 'AtomNil))
-            --, Require (AtomKonConstructor (AtomAt 'VZ as)) 'AtomNil 'DZ
-            --, Require (AtomKonConstructor (AtomAt 'VZ as)) (DereferenceAtomList as (AtomKonAtomList (AtomAt 'VZ as))) 'DZ
-
-            , AtomKonKind (AtomAt 'VZ as) ~ (Nat -> Type)
-            --, AtomAt 'VZ as ~ ('Kon (Vector Word8) :@: 'Var 'VZ)  -- TODO: Obviously a silly constraint, but just pinning it down for the moment.
-            --, AtomKonConstructor (AtomAt 'VZ as) ~ Vector Word8
-            , DepKDeserialize (AtomKonConstructor (AtomAt 'VZ as))
+instance DepKDeserialize Vector where
+    type SerConstraints Vector xs = Serialize (HeadLoT xs)
+    type Require Vector as ds =
+            ( DepKDeserialize (AtomKonConstructor (AtomAt 'VZ as))
             , Require (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomList (AtomAt 'VZ as)) ds
             , RequireAtom (AtomAt ('VS 'VZ) as) ds
+            -- This constraint shouldn't really have to be there. It's not like Learn would ever reduce knowledge.
+            , Learn (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomListStep (AtomAt 'VZ as) 'AtomNil) ds ~ ds
             )
-    type Learn (Vector :: Type -> Nat -> Type) as ds = ds
+    type Learn Vector as ds = ds
     depKSerialize (TheseK (Proxy :: Proxy (xs :: LoT (Type -> Nat -> Type))) v) =
         case unsafeCoerce (Refl @xs) :: xs :~: (a :&&: n :&&: 'LoT0) of
             Refl ->
@@ -325,29 +314,20 @@ instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
                         depKSerialize (TheseK (Proxy @'LoT0) x) ++ depKSerialize (TheseK (Proxy @'LoT0) xs) \\ samePredecessor @(InterpretVar ('VS 'VZ) xs)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Type -> Nat -> Type))
-        .  Require (Vector :: Type -> Nat -> Type) (as :: AtomList d (Type -> Nat -> Type)) ds
-        => Proxy as -> IxGet ds (Learn (Vector :: Type -> Nat -> Type) (as :: AtomList d (Type -> Nat -> Type)) ds) (AnyK (Vector :: Type -> Nat -> Type))
+        .  Require Vector (as :: AtomList d (Type -> Nat -> Type)) ds
+        => Proxy as -> IxGet ds (Learn Vector as ds) (AnyK Vector)
     depKDeserialize (Proxy :: Proxy as) =
-        case unsafeCoerce (Refl @as) ::
-            as :~: 'AtomCons ('Kon (Vector Word8) :@: 'Var 'VZ) ('AtomCons ('Var ('VS 'VZ)) 'AtomNil) of
-            Refl ->
-                --case Dict @
-                --    ( ()
-                --    , AtomAt 'VZ as ~ ('Kon (Vector Word8) :@: 'Var 'VZ)
-                --    , AtomKonConstructor (AtomAt 'VZ as) ~ Vector Word8
-                --    , AtomKonAtomList ('Kon (Vector Word8) :@: 'Var 'VZ) ~ 'AtomCons ('Var 'VZ) 'AtomNil) of  -- Just checking. This follows form the above axiom.
-                --    Dict ->
-                        igetAtom @d @Nat @(AtomAt ('VS 'VZ) as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
-                        withKnownNat @n sing $
-                            Vector.ifZeroElse @n
-                                (return (AnyK (Proxy @(_ :&&: 0 :&&: 'LoT0)) Nil))
-                                \(Proxy :: Proxy n1) ->
-                                    depKDeserialize
-                                        @(AtomKonKind (AtomAt 'VZ as))
-                                        @(AtomKonConstructor (AtomAt 'VZ as))
-                                        (Proxy @(AtomKonAtomList (AtomAt 'VZ as))) >>>= \(AnyK Proxy a) ->
-                                    depKDeserialize
-                                        @(Type -> Nat -> Type)
-                                        @Vector
-                                        (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon n1) 'AtomNil))) >>>= \(AnyK Proxy as) ->
-                                    return (AnyK Proxy (unsafeCoerce (a :> unsafeCoerce as)))
+        igetAtom @d @Nat @(AtomAt ('VS 'VZ) as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
+        withKnownNat @n sing $
+            Vector.ifZeroElse @n
+                (return (AnyK (Proxy @(_ :&&: 0 :&&: 'LoT0)) Nil))
+                \(Proxy :: Proxy n1) ->
+                    depKDeserialize
+                        @(AtomKonKind (AtomAt 'VZ as))
+                        @(AtomKonConstructor (AtomAt 'VZ as))
+                        (Proxy @(AtomKonAtomList (AtomAt 'VZ as))) >>>= \(AnyK Proxy a) ->
+                    depKDeserialize
+                        @(Type -> Nat -> Type)
+                        @Vector
+                        (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon n1) 'AtomNil))) >>>= \(AnyK Proxy as) ->
+                    return (AnyK Proxy (unsafeCoerce (a :> unsafeCoerce as)))
