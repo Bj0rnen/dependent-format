@@ -81,24 +81,24 @@ $(deriveGenericK ''BitMap)
 --        Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))
 --    toK (Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))) =
 --        BitMap {..}
---deriving instance DepKDeserialize BitMap
-deriving instance SingI width => DepKDeserialize (BitMap width)
-deriving instance (SingI width, SingI height) => DepKDeserialize (BitMap width height)
+deriving instance DepKDeserialize BitMap
 
-testSerializeEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil })
---testDeserializeEmpty = --runStateT (deserialize @BitMap) [66,77,80,0,0]
---    case runIxStateT
---            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
---            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,0,0]) of
---        Left e -> show e
---        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
-testSerializeNonEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil })
---testDeserializeNonEmpty = --runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
---    case runIxStateT
---            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
---            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,2,2,0,1,2,3]) of
---        Left e -> show e
---        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
+testSerializeEmpty = --serialize (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil })
+    depKSerialize (TheseK (Proxy @(_ :&&: _ :&&: 'LoT0)) (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil }))
+testDeserializeEmpty = --runStateT (deserialize @BitMap) [66,77,80,0,0]
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
+            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,0,0]) of
+        Left e -> show e
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
+testSerializeNonEmpty = --serialize (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil })
+    depKSerialize (TheseK (Proxy @(_ :&&: _ :&&: 'LoT0)) (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil }))
+testDeserializeNonEmpty = --runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
+            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,2,2,0,1,2,3]) of
+        Left e -> show e
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 --testDict :: Dict (
 --    RequireK
@@ -295,7 +295,6 @@ testDict3 = Dict
 --require :: Require f as ds => Proxy as -> Proxy ds -> Proxy f
 --require = undefined
 
-{-
 instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
     type SerConstraints (Vector :: Type -> Nat -> Type) xs = Serialize (HeadLoT xs)
     type Require
@@ -352,4 +351,3 @@ instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
                                         @Vector
                                         (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon n1) 'AtomNil))) >>>= \(AnyK Proxy as) ->
                                     return (AnyK Proxy (unsafeCoerce (a :> unsafeCoerce as)))
--}
