@@ -122,10 +122,11 @@ newtype GeneralizedVector (a :: Type) (n :: k) where
 deriving instance Show (Vector a (ToNat n)) => Show (GeneralizedVector a n)
 
 instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k -> Type) where
+    type SerConstraints (GeneralizedVector a :: k -> Type) _ = ()
     type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (GeneralizedVector a :: k -> Type) as ds = ds
-    depKSerialize (AnyK (Proxy :: Proxy xs) (GeneralizedVector a)) =
-        depKSerialize @(Nat -> Type) @(Vector a) (AnyK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
+    depKSerialize (TheseK (Proxy :: Proxy xs) (GeneralizedVector a)) =
+        depKSerialize @(Nat -> Type) @(Vector a) (TheseK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds
@@ -146,6 +147,7 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
                                     Right (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), (kl, bs'))
 
 instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a (n :: k)) where
+    type SerConstraints (GeneralizedVector a (n :: k)) xs = SerConstraints1Up (GeneralizedVector a (n :: k)) xs
     type Require (GeneralizedVector a (n :: k)) as ds = Require1Up (GeneralizedVector a (n :: k)) as ds
     type Learn (GeneralizedVector a (n :: k)) as ds = Learn1Up (GeneralizedVector a (n :: k)) as ds
     depKSerialize = depKSerialize1Up

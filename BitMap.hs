@@ -53,6 +53,7 @@ import DepState
 import Data.Kind
 import Control.Monad.Indexed
 import Unsafe.Coerce
+import GHC.TypeLits
 
 data BitMap = forall (width :: Nat) (height :: Nat). BitMap
     { bmp    :: ASCII "BMP"
@@ -208,6 +209,20 @@ testDict2 ::
         ])
 testDict2 = Dict
 
+testDict3 ::
+    Dict (
+        AllSame
+        '[  SerConstraintsK
+                (Exists Nat
+                    (Exists Nat
+                        (   Field ('Kon (ASCII "BMP")) :*: Field ('Kon Sing :@: 'Var 'VZ) :*: Field ('Kon Sing :@: 'Var ('VS 'VZ)) :*: Field ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ))
+                        )
+                    )
+                )
+                'LoT0
+        ])
+testDict3 = Dict
+
 
 --instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
 --    type Require
@@ -266,6 +281,7 @@ testDict2 = Dict
 --require = undefined
 
 instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
+    type SerConstraints (Vector :: Type -> Nat -> Type) xs = Serialize (HeadLoT xs)
     type Require
         (Vector :: Type -> Nat -> Type)
         (as :: AtomList d (Type -> Nat -> Type))
@@ -285,13 +301,13 @@ instance DepKDeserialize (Vector :: Type -> Nat -> Type) where
             , RequireAtom (AtomAt ('VS 'VZ) as) ds
             )
     type Learn (Vector :: Type -> Nat -> Type) as ds = ds
-    depKSerialize (AnyK (Proxy :: Proxy (xs :: LoT (Type -> Nat -> Type))) v) = undefined
-    --    case unsafeCoerce (Refl @xs) :: xs :~: (a :&&: n :&&: 'LoT0) of
-    --        Refl ->
-    --            case v of
-    --                Nil -> []
-    --                x :> xs ->
-    --                    depKSerialize (AnyK (Proxy @'LoT0) x) ++ depKSerialize (AnyK (Proxy @'LoT0) xs) \\ samePredecessor @(InterpretVar ('VS 'VZ) xs)
+    depKSerialize (TheseK (Proxy :: Proxy (xs :: LoT (Type -> Nat -> Type))) v) =
+        case unsafeCoerce (Refl @xs) :: xs :~: (a :&&: n :&&: 'LoT0) of
+            Refl ->
+                case v of
+                    Nil -> []
+                    x :> xs ->
+                        depKSerialize (TheseK (Proxy @'LoT0) x) ++ depKSerialize (TheseK (Proxy @'LoT0) xs) \\ samePredecessor @(InterpretVar ('VS 'VZ) xs)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (Type -> Nat -> Type))
         .  Require (Vector :: Type -> Nat -> Type) (as :: AtomList d (Type -> Nat -> Type)) ds

@@ -47,6 +47,7 @@ addNonZero = Sub axiom
 
 data Vector :: Type -> Nat -> Type where
     Nil :: Vector a 0
+    -- TODO: Removed the constraint below beacuse it gave me headaches, but it's probably better if I bring it back.
     (:>) :: {- IsNonZero (1 + n) ~ 'True => -} a -> Vector a n -> Vector a (1 + n)  -- NOTE: The IsNonZero thing makes ifZeroElse's 0-case fail this pattern match. Hope there's some nicer way to achieve this.
 deriving instance Show a => Show (Vector a n)
 infixr :>

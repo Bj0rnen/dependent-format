@@ -28,9 +28,10 @@ ascii str =
         map (fromIntegral @_ @Word8 . ord) str
 
 instance KnownSymbol s => DepKDeserialize (ASCII s) where
+    type SerConstraints (ASCII s) _ = ()
     type Require (ASCII s) as ds = ()
     type Learn (ASCII s) _ ds = ds
-    depKSerialize (AnyK Proxy v) =
+    depKSerialize (TheseK Proxy v) =
         let str = symbolVal (Proxy @s)
         in  ascii str
     depKDeserialize _ = do
