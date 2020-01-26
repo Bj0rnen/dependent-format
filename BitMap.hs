@@ -15,6 +15,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module BitMap where
 
@@ -54,36 +55,50 @@ import Data.Kind
 import Control.Monad.Indexed
 import Unsafe.Coerce
 import GHC.TypeLits
+import Control.Monad.Indexed.State
+import Knowledge
 
-data BitMap = forall (width :: Nat) (height :: Nat). BitMap
+data BitMap (width :: Nat) (height :: Nat) = BitMap
     { bmp    :: ASCII "BMP"
     , width  :: Sing width
     , height :: Sing height
     , pixels :: Vector (Vector Word8 width) height
-    }
-deriving instance Show BitMap
+    } deriving (Show)
+--deriving instance Show (BitMap width height)
 
--- $(deriveGenericK ''BitMap)
-instance GenericK BitMap 'LoT0 where
-    type RepK BitMap =
-        Exists Nat (
-            Exists Nat (
-                    Field ('Kon (ASCII "BMP"))
-                :*: Field ('Kon Sing :@: 'Var 'VZ)
-                :*: Field ('Kon Sing :@: 'Var ('VS 'VZ))
-                :*: Field ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ))
-            )
-        )
-    fromK (BitMap {..}) =
-        Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))
-    toK (Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))) =
-        BitMap {..}
+$(deriveGenericK ''BitMap)
+--instance GenericK BitMap 'LoT0 where
+--    type RepK BitMap =
+--        Exists Nat (
+--            Exists Nat (
+--                    Field ('Kon (ASCII "BMP"))
+--                :*: Field ('Kon Sing :@: 'Var 'VZ)
+--                :*: Field ('Kon Sing :@: 'Var ('VS 'VZ))
+--                :*: Field ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ))
+--            )
+--        )
+--    fromK (BitMap {..}) =
+--        Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))
+--    toK (Exists (Exists (Field bmp :*: Field width :*: Field height :*: Field pixels))) =
+--        BitMap {..}
 deriving instance DepKDeserialize BitMap
+deriving instance SingI width => DepKDeserialize (BitMap width)
+deriving instance (SingI width, SingI height) => DepKDeserialize (BitMap width height)
 
 testSerializeEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil })
-testDeserializeEmpty = runStateT (deserialize @BitMap) [66,77,80,0,0]
+testDeserializeEmpty = --runStateT (deserialize @BitMap) [66,77,80,0,0]
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
+            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,0,0]) of
+        Left e -> show e
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 testSerializeNonEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil })
-testDeserializeNonEmpty = runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
+testDeserializeNonEmpty = --runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
+    case runIxStateT
+            (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
+            ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,2,2,0,1,2,3]) of
+        Left e -> show e
+        Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
 
 --testDict :: Dict (
 --    RequireK
