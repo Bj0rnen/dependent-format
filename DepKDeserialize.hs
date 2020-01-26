@@ -405,39 +405,53 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) w
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
-instance Serialize a => DepKDeserialize (Vector a) where
-    type SerConstraints (Vector a) _ = ()
-    type Require (Vector a) as ds = RequireAtom (AtomAt 'VZ as) ds
-    type Learn (Vector a) _ ds = ds
-    depKSerialize (TheseK (Proxy :: Proxy xs) v) =
-        case v of
-            Nil -> []
-            x :> xs ->
-                depKSerialize (TheseK (Proxy @'LoT0) x) ++ depKSerialize (TheseK (Proxy @'LoT0) xs) \\ samePredecessor @(HeadLoT xs)
+instance DepKDeserialize Vector where
+    type SerConstraints Vector xs = Serialize (HeadLoT xs)
+    type Require Vector as ds =
+            ( DepKDeserialize (AtomKonConstructor (AtomAt 'VZ as))
+            , Require (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomList (AtomAt 'VZ as)) ds
+            , RequireAtom (AtomAt ('VS 'VZ) as) ds
+            )
+    type Learn Vector as ds = ds
+    depKSerialize (TheseK (Proxy :: Proxy (xs :: LoT (Type -> Nat -> Type))) v) =
+        case unsafeCoerce (Refl @xs) :: xs :~: (a :&&: n :&&: 'LoT0) of
+            Refl ->
+                case v of
+                    Nil -> []
+                    x :> xs ->
+                        depKSerialize (TheseK (Proxy @'LoT0) x) ++ depKSerialize (TheseK (Proxy @'LoT0) xs) \\ samePredecessor @(InterpretVar ('VS 'VZ) xs)
     depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d (Nat -> Type))
-        .  Require (Vector a) as ds
-        => Proxy as -> IxGet ds (Learn (Vector a) as ds) (AnyK (Vector a))
-    depKDeserialize _ =
---        igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
---        withKnownNat @n sing $
---            Vector.ifZeroElse @n
---                (return (AnyK (Proxy @(n :&&: 'LoT0)) Nil))
---                \(Proxy :: Proxy n1) -> undefined
---                    --depKDeserialize @Type @a (Proxy @'AtomNil) >>>= \(AnyK Proxy a) -> undefined
---                    --depKDeserialize @(Nat -> Type) @(Vector a) proxy >>>= \(AnyK Proxy as) ->
---                    --return (AnyK (Proxy @(n :&&: 'LoT0)) (a :> as))
-        igetAtom @d @Nat @(AtomAt 'VZ as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
-        fmap (AnyK (Proxy @(n :&&: 'LoT0))) $ withoutKnowledge $
-            withKnownNat @n sing $
-                Vector.ifZeroElse @n
-                    (return Nil)
-                    \(Proxy :: Proxy n1) -> do
-                        a <- deserialize @a
-                        as <- deserialize @(Vector a n1)
-                        return (a :> as)
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (Type -> Nat -> Type))
+        .  Require Vector (as :: AtomList d (Type -> Nat -> Type)) ds
+        => Proxy as -> IxGet ds (Learn Vector as ds) (AnyK Vector)
+    depKDeserialize (Proxy :: Proxy as) =
+        -- This shouldn't have to be asserted. It's not like Learn would ever reduce knowledge.
+        case unsafeCoerce (Refl @ds) ::
+            ds :~: Learn (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomListStep (AtomAt 'VZ as) 'AtomNil) ds of
+            Refl ->
+                igetAtom @d @Nat @(AtomAt ('VS 'VZ) as) @ds >>>= \(SomeSing (SNat :: Sing n)) ->
+                withKnownNat @n sing $
+                    Vector.ifZeroElse @n
+                        (return (AnyK (Proxy @(_ :&&: 0 :&&: 'LoT0)) Nil))
+                        \(Proxy :: Proxy n1) ->
+                            depKDeserialize
+                                @(AtomKonKind (AtomAt 'VZ as))
+                                @(AtomKonConstructor (AtomAt 'VZ as))
+                                (Proxy @(AtomKonAtomList (AtomAt 'VZ as))) >>>= \(AnyK Proxy a) ->
+                            depKDeserialize
+                                @(Type -> Nat -> Type)
+                                @Vector
+                                (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon n1) 'AtomNil))) >>>= \(AnyK Proxy as) ->
+                            return (AnyK Proxy (unsafeCoerce (a :> unsafeCoerce as)))
 
-instance Serialize a => DepKDeserialize (Vector a n) where
+instance DepKDeserialize (Vector a) where
+    type SerConstraints (Vector a) xs = SerConstraints1Up (Vector a) xs
+    type Require (Vector a) as ds = Require1Up (Vector a) as ds
+    type Learn (Vector a) as ds = Learn1Up (Vector a) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
+
+instance DepKDeserialize (Vector a n) where
     type SerConstraints (Vector a n) xs = SerConstraints1Up (Vector a n) xs
     type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
     type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
