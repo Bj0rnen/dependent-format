@@ -125,8 +125,8 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
     type SerConstraints (GeneralizedVector a :: k -> Type) _ = ()
     type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
     type Learn (GeneralizedVector a :: k -> Type) as ds = ds
-    depKSerialize (TheseK (Proxy :: Proxy xs) (GeneralizedVector a)) =
-        depKSerialize @(Nat -> Type) @(Vector a) (TheseK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
+    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (GeneralizedVector a)) = undefined
+--        depKSerialize @(Nat -> Type) @(Vector a) (Proxy @('AtomCons ('Kon (ToNat n)) 'AtomNil)) (TheseK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
         .  Require (GeneralizedVector a) as ds
