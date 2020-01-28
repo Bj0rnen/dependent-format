@@ -51,3 +51,19 @@ data Vector :: Type -> Nat -> Type where
     (:>) :: {- IsNonZero (1 + n) ~ 'True => -} a -> Vector a n -> Vector a (1 + n)  -- NOTE: The IsNonZero thing makes ifZeroElse's 0-case fail this pattern match. Hope there's some nicer way to achieve this.
 deriving instance Show a => Show (Vector a n)
 infixr :>
+
+matchVector
+    :: forall a n r
+    .  KnownNat n
+    => Vector a n
+    -> (n ~ 0 => r)
+    -> (forall n1. (KnownNat n1, n ~ (1 + n1), IsNonZero n ~ 'True) => a -> Vector a n1 -> r)
+    -> r
+matchVector Nil z _ = z
+matchVector (x :> (xs :: Vector a n1)) _ s =
+    withDict (axiom :: Dict (1 `CmpNat` (1 + n) ~ 'LT)) $
+        withDict (axiom :: Dict (IsNonZero n ~ 'True)) $
+            s x xs
+            \\ samePredecessor @n @(n - 1) @n1
+            \\ unsafeSubNat @n @1
+            \\ plusMinusInverse @1 @n
