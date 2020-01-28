@@ -31,9 +31,9 @@ instance KnownSymbol s => DepKDeserialize (ASCII s) where
     type SerConstraints (ASCII s) _ = ()
     type Require (ASCII s) as ds = ()
     type Learn (ASCII s) _ ds = ds
-    depKSerialize _ (TheseK Proxy v) _ =
+    depKSerialize _ (TheseK Proxy v) =
         let str = symbolVal (Proxy @s)
-        in  ascii str
+        in  pure $ ascii str
     depKDeserialize _ = do
         let str = symbolVal (Proxy @s)
             expectedBytes = ascii str

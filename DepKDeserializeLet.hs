@@ -38,7 +38,9 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
     type SerConstraints (Let :: (a ~> b) -> a -> b -> Type) _ = ()
     type Require (Let :: (a ~> b) -> a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, RequireAtom (AtomAt ('VS 'VZ) as) ds, LearnableAtom (AtomAt ('VS ('VS 'VZ)) as) ds)
     type Learn (Let :: (a ~> b) -> a -> b -> Type) as ds = LearnAtom (AtomAt ('VS ('VS 'VZ)) as) ds
-    depKSerialize _ (TheseK (Proxy :: Proxy xs) (Let Refl)) _ = []
+    depKSerialize _ (TheseK (Proxy) (Let Refl :: Let f x y)) =
+        undefined
+        --pure []
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ((a ~> b) -> a -> b -> Type))
         .  Require (Let :: (a ~> b) -> a -> b -> Type) as ds
@@ -79,7 +81,7 @@ instance SingI f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
     type SerConstraints (LetFromJust f :: a -> b -> Type) _ = ()
     type Require (LetFromJust f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (LetFromJust f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
-    depKSerialize _ (TheseK (Proxy :: Proxy xs) (LetFromJust Refl)) _ = []
+    depKSerialize _ (TheseK (Proxy :: Proxy xs) (LetFromJust Refl)) = pure []
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (a -> b -> Type))
         .  Require (LetFromJust f :: a -> b -> Type) as ds
