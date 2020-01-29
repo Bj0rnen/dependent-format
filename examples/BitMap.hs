@@ -36,12 +36,12 @@ testSerializeEmpty = serialize $ BitMap
     , height = sWord8 @0
     , pixels = GeneralizedVector Nil
     }
--- > testSerializeEmpty
+-- | >>> testSerializeEmpty
 -- [66,77,80,0,0]
 
 testDeserializeEmpty :: Either DeserializeError (BitMap, [Word8])
 testDeserializeEmpty = runStateT (deserialize @BitMap) [66,77,80,0,0]
--- > testDeserializeEmpty
+-- | >>> testDeserializeEmpty
 -- Right (BitMap {bmp = ASCII, width = SPromoted (SFin @256 @('Fin 0)), height = SPromoted (SFin @256 @('Fin 0)), pixels = GeneralizedVector Nil},[])
 
 testSerializeNonEmpty :: [Word8]
@@ -51,10 +51,10 @@ testSerializeNonEmpty = serialize $ BitMap
     , height = sWord8 @2
     , pixels = GeneralizedVector (GeneralizedVector (0 :> 1 :> Nil) :> GeneralizedVector (2 :> 3 :> Nil) :> Nil)
     }
--- > testSerializeNonEmpty
+-- | >>> testSerializeNonEmpty
 -- [66,77,80,2,2,0,1,2,3]
 
 testDeserializeNonEmpty :: Either DeserializeError (BitMap, [Word8])
 testDeserializeNonEmpty = runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
--- > testDeserializeNonEmpty
+-- | >>> testDeserializeNonEmpty
 -- Right (BitMap {bmp = ASCII, width = SPromoted (SFin @256 @('Fin 2)), height = SPromoted (SFin @256 @('Fin 2)), pixels = GeneralizedVector (GeneralizedVector (0 :> (1 :> Nil)) :> (GeneralizedVector (2 :> (3 :> Nil)) :> Nil))},[])
