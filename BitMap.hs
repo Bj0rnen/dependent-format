@@ -59,123 +59,17 @@ import GHC.TypeLits
 import Control.Monad.Indexed.State
 import Knowledge
 
-data BitMap (width :: Nat) (height :: Nat) = BitMap
-    { bmp    :: ASCII "BMP"
-    , width  :: Sing width
-    , height :: Sing height
-    , pixels :: Vector (Vector Word8 width) height
-    } deriving (Show)
-$(deriveGenericK ''BitMap)
-deriving instance DepKDeserialize BitMap
-deriving instance DepKDeserialize (BitMap width)
-deriving instance DepKDeserialize (BitMap width height)
-
-data BitMapExt = forall (width :: Nat) (height :: Nat). BitMapExt
+data BitMap = forall (width :: Nat) (height :: Nat). BitMap
     { bmp    :: ASCII "BMP"
     , width  :: Sing width
     , height :: Sing height
     , pixels :: Vector (Vector Word8 width) height
     }
-deriving instance Show BitMapExt
-$(deriveGenericK ''BitMapExt)
-deriving instance DepKDeserialize BitMapExt
+deriving instance Show BitMap
+$(deriveGenericK ''BitMap)
+deriving instance DepKDeserialize BitMap
 
-testSerializeEmpty = serialize (BitMapExt { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil })
-    --depKSerialize (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (TheseK (Proxy @(_ :&&: _ :&&: 'LoT0)) (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil }))
-testDeserializeEmpty = runStateT (deserialize @BitMapExt) [66,77,80,0,0]
-    --case runIxStateT
-    --        (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
-    --        ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,0,0]) of
-    --    Left e -> show e
-    --    Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
-testSerializeNonEmpty = serialize (BitMapExt { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil })
-    --depKSerialize (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))) (TheseK (Proxy @(_ :&&: _ :&&: 'LoT0)) (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil }))
-testDeserializeNonEmpty = runStateT (deserialize @BitMapExt) [66,77,80,2,2,0,1,2,3]
-    --case runIxStateT
-    --        (runIxGet $ depKDeserialize @_ @BitMap (Proxy @(AtomCons Var0 (AtomCons Var1 AtomNil))))
-    --        ((KnowledgeCons KnowledgeU (KnowledgeCons KnowledgeU KnowledgeNil)), [66,77,80,2,2,0,1,2,3]) of
-    --    Left e -> show e
-    --    Right (AnyK (Proxy :: Proxy xs) a, _) -> show a
-
-
-type family
-    AllSame (xs :: [k]) :: Constraint where
-    AllSame '[] = ()
-    AllSame (x ': '[]) = ()
-    AllSame (x ': y ': xs) = (x ~ y, AllSame (y ': xs))
-
-testDict1 ::
-    Dict (
-        AllSame
-        '[  RequireK
-                (Field ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ)))
-                ('AtomCons ('Var ('VZ)) ('AtomCons ('Var ('VS 'VZ)) 'AtomNil))
-                ('DS 'Known ('DS 'Known 'DZ))
-        ,   Require
-                (AtomKonConstructor ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ)))
-                (DereferenceAtomList
-                    ('AtomCons ('Var 'VZ) ('AtomCons ('Var ('VS 'VZ)) 'AtomNil))
-                    (AtomKonAtomList ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ)))
-                )
-                ('DS 'Known ('DS 'Known 'DZ))
-        ,   Require
-                Vector
-                ('AtomCons
-                    (DereferenceAtom
-                        ('AtomCons ('Var 'VZ) ('AtomCons ('Var ('VS 'VZ)) 'AtomNil))
-                        ('Kon (Vector Word8) :@: 'Var 'VZ)
-                    )
-                    ('AtomCons ('Var ('VS 'VZ)) 'AtomNil)
-                )
-                ('DS 'Known ('DS 'Known 'DZ))
-        ,   Require
-                Vector
-                ('AtomCons
-                    ('Kon (Vector Word8) :@: 'Var 'VZ)
-                    ('AtomCons ('Var ('VS 'VZ)) 'AtomNil)
-                )
-                ('DS 'Known ('DS 'Known 'DZ))
-        ])
-testDict1 = Dict
-
-testDict2 ::
-    Dict (
-        AllSame
-        '[  RequireK
-                (Field ('Kon Vector :@: 'Kon Word8 :@: 'Var 'VZ))
-                ('AtomCons ('Var 'VZ) 'AtomNil)
-                ('DS 'Known 'DZ)
-        ,   Require
-                (AtomKonConstructor ('Kon Vector :@: 'Kon Word8 :@: 'Var 'VZ))
-                (DereferenceAtomList
-                    ('AtomCons ('Var 'VZ) 'AtomNil)
-                    (AtomKonAtomList ('Kon Vector :@: 'Kon Word8 :@: 'Var 'VZ))
-                )
-                ('DS 'Known 'DZ)
-        ,   Require
-                Vector
-                (DereferenceAtomList
-                    ('AtomCons ('Var 'VZ) 'AtomNil)
-                    ('AtomCons ('Kon Word8) ('AtomCons ('Var 'VZ) 'AtomNil))
-                )
-                ('DS 'Known 'DZ)
-        ,   Require
-                Vector
-                ('AtomCons ('Kon Word8) ('AtomCons ('Var 'VZ) 'AtomNil))
-                ('DS 'Known 'DZ)
-        ])
-testDict2 = Dict
-
-testDict3 ::
-    Dict (
-        AllSame
-        '[  SerConstraintsK
-                (Exists Nat
-                    (Exists Nat
-                        (   Field ('Kon (ASCII "BMP")) :*: Field ('Kon Sing :@: 'Var 'VZ) :*: Field ('Kon Sing :@: 'Var ('VS 'VZ)) :*: Field ('Kon Vector :@: ('Kon (Vector Word8) :@: 'Var 'VZ) :@: 'Var ('VS 'VZ))
-                        )
-                    )
-                )
-                'LoT0
-        ])
-testDict3 = Dict
+testSerializeEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @0), height = (SNat @0), pixels = Nil })
+testDeserializeEmpty = runStateT (deserialize @BitMap) [66,77,80,0,0]
+testSerializeNonEmpty = serialize (BitMap { bmp = ASCII, width = (SNat @2), height = (SNat @2), pixels = (0 :> 1 :> Nil) :> (2 :> 3 :> Nil) :> Nil })
+testDeserializeNonEmpty = runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]

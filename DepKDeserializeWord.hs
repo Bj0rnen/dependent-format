@@ -20,6 +20,7 @@ module DepKDeserializeWord where
 import DepKDeserialize
 import DepKDeserializeLet
 import Vector
+import Proof
 
 import Data.Singletons.TH
 import GHC.TypeNats
@@ -136,6 +137,7 @@ instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k 
         case toNat n of
             (SNat :: Sing (ToNat n)) ->
                 IxGet $ IxStateT $ \(kl, bs) ->
+                    axm @'DZ @(Learn a 'AtomNil 'DZ) $
                     case runIxStateT
                             (runIxGet $ depKDeserialize @(Nat -> Type) @(Vector a) (Proxy @('AtomCons ('Kon (ToNat n)) 'AtomNil)))
                             (KnowledgeNil, bs) of

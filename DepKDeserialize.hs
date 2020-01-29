@@ -29,6 +29,7 @@ module DepKDeserialize where
 import Vector
 import DepState
 import Knowledge
+import Proof
 
 import Data.Singletons
 import Data.Singletons.Decide
@@ -51,8 +52,6 @@ import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Indexed.State
 import Control.Monad.Indexed
-
-import Data.Constraint.Nat
 
 
 data DepStateList :: Type -> Type where
@@ -434,24 +433,6 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) w
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
---axm :: forall x y r. (x :~: y -> r) -> r
---axm = unsafeCoerce Refl
-
-vectorLength :: Vector a n -> Sing n
-vectorLength Nil = SNat @0
-vectorLength (x :> xs) =
-    case vectorLength xs of
-        (SNat :: Sing n) ->
-            SNat @(1 + n) \\ plusNat @1 @n
-
-axm :: forall a b r. (a ~ b => r) -> r
-axm x =
-    case unsafeCoerce (Refl @a) of
-        (Refl :: a :~: b) -> x
-
-letT :: forall a r. (forall b. a ~ b => Proxy b -> r) -> r
-letT f = f Proxy
-
 instance DepKDeserialize Vector where
     type SerConstraints Vector xs = Serialize (HeadLoT xs)
     type Require Vector as ds =
@@ -667,7 +648,11 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
         => Proxy as -> (Exists k (f :: LoT (k -> ks) -> Type)) xs -> IxState (KnowledgeList ds) (KnowledgeList (LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds)) [Word8]
     depKSerializeK _ (Exists (a :: f (x ':&&: xs))) =
         IxState $ \kl ->
-        runIxState (depKSerializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)) a) (KnowledgeCons KnowledgeU kl)
+            case runIxState
+                        (depKSerializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)) a)
+                        (KnowledgeCons KnowledgeU kl) of
+                (bs, KnowledgeCons _ kl') ->
+                    (bs, kl')
     depKDeserializeK
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
         .  RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds
@@ -680,7 +665,5 @@ instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) ->
                         (runIxGet $ depKDeserializeK @_ @f (Proxy :: Proxy (IntroduceTyVar k ks as)))
                         (KnowledgeCons KnowledgeU kl, bs) of
                     Left e -> Left e
-                    Right (AnyKK a, (kl', bs')) ->
-                        case kl' of
-                            KnowledgeCons _ kl'' ->
-                                Right (AnyKK (Exists (unsafeCoerce a)), (kl'', bs'))
+                    Right (AnyKK a, (KnowledgeCons _ kl', bs')) ->
+                        Right (AnyKK (Exists (unsafeCoerce a)), (kl', bs'))

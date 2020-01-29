@@ -27,6 +27,7 @@ import Generics.Kind.TH
 import Data.Word
 
 import Control.Monad.Indexed
+import Control.Monad.Indexed.State
 
 
 data Let (f :: a ~> b) (x :: a) (y :: b) where
@@ -38,9 +39,17 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
     type SerConstraints (Let :: (a ~> b) -> a -> b -> Type) _ = ()
     type Require (Let :: (a ~> b) -> a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, RequireAtom (AtomAt ('VS 'VZ) as) ds, LearnableAtom (AtomAt ('VS ('VS 'VZ)) as) ds)
     type Learn (Let :: (a ~> b) -> a -> b -> Type) as ds = LearnAtom (AtomAt ('VS ('VS 'VZ)) as) ds
-    depKSerialize _ (TheseK (Proxy) (Let Refl :: Let f x y)) =
-        undefined
-        --pure []
+    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (Let Refl)) =
+        iget >>>= \kl ->
+        case getAtom @_ @(a ~> b) @(AtomAt 'VZ as) kl of
+            SomeSing (f :: Sing f) ->
+                case getAtom @_ @a @(AtomAt ('VS 'VZ) as) kl of
+                    SomeSing (x :: Sing x) ->
+                        case learnAtom @_ @b @(AtomAt ('VS ('VS 'VZ)) as) (SomeSing (f @@ x)) kl of
+                            Nothing -> error "unreachable"
+                            Just kl' ->
+                                iput kl' >>>= \_ ->
+                                ireturn []
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ((a ~> b) -> a -> b -> Type))
         .  Require (Let :: (a ~> b) -> a -> b -> Type) as ds
@@ -81,7 +90,19 @@ instance SingI f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
     type SerConstraints (LetFromJust f :: a -> b -> Type) _ = ()
     type Require (LetFromJust f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (LetFromJust f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
-    depKSerialize _ (TheseK (Proxy :: Proxy xs) (LetFromJust Refl)) = pure []
+    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (LetFromJust Refl)) =
+        iget >>>= \kl ->
+        case getAtom @_ @a @(AtomAt 'VZ as) kl of
+            SomeSing x ->
+                case sing @f @@ x of
+                    SNothing -> error "unreachable"
+                    (SJust s) ->
+                        case learnAtom @_ @b @(AtomAt ('VS 'VZ) as) (SomeSing s) kl of
+                            Nothing -> error "unreachable"
+                            Just kl' ->
+                                iput kl' >>>= \_ ->
+                                ireturn []
+
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (a -> b -> Type))
         .  Require (LetFromJust f :: a -> b -> Type) as ds
