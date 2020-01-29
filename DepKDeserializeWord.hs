@@ -88,6 +88,14 @@ instance SingKind (Promoted Word64) where
         Nothing -> error $ show n ++ " out of bounds for Word64. This should not be possible."
         Just (SomeFin (_ :: Proxy a)) -> SomeSing (SPromoted (SFin :: Sing a))
 
+sWord8 :: forall n. (KnownNat n, CmpNat n 256 ~ 'LT) => Sing ('Promoted ('Fin n) :: Promoted Word8)
+sWord8 = SPromoted (SFin @256 @('Fin n))
+sWord16 :: forall n. (KnownNat n, CmpNat n 65536 ~ 'LT) => Sing ('Promoted ('Fin n) :: Promoted Word16)
+sWord16 = SPromoted (SFin @65536 @('Fin n))
+sWord32 :: forall n. (KnownNat n, CmpNat n 4294967296 ~ 'LT) => Sing ('Promoted ('Fin n) :: Promoted Word32)
+sWord32 = SPromoted (SFin @4294967296 @('Fin n))
+sWord64 :: forall n. (KnownNat n, CmpNat n 18446744073709551616 ~ 'LT) => Sing ('Promoted ('Fin n) :: Promoted Word64)
+sWord64 = SPromoted (SFin @18446744073709551616 @('Fin n))
 
 -- TODO: Too specialized? Not sure what's a good abstraction yet. Could be an x-to-y (i.e. Promoted Word8-to-Nat) conversion.
 --  Or it could be more semantics/purpose focused, like "Can this kind represent a vector's (or other collection's) length?".
@@ -122,37 +130,67 @@ newtype GeneralizedVector (a :: Type) (n :: k) where
     GeneralizedVector :: forall a k (n :: k). Vector a (ToNat n) -> GeneralizedVector a n
 deriving instance Show (Vector a (ToNat n)) => Show (GeneralizedVector a n)
 
-instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a :: k -> Type) where
-    type Require (GeneralizedVector a :: k -> Type) as ds = RequireAtom (AtomAt 'VZ as) ds
-    type Learn (GeneralizedVector a :: k -> Type) as ds = ds
-    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (GeneralizedVector a)) = undefined
---        depKSerialize @(Nat -> Type) @(Vector a) (Proxy @('AtomCons ('Kon (ToNat n)) 'AtomNil)) (TheseK (Proxy @(ToNat (InterpretVar 'VZ xs) :&&: 'LoT0)) a)
+instance HasToNat k => DepKDeserialize (GeneralizedVector :: Type -> k -> Type) where
+    type Require (GeneralizedVector :: Type -> k -> Type) as ds =
+        ( DepKDeserialize (AtomKonConstructor (AtomAt 'VZ as))
+        , Require (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomList (AtomAt 'VZ as)) ds
+        , RequireAtom (AtomAt ('VS 'VZ) as) ds
+        -- Saying that we don't learn from the elements might turn out to be overly strict.
+        -- It wouldn't be hard to instead claim inside the methods that there's no harm in that.
+        , Learn (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomList (AtomAt 'VZ as)) ds ~ ds
+        )
+    type Learn (GeneralizedVector :: Type -> k -> Type) as ds = ds
+    depKSerialize
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (Type -> k -> Type)) (xs :: LoT (Type -> k -> Type))
+        .  Require (GeneralizedVector :: Type -> k -> Type) as ds
+        => Proxy as -> TheseK (GeneralizedVector :: Type -> k -> Type) xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn (GeneralizedVector :: Type -> k -> Type) as ds)) [Word8]
+    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (GeneralizedVector a)) =
+        letT @(HeadLoT xs) \(Proxy :: Proxy a) ->
+        iget >>>= \kl ->
+        case getAtom @d @k @(AtomAt ('VS 'VZ) as) kl of
+            SomeSing (n :: Sing n) ->
+                case toNat n of
+                    (SNat :: Sing (ToNat n)) ->
+                        axm @n @(InterpretVar ('VS 'VZ) xs) $
+                        depKSerialize
+                            @(Type -> Nat -> Type)
+                            @Vector
+                            (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon (ToNat n)) 'AtomNil)))
+                            (TheseK (Proxy @(a :&&: ToNat n :&&: 'LoT0)) a)
     depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
-        .  Require (GeneralizedVector a) as ds
-        => Proxy as -> IxGet ds (Learn (GeneralizedVector a) as ds) (AnyK (GeneralizedVector a))
+        :: forall d (ds :: DepStateList d) (as :: AtomList d (Type -> k -> Type))
+        .  Require (GeneralizedVector :: Type -> k -> Type) as ds
+        => Proxy as -> IxGet ds (Learn (GeneralizedVector :: Type -> k -> Type) as ds) (AnyK (GeneralizedVector :: Type -> k -> Type))
     depKDeserialize (Proxy :: Proxy as) =
-        igetAtom @d @k @(AtomAt 'VZ as) @ds >>>= \(SomeSing (n :: Sing n)) ->
+        igetAtom @d @k @(AtomAt ('VS 'VZ) as) @ds >>>= \(SomeSing (n :: Sing n)) ->
         case toNat n of
             (SNat :: Sing (ToNat n)) ->
                 IxGet $ IxStateT $ \(kl, bs) ->
-                    axm @'DZ @(Learn a 'AtomNil 'DZ) $
                     case runIxStateT
-                            (runIxGet $ depKDeserialize @(Nat -> Type) @(Vector a) (Proxy @('AtomCons ('Kon (ToNat n)) 'AtomNil)))
-                            (KnowledgeNil, bs) of
+                            (runIxGet $
+                                depKDeserialize
+                                    @(Type -> Nat -> Type)
+                                    @Vector
+                                    (Proxy @('AtomCons (AtomAt 'VZ as) ('AtomCons ('Kon (ToNat n)) 'AtomNil))))
+                            (kl, bs) of
                         Left e -> Left e
                         Right (AnyK (Proxy :: Proxy xs) a, (_, bs')) ->
+                            letT @(HeadLoT xs) \(Proxy :: Proxy a) ->
                             -- TODO: We want to show (properly) that (HeadLoT xs ~ ToNat n)
-                            case unsafeCoerce (Dict @(HeadLoT xs ~ HeadLoT xs)) :: Dict (HeadLoT xs ~ ToNat n) of
-                                Dict ->
-                                    Right (AnyK (Proxy @(n :&&: 'LoT0)) (GeneralizedVector a), (kl, bs'))
+                            axm @(HeadLoT (TailLoT xs)) @(ToNat n) $
+                            Right (AnyK (Proxy @(a :&&: n :&&: 'LoT0)) (GeneralizedVector a), (kl, bs'))
 
-instance (Serialize a, HasToNat k) => DepKDeserialize (GeneralizedVector a (n :: k)) where
+instance HasToNat k => DepKDeserialize (GeneralizedVector a :: k -> Type) where
+    type Require (GeneralizedVector a :: k -> Type) as ds = Require1Up (GeneralizedVector a :: k -> Type) as ds
+    type Learn (GeneralizedVector a :: k -> Type) as ds = Learn1Up (GeneralizedVector a :: k -> Type) as ds
+    depKSerialize = depKSerialize1Up
+    depKDeserialize = depKDeserialize1Up
+
+instance HasToNat k => DepKDeserialize (GeneralizedVector a (n :: k)) where
     type Require (GeneralizedVector a (n :: k)) as ds = Require1Up (GeneralizedVector a (n :: k)) as ds
     type Learn (GeneralizedVector a (n :: k)) as ds = Learn1Up (GeneralizedVector a (n :: k)) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
-
 
 -- Using this, GeneralizedVector isn't really necessary.
 data WordToNat :: a ~> Nat
@@ -169,6 +207,7 @@ data GVector (a :: Type) (n :: k) = forall (m :: Nat). GVector
 deriving instance Show a => Show (GVector a n)
 -- TODO: Should all (non-test) uses of TemplateHaskell, be avoided or moved to a *.TH module?
 $(deriveGenericK ''GVector)
+deriving instance HasToNat k => DepKDeserialize (GVector :: Type -> k -> Type)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a :: k -> Type)
 deriving instance (Serialize a, HasToNat k) => DepKDeserialize (GVector a (n :: k))
 
@@ -186,6 +225,9 @@ instance SingKind (Promoted Int8) where
     toSing n = case someFinIntVal $ fromIntegral n of
         Nothing -> error $ show n ++ " out of bounds for Int8. This should not be possible."
         Just (SomeFinInt (_ :: Proxy a)) -> SomeSing (SPromoted (SFinInt :: Sing a))
+--sInt8 :: forall n. (KnownNat n, CmpNat n 256 ~ 'LT) => Sing ('Promoted n :: Promoted Int8)
+sInt8 :: forall i. KnownFinInt i => Sing ('Promoted i :: Promoted Int8)
+sInt8 = SPromoted (SFinInt @128 @128 @i)
 
 data IntToMaybeNat :: a ~> Maybe Nat
 type instance Apply IntToMaybeNat n = IntToMaybeNatF n
