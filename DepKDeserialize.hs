@@ -181,12 +181,6 @@ ilearnAtom ss =
         Nothing -> ithrowError $ DeserializeError "Learned something contradictory"
         Just kl' -> putKnowledge kl'
 
---newtype IxPut (ds :: DepStateList d) (ds' :: DepStateList d) (a :: Type) =
---    IxPut { runIxPut :: IxState (KnowledgeList ds) (KnowledgeList ds') a }
---    deriving newtype (Functor)
---deriving newtype instance Applicative (IxPut ds ds)
---deriving newtype instance Monad (IxPut ds ds)
-
 
 data TheseK (f :: ks) (xs :: LoT ks) where
     TheseK :: Proxy xs -> f :@@: InterpretVars xs -> TheseK f xs
@@ -198,7 +192,6 @@ data AnyK (f :: ks) where
     AnyK :: Proxy xs -> f :@@: InterpretVars xs -> AnyK f
 
 class DepKDeserialize (f :: ks) where
-    type SerConstraints (f :: ks) (xs :: LoT ks) :: Constraint
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
     depKSerialize
@@ -212,7 +205,6 @@ class DepKDeserialize (f :: ks) where
         => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
 
     -- TODO: I was going for a DerivingVia design rather than default signatures, but that had problems.
-    type SerConstraints (f :: ks) (xs :: LoT ks) = SerConstraintsK (RepK f) xs
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
     default depKSerialize
@@ -255,8 +247,6 @@ depKSerialize1Up
     => Proxy as -> TheseK (f x) xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn f ('AtomCons ('Kon x) as) ds)) [Word8]
 depKSerialize1Up (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) a) =
     depKSerialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) (TheseK (Proxy :: Proxy (x :&&: xs)) a)
-type family SerConstraints1Up (f :: ks) (xs :: LoT ks) :: Constraint where
-    SerConstraints1Up (f x) xs = SerConstraints f (x :&&: xs)
 type family Require1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint where
     Require1Up (f x) as ds = Require f ('AtomCons ('Kon x) as) ds
 type family Learn1Up (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d where
@@ -291,7 +281,6 @@ expectBytes (b : bs) = do
         expectBytes bs
 
 instance DepKDeserialize Word8 where
-    type SerConstraints Word8 _ = ()
     type Require Word8 as ds = ()
     type Learn Word8 as ds = ds
     depKSerialize _ (TheseK _ a) = pure [a]
@@ -304,7 +293,6 @@ instance DepKDeserialize Word8 where
                 return b
 
 instance DepKDeserialize Word16 where
-    type SerConstraints Word16 _ = ()
     type Require Word16 as ds = ()
     type Learn Word16 as ds = ds
     depKSerialize _ (TheseK _ a) = pure
@@ -321,7 +309,6 @@ instance DepKDeserialize Word16 where
                     )
 
 instance DepKDeserialize Word32 where
-    type SerConstraints Word32 _ = ()
     type Require Word32 as ds = ()
     type Learn Word32 as ds = ds
     depKSerialize _ (TheseK _ a) = pure
@@ -342,7 +329,6 @@ instance DepKDeserialize Word32 where
                     )
 
 instance DepKDeserialize Word64 where
-    type SerConstraints Word64 _ = ()
     type Require Word64 as ds = ()
     type Learn Word64 as ds = ds
     depKSerialize _ (TheseK _ a) = pure
@@ -371,7 +357,6 @@ instance DepKDeserialize Word64 where
                     )
 
 instance DepKDeserialize Int8 where
-    type SerConstraints Int8 _ = ()
     type Require Int8 as ds = ()
     type Learn Int8 as ds = ds
     depKSerialize _ (TheseK _ a) = pure [fromIntegral a]
@@ -385,7 +370,6 @@ instance DepKDeserialize Int8 where
 
 -- TODO: This instance should go away.
 instance DepKDeserialize Natural where  -- 8-bit
-    type SerConstraints Natural _ = ()
     type Require Natural as ds = ()
     type Learn Natural as ds = ds
     depKSerialize _ (TheseK _ a) = pure [fromIntegral a]
@@ -401,7 +385,6 @@ type family
     AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
-    type SerConstraints (Sing :: k -> Type) _ = ()
     type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
     type Learn (Sing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
     depKSerialize
@@ -427,14 +410,12 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
         ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
 
 instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) where
-    type SerConstraints (Sing (a :: k)) xs = SerConstraints1Up (Sing (a :: k)) xs
     type Require (Sing (a :: k)) as ds = Require1Up (Sing (a :: k)) as ds
     type Learn (Sing (a :: k)) as ds = Learn1Up (Sing (a :: k)) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
 instance DepKDeserialize Vector where
-    type SerConstraints Vector xs = Serialize (HeadLoT xs)
     type Require Vector as ds =
             ( DepKDeserialize (AtomKonConstructor (AtomAt 'VZ as))
             , Require (AtomKonConstructor (AtomAt 'VZ as)) (AtomKonAtomList (AtomAt 'VZ as)) ds
@@ -496,14 +477,12 @@ instance DepKDeserialize Vector where
                         return (AnyK Proxy (unsafeCoerce (a :> unsafeCoerce as)))
 
 instance DepKDeserialize (Vector a) where
-    type SerConstraints (Vector a) xs = SerConstraints1Up (Vector a) xs
     type Require (Vector a) as ds = Require1Up (Vector a) as ds
     type Learn (Vector a) as ds = Learn1Up (Vector a) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
 instance DepKDeserialize (Vector a n) where
-    type SerConstraints (Vector a n) xs = SerConstraints1Up (Vector a n) xs
     type Require (Vector a n) as ds = Require1Up (Vector a n) as ds
     type Learn (Vector a n) as ds = Learn1Up (Vector a n) as ds
     depKSerialize = depKSerialize1Up
@@ -513,7 +492,6 @@ data AnyKK :: (LoT ks -> Type) -> Type where
     AnyKK :: f xs -> AnyKK f
 
 class DepKDeserializeK (f :: LoT ks -> Type) where
-    type SerConstraintsK (f :: LoT ks -> Type) (xs :: LoT ks) :: Constraint
     type RequireK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type LearnK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
     depKSerializeK
@@ -571,8 +549,6 @@ type family
 
 
 instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) where
-    type SerConstraintsK (Field t) xs =
-        SerConstraints (AtomKonConstructor t) (InterpretAll (AtomKonAtomList t) xs)
     type RequireK (Field t) as (ds :: DepStateList d) =
         Require (AtomKonConstructor t) (DereferenceAtomList as (AtomKonAtomList t)) ds
     type LearnK (Field t) as (ds :: DepStateList d) =
@@ -591,7 +567,6 @@ instance (DepKDeserialize (AtomKonConstructor t)) => DepKDeserializeK (Field t) 
         ireturn $ AnyKK (Field (unsafeCoerce a))
 
 instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :: LoT ks -> Type) where
-    type SerConstraintsK (f :*: g) xs = (SerConstraintsK f xs, SerConstraintsK g xs)
     type RequireK (f :*: g) as ds =
         ( RequireK f as ds
         , RequireK g as (LearnK f as ds)
@@ -607,7 +582,6 @@ instance (DepKDeserializeK f, DepKDeserializeK g) => DepKDeserializeK (f :*: g :
         ireturn $ AnyKK (unsafeCoerce a :*: b)  -- TODO: Would be excellent to get rid of unsafeCoerce!
 
 instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
-    type SerConstraintsK (M1 i c f) xs = SerConstraintsK f xs
     type RequireK (M1 i c f) as ds = RequireK f as ds
     type LearnK (M1 i c f) as ds = LearnK f as ds
     depKSerializeK p (M1 a) = depKSerializeK p a
@@ -616,7 +590,6 @@ instance DepKDeserializeK f => DepKDeserializeK (M1 i c f) where
         ireturn $ AnyKK (M1 a)
 
 instance DepKDeserializeK U1 where
-    type SerConstraintsK U1 xs = ()
     type RequireK U1 as ds = ()
     type LearnK U1 as ds = ds
     depKSerializeK _ _ = pure []
@@ -638,8 +611,6 @@ type family
     DiscardTyVar (ds :: DepStateList (k -> d)) :: DepStateList d where
     DiscardTyVar ('DS _ ds) = ds
 instance DepKDeserializeK f => DepKDeserializeK (Exists k (f :: LoT (k -> ks) -> Type)) where
-    type SerConstraintsK (Exists k (f :: LoT (k -> ks) -> Type)) (xs :: LoT ks) =
-        SerConstraintsK f (TypeError (Text "SerConstraintsK constraints cannot reach this existential variable (hopefully)") :&&: xs)
     type RequireK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = RequireK f (IntroduceTyVar k ks as) ('DS 'Unknown ds)
     type LearnK (Exists k (f :: LoT (k -> ks) -> Type)) as ds = DiscardTyVar (LearnK f (IntroduceTyVar k ks as) ('DS 'Unknown ds))
     depKSerializeK

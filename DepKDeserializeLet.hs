@@ -36,7 +36,6 @@ data Let (f :: a ~> b) (x :: a) (y :: b) where
 
 
 instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
-    type SerConstraints (Let :: (a ~> b) -> a -> b -> Type) _ = ()
     type Require (Let :: (a ~> b) -> a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, RequireAtom (AtomAt ('VS 'VZ) as) ds, LearnableAtom (AtomAt ('VS ('VS 'VZ)) as) ds)
     type Learn (Let :: (a ~> b) -> a -> b -> Type) as ds = LearnAtom (AtomAt ('VS ('VS 'VZ)) as) ds
     depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (Let Refl)) =
@@ -61,21 +60,18 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
         ireturn $ AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) (Let Refl)
 
 instance DepKDeserialize (Let f) where
-    type SerConstraints (Let f) xs = SerConstraints1Up (Let f) xs
     type Require (Let f) as ds = Require1Up (Let f) as ds
     type Learn (Let f) as ds = Learn1Up (Let f) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
 instance DepKDeserialize (Let f x) where
-    type SerConstraints (Let f x) xs = SerConstraints1Up (Let f x) xs
     type Require (Let f x) as ds = Require1Up (Let f x) as ds
     type Learn (Let f x) as ds = Learn1Up (Let f x) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 
 instance DepKDeserialize (Let f x y) where
-    type SerConstraints (Let f x y) xs = SerConstraints1Up (Let f x y) xs
     type Require (Let f x y) as ds = Require1Up (Let f x y) as ds
     type Learn (Let f x y) as ds = Learn1Up (Let f x y) as ds
     depKSerialize = depKSerialize1Up
@@ -87,7 +83,6 @@ data LetFromJust (f :: a ~> Maybe b) (x :: a) (y :: b) where
     deriving (Show)
 
 instance SingI f => DepKDeserialize (LetFromJust f :: a -> b -> Type) where
-    type SerConstraints (LetFromJust f :: a -> b -> Type) _ = ()
     type Require (LetFromJust f :: a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, LearnableAtom (AtomAt ('VS 'VZ) as) ds)
     type Learn (LetFromJust f :: a -> b -> Type) as ds = LearnAtom (AtomAt ('VS 'VZ) as) ds
     depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (LetFromJust Refl)) =
