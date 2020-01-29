@@ -10,7 +10,7 @@
 module BitMap where
 
 import DepKDeserialize (DepKDeserialize, serialize, deserialize, DeserializeError)
-import Generics.Kind.TH
+import Generics.Kind.TH (deriveGenericK)
 
 import DepKDeserializeWord (Promoted, GeneralizedVector(..), sWord8)
 import ASCII (ASCII(..))
@@ -30,23 +30,31 @@ $(deriveGenericK ''BitMap)
 deriving instance DepKDeserialize BitMap
 
 testSerializeEmpty :: [Word8]
-testSerializeEmpty = serialize (BitMap
+testSerializeEmpty = serialize $ BitMap
     { bmp = ASCII
     , width = sWord8 @0
     , height = sWord8 @0
     , pixels = GeneralizedVector Nil
-    })
+    }
+-- > testSerializeEmpty
+-- [66,77,80,0,0]
 
 testDeserializeEmpty :: Either DeserializeError (BitMap, [Word8])
 testDeserializeEmpty = runStateT (deserialize @BitMap) [66,77,80,0,0]
+-- > testDeserializeEmpty
+-- Right (BitMap {bmp = ASCII, width = SPromoted (SFin @256 @('Fin 0)), height = SPromoted (SFin @256 @('Fin 0)), pixels = GeneralizedVector Nil},[])
 
 testSerializeNonEmpty :: [Word8]
-testSerializeNonEmpty = serialize (BitMap
+testSerializeNonEmpty = serialize $ BitMap
     { bmp = ASCII
     , width = sWord8 @2
     , height = sWord8 @2
     , pixels = GeneralizedVector (GeneralizedVector (0 :> 1 :> Nil) :> GeneralizedVector (2 :> 3 :> Nil) :> Nil)
-    })
+    }
+-- > testSerializeNonEmpty
+-- [66,77,80,2,2,0,1,2,3]
 
 testDeserializeNonEmpty :: Either DeserializeError (BitMap, [Word8])
 testDeserializeNonEmpty = runStateT (deserialize @BitMap) [66,77,80,2,2,0,1,2,3]
+-- > testDeserializeNonEmpty
+-- Right (BitMap {bmp = ASCII, width = SPromoted (SFin @256 @('Fin 2)), height = SPromoted (SFin @256 @('Fin 2)), pixels = GeneralizedVector (GeneralizedVector (0 :> (1 :> Nil)) :> (GeneralizedVector (2 :> (3 :> Nil)) :> Nil))},[])
