@@ -67,3 +67,7 @@ matchVector (x :> (xs :: Vector a n1)) _ s =
             \\ samePredecessor @n @(n - 1) @n1
             \\ unsafeSubNat @n @1
             \\ plusMinusInverse @1 @n
+
+toList :: Vector a n -> [a]
+toList Nil = []
+toList (x :> xs) = x : toList xs
