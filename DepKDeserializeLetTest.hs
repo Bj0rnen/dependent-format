@@ -42,7 +42,7 @@ $(singletons [d|
   |])
 
 data RecordWithOnePlus = forall (a :: Nat) (b :: Nat). RecordWithOnePlus
-    { a :: Sing a
+    { a :: WrappedSing a
     , b :: Let OnePlusSym0 a b
     , v :: Vector Word8 b
     }
@@ -60,8 +60,8 @@ $(singletons [d|
   |])
 
 data RecordWithPlus = forall (a :: Nat) (b :: Nat) (f :: Nat ~> Nat) (c :: Nat). RecordWithPlus
-    { a :: Sing a
-    , b :: Sing b
+    { a :: WrappedSing a
+    , b :: WrappedSing b
     , f :: Let PlusSym0 a f
     , c :: Let f b c
     , v :: Vector Word8 c
@@ -76,8 +76,8 @@ testRecordWithPlus = runStateT (deserialize @RecordWithPlus) [1,2,3,4,5,6]
 
 
 data RecordWithPlus2 = forall (a :: Nat) (b :: Nat) (c :: Nat). RecordWithPlus2
-    { a :: Sing a
-    , b :: Sing b
+    { a :: WrappedSing a
+    , b :: WrappedSing b
     , c :: Let2 PlusSym0 a b c
     , v :: Vector Word8 c
     }

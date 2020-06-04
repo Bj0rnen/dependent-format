@@ -15,14 +15,14 @@ import Generics.Kind.TH (deriveGenericK)
 import DepKDeserializeWord (Promoted, GeneralizedVector(..), sWord8)
 import ASCII (ASCII(..))
 import Data.Word (Word8)
-import Data.Singletons.Fin (Sing)
+import Data.Singletons (WrappedSing(..))
 import Vector (Vector(..))
 import Control.Monad.State (StateT(..))
 
 data BitMap = forall (width :: Promoted Word8) (height :: Promoted Word8). BitMap
     { bmp    :: ASCII "BMP"
-    , width  :: Sing width
-    , height :: Sing height
+    , width  :: WrappedSing width
+    , height :: WrappedSing height
     , pixels :: GeneralizedVector (GeneralizedVector Word8 width) height
     }
 deriving instance Show BitMap
@@ -32,8 +32,8 @@ deriving instance DepKDeserialize BitMap
 testSerializeEmpty :: [Word8]
 testSerializeEmpty = serialize $ BitMap
     { bmp = ASCII
-    , width = sWord8 @0
-    , height = sWord8 @0
+    , width = WrapSing (sWord8 @0)
+    , height = WrapSing (sWord8 @0)
     , pixels = GeneralizedVector Nil
     }
 -- | >>> testSerializeEmpty
@@ -47,8 +47,8 @@ testDeserializeEmpty = runStateT (deserialize @BitMap) [66,77,80,0,0]
 testSerializeNonEmpty :: [Word8]
 testSerializeNonEmpty = serialize $ BitMap
     { bmp = ASCII
-    , width = sWord8 @2
-    , height = sWord8 @2
+    , width = WrapSing (sWord8 @2)
+    , height = WrapSing (sWord8 @2)
     , pixels = GeneralizedVector (GeneralizedVector (0 :> 1 :> Nil) :> GeneralizedVector (2 :> 3 :> Nil) :> Nil)
     }
 -- | >>> testSerializeNonEmpty

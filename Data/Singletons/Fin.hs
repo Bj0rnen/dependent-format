@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeInType #-}
 
 module Data.Singletons.Fin (
-    Sing(SFin), SFin, withKnownFin,
+    Sing, SFin(..), withKnownFin,
 
     Fin(..), KnownFin, finVal, SomeFin(..),
     someFinVal, someFin,
@@ -15,7 +15,7 @@ module Data.Singletons.Fin (
     sFinVal, sFinToSNat) where
 
 import Data.Singletons
-import Data.Singletons.TypeLits (Nat, KnownNat, Sing(SNat), natVal)
+import Data.Singletons.TypeLits (Nat, KnownNat, Sing, SNat(..), natVal)
 import Data.Kind.Fin
 import Data.Kind
 import Data.Constraint
@@ -26,8 +26,9 @@ import Text.Read
 import GHC.Show (appPrec, appPrec1)
 
 
-data instance Sing :: Fin n -> Type where
-    SFin :: forall (n :: Nat) (a :: Fin n). KnownFin a => Sing a
+data SFin :: Fin n -> Type where
+    SFin :: forall (n :: Nat) (a :: Fin n). KnownFin a => SFin a
+type instance Sing = SFin
 
 instance KnownFin a => SingI a where
   sing = SFin
@@ -43,12 +44,10 @@ instance KnownFin a => SingI a where
 --        Nothing -> error $ show n ++ " out of bounds for Fin"  -- TODO: Not like this!
 --        Just (SomeFin (_ :: Proxy a)) -> SomeSing (SFin :: Sing a)
 
-type SFin (n :: Nat) (a :: Fin n) = Sing a
-
 withKnownFin :: forall a r. Sing a -> (KnownFin a => r) -> r
 withKnownFin SFin f = f
 
-instance KnownNat n => Show (SFin n a) where
+instance KnownNat n => Show (SFin (a :: Fin n)) where
     showsPrec p SFin =
         showParen (p > appPrec) $
             showString "SFin @" .
@@ -58,7 +57,7 @@ instance KnownNat n => Show (SFin n a) where
                 showString "'Fin " .
                 showsPrec appPrec1 (finVal @a)
             )
-instance (KnownNat n, KnownFin a) => Read (SFin n a) where
+instance (KnownNat n, KnownFin a) => Read (SFin (a :: Fin n)) where
     readPrec = parens $ do
         Ident "SFin" <- lexP
         Punc "@" <- lexP

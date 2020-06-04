@@ -25,6 +25,7 @@ import Proof
 import Data.Singletons.TH
 import GHC.TypeNats
 import Data.Singletons.TypeLits
+import Data.Singletons.ShowSing
 import Data.Kind
 
 import           Generics.Kind hiding (Nat, (:~:))
@@ -48,11 +49,12 @@ type family Promote (a :: Type) = (b :: Type) | b -> a
 newtype Promoted (a :: Type) where
     Promoted :: forall a. Promote a -> Promoted a
 deriving instance Show (Promote a) => Show (Promoted a)
-data instance Sing :: Promoted a -> Type where
-    SPromoted :: Sing (x :: Promote a) -> Sing ('Promoted x :: Promoted a)
+data SPromoted :: Promoted a -> Type where
+    SPromoted :: Sing (x :: Promote a) -> SPromoted ('Promoted x :: Promoted a)
+type instance Sing = SPromoted
 instance SingI x => SingI ('Promoted x :: Promoted a) where
     sing = SPromoted (sing @x)
-deriving instance (pa ~ Promote a, forall y. Show (Sing (y :: pa))) => Show (Sing (x :: Promoted a))
+deriving instance (pa ~ Promote a, forall (y :: pa) sing. sing ~ Sing => Show (sing y)) => Show (SPromoted (x :: Promoted a))
 
 type instance Promote Word8 = Fin 256
 type instance Promote Word16 = Fin 65536

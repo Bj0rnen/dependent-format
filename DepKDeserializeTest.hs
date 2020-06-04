@@ -52,7 +52,7 @@ AtomCons Var3 (AtomCons Var3 AtomNil)
 
 
 data L0R1 (size0 :: Nat) (size1 :: Nat) = L0R1
-    { size0 :: Sing size0
+    { size0 :: WrappedSing size0
     , arr1  :: Vector Word8 size1
     } deriving (Show)
 $(deriveGenericK ''L0R1)
@@ -113,7 +113,7 @@ testL0R1AlreadyKnownContradictory =
 testL0R1SameVarK :: String
 testL0R1SameVarK =
     case runIxStateT
-            (runIxGet $ depKDeserializeK @_ @(Field (Sing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))))
+            (runIxGet $ depKDeserializeK @_ @(Field (WrappedSing :$: Var0) :*: Field (Vector Word8 :$: Var1)) (Proxy @(AtomCons Var0 (AtomCons Var0 AtomNil))))
             (KnowledgeCons KnowledgeU KnowledgeNil, [2,3,4,5,6,7]) of
         Left e -> show e
         Right (AnyKK a, _) -> show a
@@ -194,8 +194,8 @@ testPlainFieldSimple = runStateT (deserialize @PlainField) [2,3,4,5,6,7]
 
 
 data ExistentialL0L0 = forall (size :: Nat). ExistentialL0L0
-    { size0 :: Sing size
-    , size1 :: Sing size
+    { size0 :: WrappedSing size
+    , size1 :: WrappedSing size
     }
 deriving instance Show ExistentialL0L0
 $(deriveGenericK ''ExistentialL0L0)
@@ -207,8 +207,8 @@ testExistentialL0L0ContradictorySimple = runStateT (deserialize @ExistentialL0L0
 
 
 data ExistentialL0L1R0R1 = forall size0 size1. ExistentialL0L1R0R1
-    { size0 :: Sing size0
-    , size1 :: Sing size1
+    { size0 :: WrappedSing size0
+    , size1 :: WrappedSing size1
     , vect0 :: Vector Word8 size0
     , vect1 :: Vector Word8 size1
     }

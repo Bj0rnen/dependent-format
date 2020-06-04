@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeInType #-}
 
 module Data.Singletons.FinInt (
-    Sing(SFinInt), SFinInt, withKnownFinInt,
+    Sing, SFinInt(..), withKnownFinInt,
     FinInt(..), KnownFinInt, finIntVal, SomeFinInt(..),
     someFinIntVal, someFinInt,
     FinIntToMaybeNat,
@@ -16,7 +16,7 @@ module Data.Singletons.FinInt (
 
 import Data.Singletons
 import Data.Singletons.Prelude.Maybe
-import Data.Singletons.TypeLits (Nat, KnownNat, Sing(SNat), natVal)
+import Data.Singletons.TypeLits (Nat, KnownNat, Sing, SNat(..), natVal)
 import Data.Kind.FinInt
 import Data.Kind
 import Data.Constraint
@@ -24,20 +24,19 @@ import Numeric.Natural
 
 import Unsafe.Coerce
 
-data instance Sing :: FinInt n m -> Type where
-    SFinInt :: forall (n :: Nat) (m :: Nat) (a :: FinInt n m). KnownFinInt a => Sing a
+data SFinInt :: FinInt n m -> Type where
+    SFinInt :: forall (n :: Nat) (m :: Nat) (a :: FinInt n m). KnownFinInt a => SFinInt a
+type instance Sing = SFinInt
 
 instance KnownFinInt a => SingI a where
   sing = SFinInt
-
-type SFinInt (n :: Nat) (m :: Nat) (a :: FinInt n m) = Sing a
 
 withKnownFinInt :: forall a r. Sing a -> (KnownFinInt a => r) -> r
 withKnownFinInt SFinInt f = f
 
 -- TODO: Fix! Basically translate sign of Integer to/from 'Negative/'NonNegative.
-deriving instance Show (SFinInt n m a)
---instance (KnownNat n, KnownNat m) => Show (SFinInt n m a) where
+deriving instance Show (SFinInt (a :: FinInt n m))
+--instance (KnownNat n, KnownNat m) => Show (SFinInt (a :: FinInt n m)) where
 --    showsPrec p SFinInt =
 --        showParen (p > appPrec) $
 --            showString "SFinInt @" .
@@ -49,7 +48,7 @@ deriving instance Show (SFinInt n m a)
 --                showString "'Negative " .  -- Or 'NonNegative... Need two cases here.
 --                showsPrec appPrec1 (finIntVal @a)
 --            )
---instance (KnownNat n, KnownNat m, KnownFinInt a) => Read (SFinInt n m a) where
+--instance (KnownNat n, KnownNat m, KnownFinInt a) => Read (SFinInt (a :: FinInt n m)) where
 --    readPrec = parens $ do
 --        Ident "SFinInt" <- lexP
 --        Punc "@" <- lexP

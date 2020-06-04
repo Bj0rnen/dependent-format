@@ -111,18 +111,6 @@ instance SDecide k => LearnableAtom ('Var 'VZ :: Atom (k -> ks) k) ('DS 'Known d
 instance LearnableAtom ('Var v) ds => LearnableAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     learnAtom ss (KnowledgeCons k kl) = KnowledgeCons k <$> learnAtom @ks @k @('Var v) @ds ss kl
 
--- TODO: This is pretty weird... I'm surprised that this workaround works. If indeed it really always does...
-type family
-    InterpretVars (xs :: LoT ks) :: LoT ks where
-    InterpretVars (xs :: LoT Type) = 'LoT0
-    InterpretVars (xs :: LoT (k -> ks)) = InterpretVar 'VZ xs :&&: InterpretVars (TailLoT xs)
-interpretVarsIsJustVars :: forall xs. Dict (InterpretVars xs ~ xs)
-interpretVarsIsJustVars = unsafeCoerce (Dict @(xs ~ xs))
-class GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
-instance GenericK f (InterpretVars xs) => GenericK' (f :: ks) (xs :: LoT ks)
-genericKInstance :: forall f xs. GenericK' f xs :- GenericK f xs
-genericKInstance = Sub (withDict (interpretVarsIsJustVars @xs) Dict)
-
 
 -- TODO: Add meaningful structure.
 data DeserializeError = DeserializeError String
@@ -183,13 +171,14 @@ ilearnAtom ss =
 
 
 data TheseK (f :: ks) (xs :: LoT ks) where
-    TheseK :: Proxy xs -> f :@@: InterpretVars xs -> TheseK f xs
-deriving instance Show (f :@@: InterpretVars xs) => Show (TheseK f xs)
+    TheseK :: Proxy xs -> f :@@: xs -> TheseK f xs
+deriving instance Show (f :@@: xs) => Show (TheseK f xs)
 -- TODO: This type is more of a workaround than an intentional design...
 -- TODO: I struggle to even make a Show instance. Could I mitigate that by replacing (:@@:) and InterpretVars
 -- TODO: with some concrete datatype(s)? Well AnyK is pretty much that type, so that logic is a bit circular...
+-- TODO(2020-06-04): The above situation might be different, now that InterpretVars is gone.
 data AnyK (f :: ks) where
-    AnyK :: Proxy xs -> f :@@: InterpretVars xs -> AnyK f
+    AnyK :: Proxy xs -> f :@@: xs -> AnyK f
 
 class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
@@ -209,18 +198,17 @@ class DepKDeserialize (f :: ks) where
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
     default depKSerialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks) (xs :: LoT ks)
-        .  (GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
+        .  (GenericK f, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
         => Proxy as -> TheseK f xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn f as ds)) [Word8]
     depKSerialize p (TheseK (Proxy :: Proxy xs) a) =
-        depKSerializeK p ((withDict (interpretVarsIsJustVars @xs) (fromK @_ @f @xs a \\ genericKInstance @f @xs)) :: RepK f xs)
+        depKSerializeK p (fromK @_ @f @xs a :: RepK f xs)
     default depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
-        .  (forall xs. GenericK' f xs, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
+        .  (GenericK f, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
         => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
     depKDeserialize p =
         depKDeserializeK @_ @(RepK f) p >>>= \(AnyKK (r :: RepK f xs)) ->
-        -- TODO: This is messy. Could we at least make it so just one of interpretVarsIsJustVars or genericKInstance is needed?
-        ireturn $ AnyK (Proxy @xs) ((withDict (interpretVarsIsJustVars @xs) (toK @_ @f @xs r)) \\ genericKInstance @f @xs)
+        ireturn $ AnyK (Proxy @xs) (toK @_ @f @xs r)
 
 
 class (DepKDeserialize a, Require a 'AtomNil 'DZ) => Serialize a
@@ -261,7 +249,7 @@ depKDeserialize1Up
     => Proxy as -> IxGet ds (Learn (f x) as ds) (AnyK (f x))
 depKDeserialize1Up (Proxy :: Proxy as) =
     depKDeserialize @(k -> ks) @f (Proxy :: Proxy ('AtomCons ('Kon x) as)) >>>= \(AnyK (Proxy :: Proxy (xxs)) a) ->
-    ireturn $ AnyK (Proxy :: Proxy (TailLoT xxs)) (unsafeCoerce a :: f x :@@: InterpretVars (TailLoT xxs))  -- TODO: That's a kind of scary unsafeCoerce.
+    ireturn $ AnyK (Proxy :: Proxy (TailLoT xxs)) (unsafeCoerce a :: f x :@@: TailLoT xxs)  -- TODO: That's a kind of scary unsafeCoerce.
 
 
 withoutKnowledge :: StateT [Word8] (Either DeserializeError) a -> IxGet ds ds a
@@ -384,14 +372,14 @@ type family
     AtomAt 'VZ (AtomCons a _) = a
     AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
 
-instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Type) where
-    type Require (Sing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
-    type Learn (Sing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
+instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (WrappedSing :: k -> Type) where
+    type Require (WrappedSing :: k -> Type) as ds = LearnableAtom (AtomAt 'VZ as) ds
+    type Learn (WrappedSing :: k -> Type) as ds = LearnAtom (AtomAt 'VZ as) ds
     depKSerialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type)) (xs :: LoT (k -> Type))
-        .  Require (Sing :: k -> Type) as ds
-        => Proxy as -> TheseK (Sing :: k -> Type) xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn (Sing :: k -> Type) as ds)) [Word8]
-    depKSerialize _ (TheseK _ s) =
+        .  Require (WrappedSing :: k -> Type) as ds
+        => Proxy as -> TheseK (WrappedSing :: k -> Type) xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn (WrappedSing :: k -> Type) as ds)) [Word8]
+    depKSerialize _ (TheseK _ (WrapSing s)) =
         iget >>>= \kl ->
         case learnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) kl of
             Nothing -> error "unreachable"
@@ -400,18 +388,18 @@ instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing :: k -> Typ
                 ireturn $ serialize @(Demote k) (FromSing s)
     depKDeserialize
         :: forall d (ds :: DepStateList d) (as :: AtomList d (k -> Type))
-        .  Require (Sing :: k -> Type) as ds
-        => Proxy as -> IxGet ds (Learn (Sing :: k -> Type) as ds) (AnyK (Sing :: k -> Type))
+        .  Require (WrappedSing :: k -> Type) as ds
+        => Proxy as -> IxGet ds (Learn (WrappedSing :: k -> Type) as ds) (AnyK (WrappedSing :: k -> Type))
     depKDeserialize _ =
         getKnowledge >>>= \kl ->
         withoutKnowledge deserialize >>>= \(FromSing (s :: Sing (s :: k))) ->
         -- TODO: Would be awesome if we could show "expected" and "actual" in case of contradiction!
         ilearnAtom @d @k @(AtomAt 'VZ as) (SomeSing s) >>>= \_ ->
-        ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) s
+        ireturn $ AnyK (Proxy @(s :&&: 'LoT0)) (WrapSing s)
 
-instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (Sing (a :: k)) where
-    type Require (Sing (a :: k)) as ds = Require1Up (Sing (a :: k)) as ds
-    type Learn (Sing (a :: k)) as ds = Learn1Up (Sing (a :: k)) as ds
+instance (SingKind k, Serialize (Demote k)) => DepKDeserialize (WrappedSing (a :: k)) where
+    type Require (WrappedSing (a :: k)) as ds = Require1Up (WrappedSing (a :: k)) as ds
+    type Learn (WrappedSing (a :: k)) as ds = Learn1Up (WrappedSing (a :: k)) as ds
     depKSerialize = depKSerialize1Up
     depKDeserialize = depKDeserialize1Up
 

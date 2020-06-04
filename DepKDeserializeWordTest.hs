@@ -20,6 +20,7 @@ import DepKDeserializeLet
 import Vector
 import Knowledge
 
+import Data.Singletons (WrappedSing)
 import Data.Singletons.TypeLits
 
 import           Generics.Kind hiding (Nat, (:~:))
@@ -33,7 +34,7 @@ import Control.Monad.Indexed.State
 
 
 data L0Word64 (size :: Promoted Word64) = L0Word64
-    { size :: Sing size
+    { size :: WrappedSing size
     } deriving (Show)
 $(deriveGenericK ''L0Word64)
 
@@ -48,7 +49,7 @@ testL0Word64 =
 
 
 data L0R0Word16 (size :: Promoted Word16) = L0R0Word16
-    { size :: Sing size
+    { size :: WrappedSing size
     , vec  :: GeneralizedVector Word8 size
     } deriving (Show)
 $(deriveGenericK ''L0R0Word16)
@@ -64,7 +65,7 @@ testL0R0Word16 =
 
 
 data RecordWithWordToNat = forall (a :: Promoted Word32) (b :: Nat). RecordWithWordToNat
-    { a :: Sing a
+    { a :: WrappedSing a
     , b :: Let WordToNat a b
     , v :: Vector Word8 b
     }
@@ -78,7 +79,7 @@ testRecordWithWordToNat = runStateT (deserialize @RecordWithWordToNat) [0,0,0,2,
 
 
 data L0R0Word8 = forall (size :: Promoted Word8). L0R0Word8
-    { size :: Sing size
+    { size :: WrappedSing size
     , vec  :: GVector Word16 size
     }
 deriving instance Show L0R0Word8
@@ -91,7 +92,7 @@ testL0R0Word8 = runStateT (deserialize @L0R0Word8) [3,1,2,3,4,5,6,7]
 
 
 data RecordWithIntToNat = forall (a :: Promoted Int8) (b :: Nat). RecordWithIntToNat
-    { a :: Sing a
+    { a :: WrappedSing a
     , b :: LetFromJust IntToMaybeNat a b
     , v :: Vector Word8 b
     }
