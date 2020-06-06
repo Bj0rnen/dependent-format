@@ -30,15 +30,15 @@ import Control.Monad.Indexed
 import Control.Monad.Indexed.State
 
 
-data Let (f :: a ~> b) (x :: a) (y :: b) where
-    Let :: f @@ x :~: y -> Let f x y
-    deriving (Show)
+data Let :: a ~> b -> a -> b -> Type where
+    Let :: f @@ x ~ fx => Let f x fx
+deriving instance Show (Let f x fs)
 
 
 instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
     type Require (Let :: (a ~> b) -> a -> b -> Type) as ds = (RequireAtom (AtomAt 'VZ as) ds, RequireAtom (AtomAt ('VS 'VZ) as) ds, LearnableAtom (AtomAt ('VS ('VS 'VZ)) as) ds)
     type Learn (Let :: (a ~> b) -> a -> b -> Type) as ds = LearnAtom (AtomAt ('VS ('VS 'VZ)) as) ds
-    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) (Let Refl)) =
+    depKSerialize (Proxy :: Proxy as) (TheseK (Proxy :: Proxy xs) Let) =
         iget >>>= \kl ->
         case getAtom @_ @(a ~> b) @(AtomAt 'VZ as) kl of
             SomeSing (f :: Sing f) ->
@@ -57,7 +57,7 @@ instance DepKDeserialize (Let :: (a ~> b) -> a -> b -> Type) where
         igetAtom @d @(a ~> b) @(AtomAt 'VZ as) @ds >>>= \(SomeSing (f :: Sing f)) ->
         igetAtom @d @a @(AtomAt ('VS 'VZ) as) @ds >>>= \(SomeSing (x :: Sing x)) ->
         ilearnAtom @d @b @(AtomAt ('VS ('VS 'VZ)) as) (SomeSing (f @@ x)) >>>= \_ ->
-        ireturn $ AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) (Let Refl)
+        ireturn $ AnyK (Proxy @(f :&&: x :&&: Apply f x :&&: 'LoT0)) Let
 
 instance DepKDeserialize (Let f) where
     type Require (Let f) as ds = Require1Up (Let f) as ds
