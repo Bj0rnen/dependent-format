@@ -17,6 +17,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneKindSignatures, CUSKs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
@@ -588,6 +589,7 @@ type family
     IncrVar k (t :: Atom d a) :: Atom (k -> d) a where
     IncrVar _ ('Kon a) = 'Kon a
     IncrVar _ ('Var v) = 'Var ('VS v)
+type IncrVars :: forall d. forall k ks -> AtomList d ks -> AtomList (k -> d) ks
 type family
     IncrVars k ks (as :: AtomList d ks) :: AtomList (k -> d) ks where
     IncrVars k Type 'AtomNil = 'AtomNil

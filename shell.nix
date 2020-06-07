@@ -1,6 +1,6 @@
 with (import <nixpkgs> {}).pkgs;
 let
-  ghcPackages = haskell.packages.ghc883;
+  ghcPackages = haskell.packages.ghc8101;
 
   # I've modified nixpkgs, so that singletons_2_5 depends on th-desugar_1_9,
   # and exinst_0_7 depends on singletons_2_5. (just singletons depending on th-desugar_1_9,
