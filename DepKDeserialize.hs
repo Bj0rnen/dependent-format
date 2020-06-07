@@ -17,7 +17,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE StandaloneKindSignatures, CUSKs #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeInType #-}
@@ -63,7 +63,8 @@ data AtomList :: Type -> Type -> Type where
     AtomNil  :: AtomList d Type
     AtomCons :: Atom d k -> AtomList d ks -> AtomList d (k -> ks)
 
-data KnowledgeList (ds :: DepStateList d) where
+type KnowledgeList :: DepStateList d -> Type
+data KnowledgeList ds where
     KnowledgeNil :: KnowledgeList 'DZ
     KnowledgeCons
         :: Knowledge d (x :: k)
@@ -88,8 +89,9 @@ instance
 instance RequireAtom ('Var v) ds => RequireAtom ('Var ('VS v) :: Atom (i -> ks) k) ('DS d ds) where
     getAtom (KnowledgeCons _ kl) = getAtom @ks @k @('Var v) @ds kl
 
+type LearnAtom :: Atom d k -> DepStateList d -> DepStateList d
 type family
-    LearnAtom (a :: Atom d k) (ds :: DepStateList d) :: DepStateList d where
+    LearnAtom a ds where
     LearnAtom ('Kon _) ds = ds
     LearnAtom ('Var  'VZ   ) ('DS _ ds) = 'DS 'Known ds
     LearnAtom ('Var ('VS v)) ('DS d ds) = 'DS d (LearnAtom ('Var v) ds)
@@ -185,11 +187,11 @@ class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
     depKSerialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks) (xs :: LoT ks)
+        :: forall d ds as (xs :: LoT ks)
         .  Require f as ds
         => Proxy as -> TheseK f xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn f as ds)) [Word8]
     depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        :: forall d ds as
         .  Require f as ds
         -- TODO: Drop the proxy, if that's viable.
         => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
@@ -198,13 +200,13 @@ class DepKDeserialize (f :: ks) where
     type Require (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = RequireK (RepK f) as ds
     type Learn (f :: ks) (as :: AtomList d ks) (ds :: DepStateList d) = LearnK (RepK f) as ds
     default depKSerialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks) (xs :: LoT ks)
+        :: forall d ds as (xs :: LoT ks)
         .  (GenericK f, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
         => Proxy as -> TheseK f xs -> IxState (KnowledgeList ds) (KnowledgeList (Learn f as ds)) [Word8]
     depKSerialize p (TheseK (Proxy :: Proxy xs) a) =
         depKSerializeK p (fromK @_ @f @xs a :: RepK f xs)
     default depKDeserialize
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        :: forall d ds as
         .  (GenericK f, DepKDeserializeK (RepK f), RequireK (RepK f) as ds, Learn f as ds ~ LearnK (RepK f) as ds)
         => Proxy as -> IxGet ds (Learn f as ds) (AnyK f)
     depKDeserialize p =
@@ -368,8 +370,9 @@ instance DepKDeserialize Natural where  -- 8-bit
 
 
 -- TODO: Is it sensible that this is indexed by a TyVar and not a Nat?
+type AtomAt :: TyVar ks k -> AtomList d ks -> Atom d k
 type family
-    AtomAt (n :: TyVar ks k) (as :: AtomList d ks) :: Atom d k where
+    AtomAt n as where
     AtomAt 'VZ (AtomCons a _) = a
     AtomAt ('VS v) (AtomCons _ as) = AtomAt v as
 
@@ -484,55 +487,64 @@ class DepKDeserializeK (f :: LoT ks -> Type) where
     type RequireK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: Constraint
     type LearnK (f :: LoT ks -> Type) (as :: AtomList d ks) (ds :: DepStateList d) :: DepStateList d
     depKSerializeK
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks) (xs :: LoT ks)
+        :: forall d ds as (xs :: LoT ks)
         .  RequireK f as ds
         => Proxy as -> f xs -> IxState (KnowledgeList ds) (KnowledgeList (LearnK f as ds)) [Word8]
     depKDeserializeK
-        :: forall d (ds :: DepStateList d) (as :: AtomList d ks)
+        :: forall d ds as
         .  RequireK f as ds
         => Proxy as -> IxGet ds (LearnK f as ds) (AnyKK f)
 
 -- TODO: Write wappers around these where `t` is pinned to kind (Atom d Type)?
+type AtomKonKind :: Atom ks k -> Type
 type family
-    AtomKonKind (t :: Atom ks k) :: Type where
+    AtomKonKind t where
     AtomKonKind ('Kon (f :: k)) = k
     AtomKonKind (t :@: _) = AtomKonKind t
 type family
     AtomKonKindT (t :: Atom ks Type) :: Type where
     AtomKonKindT t = AtomKonKind t
 
+type AtomKonConstructor :: forall ks k. forall (t :: Atom ks k) -> AtomKonKind t
 type family
-    AtomKonConstructor (t :: Atom ks k) :: AtomKonKind t where
+    AtomKonConstructor t where
     AtomKonConstructor ('Kon (f :: k)) = f
     AtomKonConstructor (t :@: _) = AtomKonConstructor t
+type AtomKonConstructorT :: forall ks. forall (t :: Atom ks Type) -> AtomKonKind t
 type family
-    AtomKonConstructorT (t :: Atom ks Type) :: AtomKonKind t where
+    AtomKonConstructorT t where
     AtomKonConstructorT t = AtomKonConstructor t
 
+type AtomKonAtomListStep :: forall ks k acc. forall (t :: Atom ks k) -> AtomList ks acc -> AtomList ks (AtomKonKind t)
 type family
-    AtomKonAtomListStep (t :: Atom ks k) (as :: AtomList ks acc) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomListStep t as where
     AtomKonAtomListStep ('Kon (f :: k)) as = as
     AtomKonAtomListStep (t :@: a) as = AtomKonAtomListStep t ('AtomCons a as)
+type AtomKonAtomList :: forall ks k. forall (t :: Atom ks k) -> AtomList ks (AtomKonKind t)
 type family
-    AtomKonAtomList (t :: Atom ks k) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomList t where
     AtomKonAtomList t = AtomKonAtomListStep t 'AtomNil
+type AtomKonAtomListT :: forall ks. forall (t :: Atom ks Type) -> AtomList ks (AtomKonKind t)
 type family
-    AtomKonAtomListT (t :: Atom ks Type) :: AtomList ks (AtomKonKind t) where
+    AtomKonAtomListT t where
     AtomKonAtomListT t = AtomKonAtomList t
 
 -- TODO: Here be dragons. If this is actually part of a solution, I should better form an understanding around this part.
+type DereferenceAtom :: AtomList d ks -> Atom ks k -> Atom d k
 type family
-    DereferenceAtom (base :: AtomList d ks) (a :: Atom ks k) :: Atom d k where
+    DereferenceAtom base a where
     DereferenceAtom _ ('Kon a) = 'Kon a
     DereferenceAtom as ('Var v) = AtomAt v as
     DereferenceAtom as (f :@: t) = DereferenceAtom as f :@: DereferenceAtom as t
+type DereferenceAtomList :: AtomList d ks -> AtomList ks ks' -> AtomList d ks'
 type family
-    DereferenceAtomList (base :: AtomList d ks) (as :: AtomList ks ks') :: AtomList d ks' where
+    DereferenceAtomList base as where
     DereferenceAtomList _ 'AtomNil = 'AtomNil
     DereferenceAtomList base ('AtomCons a as) = 'AtomCons (DereferenceAtom base a) (DereferenceAtomList base as)
 
+type InterpretAll :: AtomList ks ks' -> LoT ks -> LoT ks'
 type family
-    InterpretAll (as :: AtomList ks ks') (xs :: LoT ks) :: LoT ks' where
+    InterpretAll as xs where
     InterpretAll 'AtomNil _ = 'LoT0
     InterpretAll ('AtomCons t as) xs = Interpret t xs :&&: InterpretAll as xs
 
@@ -591,7 +603,7 @@ type family
     IncrVar _ ('Var v) = 'Var ('VS v)
 type IncrVars :: forall d. forall k ks -> AtomList d ks -> AtomList (k -> d) ks
 type family
-    IncrVars k ks (as :: AtomList d ks) :: AtomList (k -> d) ks where
+    IncrVars k ks as where
     IncrVars k Type 'AtomNil = 'AtomNil
     IncrVars k (k' -> ks) ('AtomCons t as) = 'AtomCons (IncrVar k t) (IncrVars k ks as)
 type family
